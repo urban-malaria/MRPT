@@ -18,6 +18,7 @@ library(shinyBS)
 library(rlang)
 library(shiny)
 library(bslib)
+library(plotly)
 
 # Function to generate a list of column name patterns
 generate_pattern_list <- function(df) {
@@ -64,27 +65,6 @@ theme_manuscript <- function(){
 }
 
 
-plot_map <- function(variable_names, shp_data_reactive, raw_dataframe_reactive) {
-  plots <- list()
-  
-  for (variable_name in variable_names) {
-    plot <- ggplot(data = shp_data_reactive) +
-      geom_sf(color = "black", fill = "white") +
-      geom_sf(data = raw_dataframe_reactive,
-              aes(geometry = geometry,
-                  fill = !!sym(variable_name))
-      ) +
-      scale_fill_viridis_c(name = "") +
-      labs(title = variable_name, subtitle = '', fill = "", x = NULL, y = NULL) +
-      map_theme()
-    
-    plots[[variable_name]] <- plot
-  }
-  
-  combined_plot <- do.call(grid.arrange, c(plots, ncol = 2))
-  
-  return(combined_plot)
-}
 
 # Function to plot an interactive map
 plot_map_00 <- function(variable_name, shp_data_reactive, raw_dataframe_reactive) {
@@ -106,11 +86,6 @@ plot_map_00 <- function(variable_name, shp_data_reactive, raw_dataframe_reactive
 normalize_data <- function(uploaded_data, variable_impacts) {
   numeric_cols <- sapply(uploaded_data, is.numeric)
   
-  # Replace NAs with column means for numeric columns
-  uploaded_data[numeric_cols] <- lapply(uploaded_data[numeric_cols], function(x) {
-    ifelse(is.na(x), mean(x, na.rm = TRUE), x)
-  })
-  
   scoring_data <- uploaded_data %>%
     mutate(across(where(is.numeric), 
                   ~{
@@ -123,7 +98,6 @@ normalize_data <- function(uploaded_data, variable_impacts) {
                   },
                   .names = "normalization_{tolower(.col)}"))
   
-  # Ensure WardName is present
   if (!"WardName" %in% names(scoring_data)) {
     stop("WardName column is missing in the data.")
   }
@@ -131,23 +105,6 @@ normalize_data <- function(uploaded_data, variable_impacts) {
   return(scoring_data)
 }
 
-
-
-# Function to process data for plotting
-process_data <- function(data, selected_vars) {
-  selected_vars <- unique(c("WardName", selected_vars))
-  
-  if (length(selected_vars) < 3) {
-    stop("Error: Enter at least three variables along with WardName.")
-  }
-  
-  plotting_scoring_data <- data %>%
-    select(all_of(c("WardName", selected_vars))) %>%
-    reshape2::melt(id.vars = "WardName") %>%
-    mutate(class = cut(value, seq(0, 1, length.out = 6), include.lowest = TRUE)) 
-  
-  plotting_scoring_data
-}
 
 # Function to plot normalized map
 plot_normalized_map <- function(shp_data, processed_csv) {
@@ -262,32 +219,50 @@ plot_model_score_map <- function(shp_data, processed_csv) {
   girafe(ggobj = plot)
 }
 
-# Function to create a box plot of ranks
-box_plot_function <- function(plottingdata){
+box_plot_function <- function(plottingdata, max_wards = 20) {
+  library(plotly)
+  
   df_long <- plottingdata %>%
     select(WardName, variable, rank)
   
   medians <- df_long %>%
     group_by(WardName) %>%
     summarize(median_value = median(rank)) %>%
-    arrange(median_value) %>%
+    arrange(desc(median_value)) %>%
     .$WardName
+  
+  # Limit the number of wards shown
+  if (length(medians) > max_wards) {
+    medians <- medians[1:max_wards]
+    df_long <- df_long %>% filter(WardName %in% medians)
+  }
   
   df_long$WardName <- factor(df_long$WardName, levels = medians)
   
-  ggplot(df_long, aes(x = rank, y = WardName)) +
-    geom_boxplot() +
-    labs(title = "", x = "Rank", y = "Ward") +
-    scale_x_continuous(limits = c(0, 36),
-                       breaks = seq(0, 36, 3)) +
-    theme_bw() + 
-    theme(panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
-          plot.title = element_text(hjust = 0.5),
-          axis.text.x = element_text(size = 16, color = "black"), 
-          axis.text.y = element_text(size = 16, color = "black"),
-          axis.title.x = element_text(size = 16),
-          axis.title.y = element_text(size =16),
-          legend.title=element_text(size=16, colour = 'black'),
-          legend.text =element_text(size = 16, colour = 'black')
+  # Create the base ggplot
+  p <- ggplot(df_long, aes(x = WardName, y = rank)) +
+    geom_boxplot(fill = "lightblue", color = "darkblue", alpha = 0.7) +
+    coord_flip() +  # Flip coordinates for horizontal layout
+    labs(title = "Ward Rankings Distribution", x = "", y = "Rank") +
+    scale_y_continuous(limits = c(0, max(df_long$rank)), 
+                       breaks = seq(0, max(df_long$rank), by = 5)) +
+    theme_minimal() +
+    theme(
+      axis.text.y = element_text(size = 10),
+      axis.text.x = element_text(size = 10),
+      axis.title.x = element_text(size = 12, margin = margin(t = 10)),
+      plot.title = element_text(size = 14, hjust = 0.5),
+      panel.grid.major.y = element_blank(),
+      panel.grid.minor.y = element_blank(),
+      panel.background = element_rect(fill = "white"),
+      plot.margin = margin(10, 10, 10, 10)
     )
+  
+  # Convert to plotly for interactivity
+  ggplotly(p, tooltip = c("y", "x")) %>%
+    layout(hoverlabel = list(bgcolor = "white"),
+           plot_bgcolor = "rgba(0,0,0,0)",  # Transparent plot background
+           paper_bgcolor = "rgba(0,0,0,0)") %>%  # Transparent paper background
+    config(scrollZoom = TRUE, displayModeBar = FALSE) %>%
+    style(hoverlabel = list(bgcolor = "white"))
 }

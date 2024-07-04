@@ -43,7 +43,6 @@ ui <- fluidPage(
     "))
   ),
   
-  # actionButton("infoButton", "Open Modal"),
   
   br(),
   
@@ -133,12 +132,13 @@ global health management"),
              )), 
     
     tabPanel("Input variables (data and shapefiles)", 
-             tags$br(),tags$br(),
+             tags$br(),
              sidebarLayout(
                sidebarPanel(
                  tags$h3("Upload the shapefile and analysis data:"),
-                 fileInput("file_csv", "Choose CSV File", accept = c(".csv", ".xlsx", ".xls")),
-                 actionButton("edit_impacts", "Edit Variable Impacts"),
+                 tags$p("After uploading your CSV file, you will see a Data Cleaning popup where you can handle NA values and specify variable impacts."),
+                 fileInput("file_csv", "Choose CSV File (this will open the Data Cleaning popup)", accept = c(".csv", ".xlsx", ".xls")),
+                 actionButton("reopen_data_cleaning", "Re-open Data Cleaning"),
                  fileInput("file_shp", "Choose a Zipped Shapefile", 
                            accept = c('application/zip', 'application/x-zip-compressed', 
                                       'multipart/x-zip', 'application/x-compress', 
@@ -147,16 +147,21 @@ global health management"),
                  tags$h4("Select a variable in the dataset to visualise:"),
                  uiOutput("variable_select_input"),
                  
-                 
                  actionButton("plot_raw_data_button", "Plot Map"),
-                 downloadButton("downloadData", "example data")
+                 downloadButton("downloadData", "Download Example Data")
                ),
                mainPanel(
                  girafeOutput("rawdataPlots")
                )
              ),
              style='text-align: center',
-             tags$h6("The ward.")), 
+             tags$h6("The plot shows the distribution of the varibles selected for
+                     evaluation accross the region of interest before they have been 
+                     normalized using the min-max method. Each measure is presented on 
+                     a continous scale (for the units one should refer to the rasters 
+                     where the data was extarcted). The deeper the intensity of the 
+                     colour in a given ward the higher the value of that measure is 
+                     in the ward.")), 
     
     tabPanel("Composite Score distribution", 
              # "Composite Score distribution", 
@@ -187,7 +192,7 @@ global health management"),
     tabPanel(" box whisker plot", 
              tags$br(),tags$br(),
              
-             plotOutput("boxwhiskerPlots"),
+             plotlyOutput("boxwhiskerPlots"),
              # rank the plots based of  the mean/median score
              tags$br(),tags$br(), # Adds a single line break (adjust by adding more)
              tags$br(),tags$br(),  
@@ -236,7 +241,7 @@ global health management"),
     'Created by the', 
     shiny::HTML('<a href=\'https://www.urban-malaria.com/\' 
                 target=\'_blank\'> Urban Malaria Project Team </a>'),
-    '@ Loyola University, Parkinson School of Public Health, Department of Health Informatics and Data Science'
+    '@ Loyola University Chicago, Parkinson School of Public Health, Department of Health Informatics and Data Science'
   ),
   
   br()
@@ -263,87 +268,107 @@ server <- function(input, output, session) {
   shinyjs::runjs("setTimeout(function() { $('.modal').modal('hide'); }, 60000);")
   
   # Reactive values for storing various data states
-  raw_data_reactive <- reactiveVal()
-  rawdata_reactive <- reactiveVal()
-  normalized_data_reactive <- reactiveVal()
-  normalizeddata_reactive <- reactiveVal()
-  data_reactive <- reactiveVal()
-  shp_data_reactive <- reactiveVal()
-  csv_data_reactive <- reactiveVal()
-  output_data_reactive <- reactiveVal()
-  composite_scores_reactive <- reactiveVal()
-  variable_impacts <- reactiveVal()
+  # Reactive values
+  rv <- reactiveValues(
+    raw_data = NULL,
+    rawdata = NULL,
+    normalized_data = NULL,
+    normalizeddata = NULL,
+    data = NULL,
+    shp_data = NULL,
+    csv_data = NULL,
+    output_data = NULL,
+    composite_scores = NULL,
+    variable_impacts = NULL,
+    na_handling_choice = NULL,
+    na_handling_method = NULL
+  )
   
   
-  # Function to show modal for specifying variable impacts
-  showImpactModal <- function() {
-    req(raw_data_reactive())
-    variables <- setdiff(names(raw_data_reactive()), "WardName")
-    current_impacts <- variable_impacts()
+  # Modal dialog function for the data cleaning pop-up
+  showDataCleaningModal <- function(data) {
+    variables <- setdiff(names(data), "WardName")
     
-    # Create UI elements for each variable
-    impact_ui <- lapply(variables, function(var) {
-      selectInput(
-        inputId = paste0("impact_", var),
-        label = var,
-        choices = c("Direct" = "direct", "Inverse" = "inverse"),
-        selected = if (!is.null(current_impacts)) current_impacts[var] else "direct"
-      )
-    })
-    
-    # Show modal dialog
-    showModal(modalDialog(
-      title = "Specify Variable Relationship on Malaria Risk (direct or inverse)",
-      impact_ui,
+    modalDialog(
+      title = "Data Cleaning",
+      
+      h4("Handle NA Values"),
+      radioButtons("na_handling", "Choose NA handling method:",
+                   choices = c("Replace with Mean" = "mean", 
+                               "Replace with Mode" = "mode")),
+      
+      hr(),
+      
+      h4("Specify Variable Impacts on Malaria Risk"),
+      lapply(variables, function(var) {
+        selectInput(
+          inputId = paste0("impact_", var),
+          label = var,
+          choices = c("Direct" = "direct", "Inverse" = "inverse"),
+          selected = "direct"
+        )
+      }),
+      
       footer = tagList(
         modalButton("Cancel"),
-        actionButton("ok", "OK")
+        actionButton("apply_cleaning", "Apply and Continue")
       )
-    ))
+    )
   }
   
-  # Handle CSV/Excel file upload
   observeEvent(input$file_csv, {
     req(input$file_csv)
     
-    # Read the uploaded file (csv or Excel)
+    # Read the uploaded file
     csv_data <- if (tolower(tools::file_ext(input$file_csv$name)) %in% c("xlsx", "xls")) {
       readxl::read_excel(input$file_csv$datapath)
     } else {
       read.csv(input$file_csv$datapath)
     }
     
-    # Process numeric columns
-    numeric_columns <- sapply(csv_data, is.numeric)
-    csv_data[numeric_columns] <- lapply(csv_data[numeric_columns], function(x) {
-      ifelse(is.na(x), mean(x, na.rm = TRUE), x)
-    })
-    
     # Convert to data frame and rename columns
     raw_dataframe <- rename_columns(as.data.frame(csv_data))
-    raw_data_reactive(raw_dataframe)
     
-    # Show modal dialog only if variable impacts haven't been set
-    if (is.null(variable_impacts())) {
-      showImpactModal()
+    rv$raw_data <- raw_dataframe
+    
+    # Show the Data Cleaning modal
+    showModal(showDataCleaningModal(raw_dataframe))
+  })
+  
+  observeEvent(input$apply_cleaning, {
+    req(rv$raw_data)
+    raw_dataframe <- rv$raw_data
+    
+    # Handle NA values
+    if (input$na_handling == "mean") {
+      raw_dataframe <- raw_dataframe %>%
+        mutate(across(where(is.numeric), ~ifelse(is.na(.), mean(., na.rm = TRUE), .)))
+    } else if (input$na_handling == "mode") {
+      get_mode <- function(v) {
+        uniqv <- unique(v)
+        uniqv[which.max(tabulate(match(v, uniqv)))]
+      }
+      raw_dataframe <- raw_dataframe %>%
+        mutate(across(everything(), ~ifelse(is.na(.), get_mode(.), .)))
     }
-  })
-  
-  # Handle edit impacts button click
-  observeEvent(input$edit_impacts, {
-    showImpactModal()
-  })
-  
-  # Handle OK button click in impact modal
-  observeEvent(input$ok, {
-    req(raw_data_reactive())
-    variables <- setdiff(names(raw_data_reactive()), "WardName")
+    
+    # Handle variable impacts
+    variables <- setdiff(names(raw_dataframe), "WardName")
     impacts <- sapply(variables, function(var) input[[paste0("impact_", var)]])
-    variable_impacts(impacts)
+    rv$variable_impacts <- impacts
+    
+    # Update raw_data with cleaned data
+    rv$raw_data <- raw_dataframe
+    
     removeModal()
-    showNotification("Variable impacts updated successfully.", type = "message")
+    showNotification("Data cleaning applied successfully.", type = "message")
   })
   
+  # Observer for the "Re-open Data Cleaning" button
+  observeEvent(input$reopen_data_cleaning, {
+    req(rv$raw_data)
+    showModal(showDataCleaningModal(rv$raw_data))
+  })
   
   # Handle shapefile upload
   observeEvent(input$file_shp, {
@@ -357,11 +382,6 @@ server <- function(input, output, session) {
     if (length(shapefile_files) > 0) {
       tryCatch({
         shp_data <- st_read(shapefile_files[1], quiet = TRUE)
-        
-        # Print shapefile info for debugging
-        print(paste("Shapefile loaded. CRS:", st_crs(shp_data)$input))
-        print(paste("Number of features:", nrow(shp_data)))
-        print(paste("Column names:", paste(names(shp_data), collapse = ", ")))
         
         # Ensure the shapefile has a valid CRS
         if (is.na(st_crs(shp_data))) {
@@ -381,11 +401,10 @@ server <- function(input, output, session) {
           }
         }
         
-        shp_data_reactive(shp_data)
+        rv$shp_data <- shp_data
         showNotification("Shapefile loaded successfully.", type = "message")
       }, error = function(e) {
         showNotification(paste("Error loading shapefile:", e$message), type = "error")
-        print(paste("Detailed error:", e$message))
       })
     } else {
       showNotification("No .shp file found in the uploaded zip file.", type = "error")
@@ -394,40 +413,37 @@ server <- function(input, output, session) {
   
   # Update variable selection UI
   output$variable_select_input <- renderUI({
-    req(raw_data_reactive())
+    req(rv$raw_data)
     selectInput("visualize", "Select Variable", 
-                choices = setdiff(names(raw_data_reactive()), "WardName"),
-                selected = names(raw_data_reactive())[2])
+                choices = setdiff(names(rv$raw_data), "WardName"),
+                selected = names(rv$raw_data)[2])
   })
-  
   
   # Update composite variable selection UI
   output$composite_variable_select <- renderUI({
-    req(raw_data_reactive())
+    req(rv$raw_data)
     selectInput("composite_vars", "Select Variables for Composite Score",
-                choices = setdiff(names(raw_data_reactive()), "WardName"),
+                choices = setdiff(names(rv$raw_data), "WardName"),
                 selected = NULL, multiple = TRUE)
   })
   
-  
   # Handle raw data plot button click
   observeEvent(input$plot_raw_data_button, {
-    req(raw_data_reactive(), shp_data_reactive(), input$visualize)
+    req(rv$raw_data, rv$shp_data, input$visualize)
     
-    raw_data <- inner_join(raw_data_reactive(), shp_data_reactive())
-    rawdata_reactive(raw_data)
+    raw_data <- inner_join(rv$raw_data, rv$shp_data)
+    rv$rawdata <- raw_data
     
     output$rawdataPlots <- renderGirafe({
       plot_map_00(variable_name = input$visualize,
-                  shp_data_reactive = shp_data_reactive(),
-                  raw_dataframe_reactive = rawdata_reactive())
+                  shp_data_reactive = rv$shp_data,
+                  raw_dataframe_reactive = rv$rawdata)
     })
   })
   
-  
   # Handle main plot button click
   observeEvent(input$plot_button, {
-    req(raw_data_reactive(), input$composite_vars, variable_impacts())
+    req(rv$raw_data, input$composite_vars, rv$variable_impacts)
     
     if (length(input$composite_vars) < 2) {
       showNotification("Please select at least two variables for composite score calculation.", type = "warning")
@@ -436,8 +452,8 @@ server <- function(input, output, session) {
     
     tryCatch({
       # Normalize data
-      normalized_data <- normalize_data(raw_data_reactive(), variable_impacts())
-      normalized_data_reactive(normalized_data)
+      normalized_data <- normalize_data(rv$raw_data, rv$variable_impacts)
+      rv$normalized_data <- normalized_data
       
       # Calculate composite scores using only selected variables
       composite_scores <- composite_score_models(normalized_data, selected_vars = input$composite_vars)
@@ -446,29 +462,29 @@ server <- function(input, output, session) {
       processed_scores <- process_model_score(composite_scores$final_data)
       
       # Join with shapefile data
-      combined_data <- left_join(processed_scores, shp_data_reactive(), by = "WardName")
-      data_reactive(combined_data)
+      combined_data <- left_join(processed_scores, rv$shp_data, by = "WardName")
+      rv$data <- combined_data
       
       # Generate model formulas table
       model_formulae_table <- models_formulas(composite_scores$model_formula)
-      output_data_reactive(model_formulae_table)
+      rv$output_data <- model_formulae_table
       
       # Update plots and tables
       output$mapPlot <- renderGirafe({
-        plot_model_score_map(shp_data = shp_data_reactive(),
-                             processed_csv = data_reactive())
+        plot_model_score_map(shp_data = rv$shp_data,
+                             processed_csv = rv$data)
       })
       
       output$dataTable <- renderTable({
-        output_data_reactive()
+        rv$output_data
       })
       
-      # normalization plot section
+      # Normalization plot section
       output$normalizationplot <- renderGirafe({
-        req(normalized_data_reactive(), shp_data_reactive(), input$composite_vars)
+        req(rv$normalized_data, rv$shp_data, input$composite_vars)
         
-        normalized_data <- normalized_data_reactive()
-        shp_data <- shp_data_reactive()
+        normalized_data <- rv$normalized_data
+        shp_data <- rv$shp_data
         
         selected_norm_cols <- paste0("normalization_", tolower(input$composite_vars))
         
@@ -487,9 +503,9 @@ server <- function(input, output, session) {
         plot_normalized_map(shp_data = shp_data, processed_csv = plot_data)
       })
       
-      output$boxwhiskerPlots <- renderPlot({
-        box_plot_function(plottingdata = data_reactive())
-      }, width = 800, height = 600)
+      output$boxwhiskerPlots <- renderPlotly({
+        box_plot_function(plottingdata = rv$data)
+      })
       
       # Show the number of model combinations generated
       num_models <- nrow(model_formulae_table)
@@ -515,4 +531,4 @@ server <- function(input, output, session) {
   )
 }
 
-shinyApp(ui = ui, server = server) 
+shinyApp(ui = ui, server = server)
