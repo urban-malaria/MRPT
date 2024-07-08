@@ -43,6 +43,7 @@ ui <- fluidPage(
     "))
   ),
   
+  # actionButton("infoButton", "Open Modal"),
   
   br(),
   
@@ -80,7 +81,7 @@ By providing a granular view of malaria risk, the MRMT represents a significant 
 in the field of public health, offering a potent tool for the strategic planning of malaria control 
 and elimination efforts. Future developments will focus on integrating real-time data feeds and
 expanding the tool's application to other vector-borne diseases, further enhancing its utility in 
-global health management"),
+global health management."),
              
              fluidRow(column(6,
                              tags$br(),tags$br(),
@@ -288,9 +289,21 @@ server <- function(input, output, session) {
   # Modal dialog function for the data cleaning pop-up
   showDataCleaningModal <- function(data) {
     variables <- setdiff(names(data), "WardName")
+    cols_with_missing <- check_missing_values(data)
     
     modalDialog(
       title = "Data Cleaning",
+      
+      if (length(cols_with_missing) > 0) {
+        div(
+          style = "color: red;",
+          h4("Warning: Missing Values Detected"),
+          p("The following columns contain missing values:"),
+          tags$ul(
+            lapply(cols_with_missing, tags$li)
+          )
+        )
+      },
       
       h4("Handle NA Values"),
       radioButtons("na_handling", "Choose NA handling method:",
@@ -299,7 +312,7 @@ server <- function(input, output, session) {
       
       hr(),
       
-      h4("Specify Variable Impacts on Malaria Risk"),
+      h4("Specify Variable Relationship on Malaria Risk"),
       lapply(variables, function(var) {
         selectInput(
           inputId = paste0("impact_", var),
@@ -328,6 +341,18 @@ server <- function(input, output, session) {
     
     # Convert to data frame and rename columns
     raw_dataframe <- rename_columns(as.data.frame(csv_data))
+    
+    # Check for missing values
+    cols_with_missing <- check_missing_values(raw_dataframe)
+    
+    if (length(cols_with_missing) > 0) {
+      missing_cols_text <- paste(cols_with_missing, collapse = ", ")
+      showNotification(
+        paste("Warning: Missing values found in the following column(s):", missing_cols_text),
+        type = "warning",
+        duration = NULL
+      )
+    }
     
     rv$raw_data <- raw_dataframe
     

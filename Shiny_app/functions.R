@@ -82,6 +82,16 @@ plot_map_00 <- function(variable_name, shp_data_reactive, raw_dataframe_reactive
 }
 
 
+
+# Function to check for missing values:
+
+check_missing_values <- function(data) {
+  missing_cols <- sapply(data, function(x) any(is.na(x)))
+  cols_with_missing <- names(missing_cols[missing_cols])
+  return(cols_with_missing)
+}
+
+
 # Normalization function
 normalize_data <- function(uploaded_data, variable_impacts) {
   numeric_cols <- sapply(uploaded_data, is.numeric)
