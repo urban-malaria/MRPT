@@ -137,14 +137,13 @@ global health management."),
              sidebarLayout(
                sidebarPanel(
                  tags$h3("Upload the shapefile and analysis data:"),
-                 tags$p("After uploading your CSV file, you will see a Data Cleaning popup where you can handle NA values and specify variable impacts."),
-                 fileInput("file_csv", "Choose CSV File (this will open the Data Cleaning popup)", accept = c(".csv", ".xlsx", ".xls")),
-                 actionButton("reopen_data_cleaning", "Re-open Data Cleaning"),
+                 tags$p("After uploading your datafiles, you will see a Data Cleaning popup where you can handle NA values, specify variable relationship on malaria risk and modify wardnames if there any mismatches."),
+                 fileInput("file_csv", "Choose CSV File", accept = c(".csv", ".xlsx", ".xls")),
                  fileInput("file_shp", "Choose a Zipped Shapefile", 
                            accept = c('application/zip', 'application/x-zip-compressed', 
                                       'multipart/x-zip', 'application/x-compress', 
                                       'application/x-compressed', 'application/gzip')),
-                 
+                 actionButton("reopen_data_cleaning", "Re-open Data Cleaning"),
                  tags$h4("Select a variable in the dataset to visualise:"),
                  uiOutput("variable_select_input"),
                  
@@ -282,12 +281,14 @@ server <- function(input, output, session) {
     composite_scores = NULL,
     variable_impacts = NULL,
     na_handling_choice = NULL,
-    na_handling_method = NULL
+    na_handling_method = NULL,
+    csv_uploaded = FALSE,
+    shp_uploaded = FALSE
   )
   
   
   # Modal dialog function for the data cleaning pop-up
-  showDataCleaningModal <- function(data) {
+  showDataCleaningModal <- function(data, mismatched_wards) {
     variables <- setdiff(names(data), "WardName")
     cols_with_missing <- check_missing_values(data)
     
@@ -302,6 +303,18 @@ server <- function(input, output, session) {
           tags$ul(
             lapply(cols_with_missing, tags$li)
           )
+        )
+      },
+      
+      if (length(mismatched_wards) > 0) {
+        div(
+          style = "color: red;",
+          h4("Warning: Wardname Mismatches Detected"),
+          p("The following ward names in the scoring data do not match with the shapefile:"),
+          tags$ul(
+            lapply(mismatched_wards, tags$li)
+          ),
+          p("Please correct these mismatches before proceeding.")
         )
       },
       
@@ -356,8 +369,16 @@ server <- function(input, output, session) {
     
     rv$raw_data <- raw_dataframe
     
+    # Check for wardname mismatches if shapefile is already uploaded
+    if (!is.null(rv$shp_data)) {
+      mismatched_wards <- check_wardname_mismatches(raw_dataframe, rv$shp_data)
+      rv$mismatched_wards <- mismatched_wards
+    } else {
+      rv$mismatched_wards <- character(0)
+    }
+    
     # Show the Data Cleaning modal
-    showModal(showDataCleaningModal(raw_dataframe))
+    showModal(showDataCleaningModal(raw_dataframe, rv$mismatched_wards))
   })
   
   observeEvent(input$apply_cleaning, {
@@ -392,7 +413,7 @@ server <- function(input, output, session) {
   # Observer for the "Re-open Data Cleaning" button
   observeEvent(input$reopen_data_cleaning, {
     req(rv$raw_data)
-    showModal(showDataCleaningModal(rv$raw_data))
+    showModal(showDataCleaningModal(rv$raw_data, rv$mismatched_wards))
   })
   
   # Handle shapefile upload
@@ -433,6 +454,15 @@ server <- function(input, output, session) {
       })
     } else {
       showNotification("No .shp file found in the uploaded zip file.", type = "error")
+    }
+    
+    # Check for wardname mismatches if CSV is already uploaded
+    if (!is.null(rv$raw_data)) {
+      mismatched_wards <- check_wardname_mismatches(rv$raw_data, shp_data)
+      rv$mismatched_wards <- mismatched_wards
+      
+      # Show the Data Cleaning modal again with updated mismatch information
+      showModal(showDataCleaningModal(rv$raw_data, rv$mismatched_wards))
     }
   })
   

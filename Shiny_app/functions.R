@@ -91,6 +91,14 @@ check_missing_values <- function(data) {
   return(cols_with_missing)
 }
 
+# Function to check for wardname mismatches:
+check_wardname_mismatches <- function(csv_data, shp_data) {
+  csv_wardnames <- csv_data$WardName
+  shp_wardnames <- shp_data$WardName
+  mismatched_wards <- setdiff(csv_wardnames, shp_wardnames)
+  return(mismatched_wards)
+}
+
 
 # Normalization function
 normalize_data <- function(uploaded_data, variable_impacts) {
