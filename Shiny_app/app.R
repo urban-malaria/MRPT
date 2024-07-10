@@ -255,13 +255,14 @@ server <- function(input, output, session) {
   ))
   
   # Use JavaScript to close the modal after 60 seconds
-  shinyjs::runjs("setTimeout(function() { $('.modal').modal('hide'); }, 60000);")
+  shinyjs::runjs("setTimeout(function() { $('.modal').modal('hide'); }, 300000);")
   
   # Reactive values for storing various data states
   rv <- reactiveValues(
     raw_data = NULL,
     rawdata = NULL,
     mismatched_wards = NULL,
+    #corrected_wardnames = NULL,
     cleaned_data = NULL,
     normalized_data = NULL,
     normalizeddata = NULL,
@@ -290,10 +291,15 @@ server <- function(input, output, session) {
     }
     
     rv$raw_data <- rename_columns(as.data.frame(csv_data))
+    print(paste("Number of rows in raw_data:", nrow(rv$raw_data)))
     rv$na_columns <- check_missing_values(rv$raw_data)
     
     if (length(rv$na_columns) > 0) {
       showNotification(paste("Warning: Missing values (NAs) found in columns:", paste(rv$na_columns, collapse = ", ")), type = "warning")
+    }
+    
+    if (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0) {
+      showModal(wardNameMismatchModal(rv$mismatched_wards))
     }
   })
   
@@ -309,12 +315,13 @@ server <- function(input, output, session) {
       tryCatch({
         shp_data <- st_read(shapefile_files[1], quiet = TRUE)
         rv$shp_data <- shp_data
+        print(paste("Number of rows in shp_data:", nrow(rv$shp_data)))
         showNotification("Shapefile loaded successfully.", type = "message")
         
         if (!is.null(rv$raw_data)) {
           rv$mismatched_wards <- check_wardname_mismatches(rv$raw_data, rv$shp_data)
-          if (!is.null(rv$mismatched_wards)) {
-            showModal(wardNameMismatchModal())
+          if (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0) {
+            showModal(wardNameMismatchModal(rv$mismatched_wards))
           }
         }
       }, error = function(e) {
@@ -325,44 +332,106 @@ server <- function(input, output, session) {
     }
   })
   
-  # Add a button to reopen the ward name mismatch modal
-  output$reopen_mismatch_modal <- renderUI({
-    req(rv$mismatched_wards)
-    if (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0) {
-      actionButton("reopen_mismatch", "Review Ward Name Mismatches")
+  
+ # add this reactive value
+  rv$corrected_wardnames <- reactiveVal(data.frame(original = character(), corrected = character(), stringsAsFactors = FALSE))
+  
+  # Modify the observeEvent for apply_corrections
+  observeEvent(input$apply_corrections, {
+    req(rv$mismatched_wards, rv$raw_data)
+    
+    corrected_names <- data.frame(
+      original = rv$raw_data$WardName,
+      corrected = rv$raw_data$WardName,
+      stringsAsFactors = FALSE
+    )
+    
+    for (i in 1:nrow(rv$mismatched_wards)) {
+      old_name <- rv$mismatched_wards$CSV_WardName[i]
+      new_name <- input[[paste0("mismatch_", i)]]
+      
+      if (new_name != "None") {
+        corrected_names$corrected[corrected_names$original == old_name] <- new_name
+      }
+    }
+    
+    rv$corrected_wardnames(corrected_names)
+    rv$raw_data$WardName <- corrected_names$corrected
+    
+    # Check for remaining mismatches
+    remaining_mismatches <- check_wardname_mismatches(rv$raw_data, rv$shp_data)
+    
+    if (is.null(remaining_mismatches)) {
+      removeModal()
+      showNotification("All ward name mismatches have been corrected.", type = "message")
+    } else {
+      rv$mismatched_wards <- remaining_mismatches
+      showModal(wardNameMismatchModal(remaining_mismatches))
     }
   })
   
-  # Reopen ward name mismatch modal
-  observeEvent(input$reopen_mismatch, {
-    showModal(wardNameMismatchModal())
-  })
-  
-  # Ward name mismatch modal
-  wardNameMismatchModal <- function() {
+  # Modify the wardNameMismatchModal function
+  wardNameMismatchModal <- function(mismatches) {
+    req(mismatches)
+    corrected_names <- rv$corrected_wardnames()
+    
     modalDialog(
-      title = "Ward Name Mismatches",
-      "The following ward names in your CSV file do not match the shapefile:",
-      br(),
-      tableOutput("mismatch_table"),
-      br(),
-      "Please correct these ward names in your CSV file to match the Shapefile WardNames and re-upload the data.",
-      footer = tagList(
-        modalButton("Close")
+      title = "Data Cleaning",
+      
+      tags$div(
+        tags$h4("Warning: Wardname Mismatches Detected"),
+        tags$p("The following ward names in the scoring data do not match with the shapefile:"),
+        tags$ul(
+          lapply(mismatches$CSV_WardName, function(ward) {
+            tags$li(ward)
+          })
+        ),
+        tags$p("Please correct these mismatches before proceeding.")
       ),
-      size = "l"  # Make the modal larger
+      
+      lapply(1:nrow(mismatches), function(i) {
+        ward <- mismatches$CSV_WardName[i]
+        options <- c("None", mismatches$Shapefile_Options[[i]])
+        
+        selected_value <- if (!is.null(corrected_names) && nrow(corrected_names) > 0) {
+          corrected <- corrected_names$corrected[corrected_names$original == ward]
+          if (length(corrected) > 0) corrected else "None"
+        } else {
+          "None"
+        }
+        
+        tags$div(
+          tags$h4(ward),
+          selectInput(paste0("mismatch_", i), label = NULL, choices = options, selected = selected_value)
+        )
+      }),
+      
+      footer = tagList(
+        actionButton("apply_corrections", "Apply Corrections"),
+        modalButton("Cancel")
+      ),
+      size = "l"
     )
   }
   
-  output$mismatch_table <- renderTable({
-    req(rv$mismatched_wards)
-    rv$mismatched_wards
-  }, align = 'l')
   
+  output$reopen_mismatch_modal <- renderUI({
+    req(rv$mismatched_wards)
+    if (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0) {
+      actionButton("reopen_mismatch", "Review Ward Name Mismatches", 
+                   style = "margin-top: 10px; margin-bottom: 10px;")
+    }
+  })
+  
+  observeEvent(input$reopen_mismatch, {
+    req(rv$mismatched_wards)
+    showModal(wardNameMismatchModal(rv$mismatched_wards))
+  })
   
   # Data Cleaning
   observeEvent(input$data_cleaning, {
     req(rv$raw_data, rv$shp_data)
+    print(paste("Number of rows in cleaned_data:", nrow(rv$cleaned_data)))
     
     showModal(modalDialog(
       title = "Data Cleaning",
@@ -386,6 +455,13 @@ server <- function(input, output, session) {
     ))
   })
   
+  observeEvent(input$na_handling, {
+    rv$na_handling_method <- input$na_handling
+    print("Updated NA handling method:")
+    print(rv$na_handling_method)
+  })
+  
+  
   output$variable_relationships <- renderUI({
     req(rv$raw_data)
     vars <- setdiff(names(rv$raw_data), "WardName")
@@ -407,28 +483,38 @@ server <- function(input, output, session) {
   observeEvent(input$apply_cleaning, {
     req(rv$raw_data, rv$shp_data)
     
-    # Store NA handling method
-    rv$na_handling_method <- input$na_handling
-    
-    # Apply NA handling method
-    cleaned_data <- switch(rv$na_handling_method,
-                           "spatial_neighbor_mean" = handle_na_neighbor_mean(rv$raw_data, rv$shp_data),
-                           "region_mean" = handle_na_region_mean(rv$raw_data),
-                           "region_mode" = handle_na_region_mode(rv$raw_data))
-    
-    # Store and apply variable relationships
-    vars <- setdiff(names(cleaned_data), "WardName")
-    for (var in vars) {
-      relationship <- input[[paste0("relationship_", var)]]
-      rv$variable_relationships[[var]] <- relationship
-      if (relationship == "inverse") {
-        cleaned_data[[var]] <- max(cleaned_data[[var]], na.rm = TRUE) - cleaned_data[[var]]
+    tryCatch({
+      # Apply NA handling method
+      cleaned_data <- switch(input$na_handling,
+                             "spatial_neighbor_mean" = handle_na_neighbor_mean(rv$raw_data, rv$shp_data),
+                             "region_mean" = handle_na_region_mean(rv$raw_data),
+                             "region_mode" = handle_na_region_mode(rv$raw_data))
+      
+      print(paste("Rows in cleaned_data after NA handling:", nrow(cleaned_data)))
+      
+      # Store and apply variable relationships
+      vars <- setdiff(names(cleaned_data), "WardName")
+      for (var in vars) {
+        relationship <- input[[paste0("relationship_", var)]]
+        rv$variable_relationships[[var]] <- relationship
+        if (relationship == "inverse") {
+          cleaned_data[[var]] <- max(cleaned_data[[var]], na.rm = TRUE) - cleaned_data[[var]]
+        }
       }
-    }
-    
-    rv$cleaned_data <- cleaned_data
-    removeModal()
-    showNotification("Data cleaning applied successfully.", type = "message")
+      
+      rv$cleaned_data <- cleaned_data
+      print(paste("Final rows in cleaned_data:", nrow(rv$cleaned_data)))
+      
+      removeModal()
+      showNotification("Data cleaning applied successfully.", type = "message")
+    }, error = function(e) {
+      print(paste("Error in data cleaning:", e$message))
+      print("Structure of raw_data:")
+      print(str(rv$raw_data))
+      print("Structure of shp_data:")
+      print(str(rv$shp_data))
+      showNotification(paste("Error in data cleaning:", e$message), type = "error")
+    })
   })
   
   # Raw data variable selection
@@ -485,6 +571,9 @@ server <- function(input, output, session) {
   
   observeEvent(input$plot_button, {
     req(rv$cleaned_data, input$composite_vars)
+    print(paste("Number of rows in cleaned_data:", nrow(rv$cleaned_data)))
+    print(paste("Number of rows in shp_data:", nrow(rv$shp_data)))
+    
     
     if (length(input$composite_vars) < 2) {
       showNotification("Please select at least two variables for composite score calculation.", type = "warning")
