@@ -85,11 +85,17 @@ theme_manuscript <- function(){
 
 
 # Function to handle NA values using spatial weights
-library(spdep)
-
 handle_na_neighbor_mean <- function(data, shp_data) {
+  print(paste("Initial rows in data:", nrow(data)))
+  print(paste("Initial rows in shp_data:", nrow(shp_data)))
+  
   # Merge data with shapefile
   spatial_data <- left_join(shp_data, data, by = "WardName")
+  print(paste("Rows after merge:", nrow(spatial_data)))
+  
+  # Remove any rows that were added due to mismatches
+  spatial_data <- spatial_data[!is.na(spatial_data$X),]
+  print(paste("Rows after removing mismatches:", nrow(spatial_data)))
   
   # Create neighbor list
   w <- spdep::poly2nb(spatial_data, queen = TRUE)
@@ -97,11 +103,14 @@ handle_na_neighbor_mean <- function(data, shp_data) {
   
   for (col in names(data)) {
     if (is.numeric(data[[col]]) && any(is.na(data[[col]]))) {
+      print(paste("Processing column:", col))
+      
       # Get the column data
       col_data <- spatial_data[[col]]
       
       # Find indices of missing values
       missing_indices <- which(is.na(col_data))
+      print(paste("Number of missing values:", length(missing_indices)))
       
       # Impute missing values with the mean of neighboring values
       for (index in missing_indices) {
@@ -122,6 +131,7 @@ handle_na_neighbor_mean <- function(data, shp_data) {
     }
   }
   
+  print(paste("Final rows in data:", nrow(data)))
   return(data)
 }
 
@@ -202,17 +212,10 @@ check_wardname_mismatches <- function(csv_data, shp_data) {
   
   if (length(mismatched_wards) > 0) {
     mismatches <- data.frame(
-      CSV_WardNames = mismatched_wards,
-      Shapefile_WardNames = character(length(mismatched_wards)),
+      CSV_WardName = mismatched_wards,
+      Shapefile_Options = I(replicate(length(mismatched_wards), list(shp_wardnames))),
       stringsAsFactors = FALSE
     )
-    
-    for (i in seq_along(mismatched_wards)) {
-      distances <- stringdist(mismatched_wards[i], shp_wardnames, method = "lv")
-      closest_match <- shp_wardnames[which.min(distances)]
-      mismatches$Shapefile_WardNames[i] <- closest_match
-    }
-    
     return(mismatches)
   } else {
     return(NULL)

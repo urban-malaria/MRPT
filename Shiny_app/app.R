@@ -146,11 +146,11 @@ global health management."),
                column(8,
                       fluidRow(
                         column(6,
-                               h4("Raw Data"),
+                               
                                girafeOutput("rawDataPlot")
                         ),
                         column(6,
-                               h4("Cleaned Data"),
+                               
                                girafeOutput("cleanedDataPlot")
                         )
                       ),
