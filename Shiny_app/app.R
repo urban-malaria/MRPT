@@ -192,7 +192,7 @@ global health management."),
     tabPanel(" box whisker plot", 
              tags$br(),tags$br(),
              
-             plotlyOutput("boxwhiskerPlots"),
+             plotlyOutput("boxwhiskerPlots", height = "800px"),
              # rank the plots based of  the mean/median score
              tags$br(),tags$br(), # Adds a single line break (adjust by adding more)
              tags$br(),tags$br(),  
@@ -320,8 +320,10 @@ server <- function(input, output, session) {
       
       h4("Handle NA Values"),
       radioButtons("na_handling", "Choose NA handling method:",
-                   choices = c("Replace with Mean" = "mean", 
-                               "Replace with Mode" = "mode")),
+                   choices = c("Mean of neighbors" = "neighbor_mean",
+                               "Mean of entire region" = "region_mean",
+                               "Mode of entire region" = "region_mode"),
+                   selected = "neighbor_mean"),
       
       hr(),
       
@@ -354,48 +356,38 @@ server <- function(input, output, session) {
     
     # Convert to data frame and rename columns
     raw_dataframe <- rename_columns(as.data.frame(csv_data))
-    
-    # Check for missing values
-    cols_with_missing <- check_missing_values(raw_dataframe)
-    
-    if (length(cols_with_missing) > 0) {
-      missing_cols_text <- paste(cols_with_missing, collapse = ", ")
-      showNotification(
-        paste("Warning: Missing values found in the following column(s):", missing_cols_text),
-        type = "warning",
-        duration = NULL
-      )
-    }
+    raw_dataframe <- filter_columns(raw_dataframe)  # Apply the filter here
     
     rv$raw_data <- raw_dataframe
     
-    # Check for wardname mismatches if shapefile is already uploaded
-    if (!is.null(rv$shp_data)) {
-      mismatched_wards <- check_wardname_mismatches(raw_dataframe, rv$shp_data)
-      rv$mismatched_wards <- mismatched_wards
-    } else {
-      rv$mismatched_wards <- character(0)
-    }
-    
-    # Show the Data Cleaning modal
-    showModal(showDataCleaningModal(raw_dataframe, rv$mismatched_wards))
   })
   
   observeEvent(input$apply_cleaning, {
     req(rv$raw_data)
     raw_dataframe <- rv$raw_data
     
-    # Handle NA values
-    if (input$na_handling == "mean") {
-      raw_dataframe <- raw_dataframe %>%
-        mutate(across(where(is.numeric), ~ifelse(is.na(.), mean(., na.rm = TRUE), .)))
-    } else if (input$na_handling == "mode") {
-      get_mode <- function(v) {
-        uniqv <- unique(v)
-        uniqv[which.max(tabulate(match(v, uniqv)))]
+    if (input$na_handling == "neighbor_mean") {
+      # Join data with shapefile
+      spatial_data <- left_join(rv$shp_data, raw_dataframe, by = "WardName")
+      
+      # Find neighbors
+      neighbors <- st_touches(spatial_data)
+      
+      # Function to calculate mean of neighbors
+      neighbor_mean <- function(i, column) {
+        neighbor_indices <- neighbors[[i]]
+        mean(spatial_data[[column]][neighbor_indices], na.rm = TRUE)
       }
-      raw_dataframe <- raw_dataframe %>%
-        mutate(across(everything(), ~ifelse(is.na(.), get_mode(.), .)))
+      
+      # Apply neighbor mean to each column with NA values
+      for (col in names(raw_dataframe)) {
+        if (is.numeric(raw_dataframe[[col]])) {
+          na_indices <- which(is.na(raw_dataframe[[col]]))
+          for (i in na_indices) {
+            raw_dataframe[i, col] <- neighbor_mean(i, col)
+          }
+        }
+      }
     }
     
     # Handle variable impacts
@@ -512,6 +504,11 @@ server <- function(input, output, session) {
       
       # Calculate composite scores using only selected variables
       composite_scores <- composite_score_models(normalized_data, selected_vars = input$composite_vars)
+      
+      if (nrow(composite_scores$final_data) == 0 || ncol(composite_scores$final_data) <= 1) {
+        showNotification("No valid models could be created. Please check your variable selection.", type = "error")
+        return()
+      }
       
       # Process composite scores for plotting
       processed_scores <- process_model_score(composite_scores$final_data)

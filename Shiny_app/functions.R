@@ -32,10 +32,26 @@ generate_pattern_list <- function(df) {
 rename_columns <- function(df) {
   pattern_list <- generate_pattern_list(df)
   for (pattern in names(pattern_list)) {
-    df <- df %>% rename_with(~ pattern, all_of(intersect(names(df), pattern_list[[pattern]])))
+    df <- df %>% rename_with(~ gsub("\\.", " ", pattern), all_of(intersect(names(df), pattern_list[[pattern]])))
   }
   df
 }
+
+
+# Function to filter the columns
+filter_columns <- function(data) {
+  ward_name_index <- which(names(data) == "WardName")
+  
+  if (length(ward_name_index) == 0) {
+    warning("WardName column not found. Using all columns.")
+    return(data)
+  }
+  
+  selected_columns <- c("WardName", names(data)[(ward_name_index + 1):ncol(data)])
+  return(data[, selected_columns])
+}
+
+
 
 # Function to set a custom theme for maps
 map_theme <- function(){
@@ -74,12 +90,21 @@ plot_map_00 <- function(variable_name, shp_data_reactive, raw_dataframe_reactive
                         aes(geometry = geometry,
                             fill = !!sym(variable_name),  
                             tooltip = paste(WardName, "(", round(as.numeric(!!sym(variable_name)), 3), ")"))) +
-    scale_fill_viridis_c(name = "") +
+    scale_fill_distiller(name = "", palette = "YlGnBu", direction = 1) +
     labs(title = variable_name, subtitle = '', fill = "", x = NULL, y = NULL) +
-    map_theme()
+    theme_classic() +
+    theme(legend.position = "right",
+          legend.title = element_text(size = 10),
+          legend.text = element_text(size = 8),
+          plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+          axis.line = element_blank(),
+          axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title = element_blank())
   
   girafe(ggobj = plot)
 }
+
 
 
 
@@ -107,18 +132,21 @@ normalize_data <- function(uploaded_data, variable_impacts) {
   scoring_data <- uploaded_data %>%
     mutate(across(where(is.numeric), 
                   ~{
-                    normalized <- (. - min(., na.rm = TRUE)) / (max(., na.rm = TRUE) - min(., na.rm = TRUE))
                     if (variable_impacts[cur_column()] == "inverse") {
-                      1 - normalized
+                      # Add a small constant to the denominator to prevent division by zero
+                      inverted <- 1 / (. + 1e-6) 
+                      normalized <- (inverted - min(inverted, na.rm = TRUE)) / 
+                        (max(inverted, na.rm = TRUE) - min(inverted, na.rm = TRUE) + 1e-6) 
                     } else {
-                      normalized
+                      normalized <- (. - min(., na.rm = TRUE)) / 
+                        (max(., na.rm = TRUE) - min(., na.rm = TRUE))
                     }
+                    normalized
                   },
                   .names = "normalization_{tolower(.col)}"))
-  
-  if (!"WardName" %in% names(scoring_data)) {
-    stop("WardName column is missing in the data.")
-  }
+  # Add debugging output
+  #print("Normalized data summary:")
+  #print(summary(scoring_data))
   
   return(scoring_data)
 }
@@ -153,9 +181,10 @@ plot_normalized_map <- function(shp_data, processed_csv) {
 composite_score_models <- function(normalized_data, selected_vars) {
   # Get normalized column names for selected variables only
   norm_cols <- paste0("normalization_", tolower(selected_vars))
+  norm_cols <- intersect(norm_cols, names(normalized_data))
   
   if (length(norm_cols) < 2) {
-    stop("Error: At least two variables are required for composite score calculation.")
+    stop("Error: At least two valid variables are required for composite score calculation.")
   }
   
   # Generate combinations
@@ -168,15 +197,31 @@ composite_score_models <- function(normalized_data, selected_vars) {
     for (i in 2:length(norm_cols)) {
       model_combinations <- c(model_combinations, combn(norm_cols, i, simplify = FALSE))
     }
-    # We don't need to add the full model separately as it's already included in the loop above
   }
   
   # Calculate composite scores
   for (i in seq_along(model_combinations)) {
     model_name <- paste0("model_", i)
-    formula_expr <- parse_expr(paste(model_combinations[[i]], collapse = "+"))
+    vars <- model_combinations[[i]]
+    
+    print(paste("Processing", model_name))
+    print("Variables used:")
+    print(vars)
+    
     normalized_data <- normalized_data %>% 
-      mutate(!!sym(model_name) := (!!formula_expr) / length(model_combinations[[i]]))
+      mutate(!!sym(model_name) := {
+        result <- rowSums(select(., all_of(vars))) / length(vars)
+        
+        print("Result summary:")
+        print(summary(result))
+        
+        if (model_name == "model_4") {
+          print("Detailed result for model_4:")
+          print(head(result, 10))
+        }
+        
+        result
+      })
   }
   
   # Prepare output
@@ -210,11 +255,19 @@ process_model_score <- function(data_to_process){
   plottingdata <- data_to_process %>% 
     reshape2::melt(id.vars = c("WardName")) %>% 
     group_by(variable) %>% 
-    mutate(new_value = (value - min(value))/(max(value) - min(value)),
-           class = cut(new_value, seq(0, 1, 0.2), include.lowest = T)) %>%
+    mutate(
+      new_value = (value - min(value)) / (max(value) - min(value)),
+      class = cut(new_value, seq(0, 1, 0.2), include.lowest = TRUE)
+    ) %>%
     arrange(value) %>% 
-    mutate(rank = 1:n(), 
-           wardname_rank = paste(WardName, "(",rank,")"))
+    mutate(
+      rank = row_number(),
+      wardname_rank = paste(WardName, "(",rank,")")
+    )
+  
+  # Add debugging output
+  print("Plotting data summary:")
+  print(summary(plottingdata))
   
   plottingdata
 }
@@ -237,8 +290,7 @@ plot_model_score_map <- function(shp_data, processed_csv) {
   girafe(ggobj = plot)
 }
 
-box_plot_function <- function(plottingdata, max_wards = 20) {
-  library(plotly)
+box_plot_function <- function(plottingdata) {
   
   df_long <- plottingdata %>%
     select(WardName, variable, rank)
@@ -249,27 +301,21 @@ box_plot_function <- function(plottingdata, max_wards = 20) {
     arrange(desc(median_value)) %>%
     .$WardName
   
-  # Limit the number of wards shown
-  if (length(medians) > max_wards) {
-    medians <- medians[1:max_wards]
-    df_long <- df_long %>% filter(WardName %in% medians)
-  }
-  
   df_long$WardName <- factor(df_long$WardName, levels = medians)
   
   # Create the base ggplot
   p <- ggplot(df_long, aes(x = WardName, y = rank)) +
-    geom_boxplot(fill = "lightblue", color = "darkblue", alpha = 0.7) +
-    coord_flip() +  # Flip coordinates for horizontal layout
+    geom_boxplot(fill = "#69b3a2", color = "#3c5e8b", alpha = 0.7) +
+    coord_flip() +
     labs(title = "Ward Rankings Distribution", x = "", y = "Rank") +
     scale_y_continuous(limits = c(0, max(df_long$rank)), 
                        breaks = seq(0, max(df_long$rank), by = 5)) +
     theme_minimal() +
     theme(
-      axis.text.y = element_text(size = 10),
+      axis.text.y = element_text(size = 8),
       axis.text.x = element_text(size = 10),
       axis.title.x = element_text(size = 12, margin = margin(t = 10)),
-      plot.title = element_text(size = 14, hjust = 0.5),
+      plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
       panel.grid.major.y = element_blank(),
       panel.grid.minor.y = element_blank(),
       panel.background = element_rect(fill = "white"),
@@ -278,9 +324,12 @@ box_plot_function <- function(plottingdata, max_wards = 20) {
   
   # Convert to plotly for interactivity
   ggplotly(p, tooltip = c("y", "x")) %>%
-    layout(hoverlabel = list(bgcolor = "white"),
-           plot_bgcolor = "rgba(0,0,0,0)",  # Transparent plot background
-           paper_bgcolor = "rgba(0,0,0,0)") %>%  # Transparent paper background
-    config(scrollZoom = TRUE, displayModeBar = FALSE) %>%
+    layout(
+      hoverlabel = list(bgcolor = "white"),
+      plot_bgcolor = "rgba(0,0,0,0)",
+      paper_bgcolor = "rgba(0,0,0,0)",
+      height = 800  # Increase plot height
+    ) %>%
+    config(scrollZoom = TRUE, displayModeBar = TRUE) %>%
     style(hoverlabel = list(bgcolor = "white"))
 }
