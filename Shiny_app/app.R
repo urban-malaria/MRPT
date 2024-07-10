@@ -1,6 +1,5 @@
 source("functions.R")
 
-
 ui <- fluidPage(
   theme = shinytheme("sandstone"),
   useShinyjs(),  
@@ -43,17 +42,12 @@ ui <- fluidPage(
     "))
   ),
   
-  # actionButton("infoButton", "Open Modal"),
-  
   br(),
-  
-  
   
   tabsetPanel(
     tabPanel("Instructions",
              tags$br(),
              h6("
-
 Malaria remains a significant public health challenge globally, necessitating 
 optimal and efficient strategies for risk management and intervention. 
 Ozodiegwu et-al's study introduces a novel Malaria Risk Mapping Tool (MRMT), designed to
@@ -83,10 +77,11 @@ and elimination efforts. Future developments will focus on integrating real-time
 expanding the tool's application to other vector-borne diseases, further enhancing its utility in 
 global health management."),
              
-             fluidRow(column(6,
-                             tags$br(),tags$br(),
-                             h3("Instructions to Using the Application"),
-                             HTML("
+             fluidRow(
+               column(6,
+                      tags$br(),tags$br(),
+                      h3("Instructions to Using the Application"),
+                      HTML("
         <ol>
           <li>Ensure you have a dataset with the variables of interest. 
           Your dataset should include column names, please download the example.csv file to edit. 
@@ -119,39 +114,47 @@ global health management."),
           </li>
         </ol>
       ")
-             )
-             ,
-             column( 6,
-                     tags$br(),tags$br(),tags$br(),tags$br(),
-                     tags$img(src = "digital_abstract.png", height = "600px", width = "auto"
-                     ),
-                     style='text-align: center',
-                     tags$h6("The figure above shows a digital abstract first presented in Ozodiegwu et-al (in-press), 
+               ),
+               column(6,
+                      tags$br(),tags$br(),tags$br(),tags$br(),
+                      tags$img(src = "digital_abstract.png", height = "600px", width = "auto"),
+                      style='text-align: center',
+                      tags$h6("The figure above shows a digital abstract first presented in Ozodiegwu et-al (in-press), 
             and it shows how the application was used to develop the malaria risk map in Ilorin")
-                     
+               )
              )
-             )), 
+    ), 
     
     tabPanel("Input variables (data and shapefiles)", 
-             tags$br(),
-             sidebarLayout(
-               sidebarPanel(
-                 tags$h3("Upload the shapefile and analysis data:"),
-                 tags$p("After uploading your datafiles, you will see a Data Cleaning popup where you can handle NA values, specify variable relationship on malaria risk and modify wardnames if there any mismatches."),
-                 fileInput("file_csv", "Choose CSV File", accept = c(".csv", ".xlsx", ".xls")),
-                 fileInput("file_shp", "Choose a Zipped Shapefile", 
-                           accept = c('application/zip', 'application/x-zip-compressed', 
-                                      'multipart/x-zip', 'application/x-compress', 
-                                      'application/x-compressed', 'application/gzip')),
-                 actionButton("reopen_data_cleaning", "Re-open Data Cleaning"),
-                 tags$h4("Select a variable in the dataset to visualise:"),
-                 uiOutput("variable_select_input"),
-                 
-                 actionButton("plot_raw_data_button", "Plot Map"),
-                 downloadButton("downloadData", "Download Example Data")
+             fluidRow(
+               column(4,
+                      h3("Upload the shapefile and analysis data:"),
+                      fileInput("file_csv", "Choose CSV File", 
+                                accept = c(".csv", ".xlsx", ".xls")),
+                      fileInput("file_shp", "Choose a Zipped Shapefile", 
+                                accept = c('application/zip', 'application/x-zip-compressed', 
+                                           'multipart/x-zip', 'application/x-compress', 
+                                           'application/x-compressed', 'application/gzip')),
+                      uiOutput("reopen_mismatch_modal"),
+                      hr(),
+                      h4("Select Variable to Visualize"),
+                      uiOutput("variable_select"),
+                      actionButton("plot_data", "Plot Maps"),
+                      hr(),
+                      actionButton("data_cleaning", "Data Cleaning (Click to clean data)")
                ),
-               mainPanel(
-                 girafeOutput("rawdataPlots")
+               column(8,
+                      fluidRow(
+                        column(6,
+                               h4("Raw Data"),
+                               girafeOutput("rawDataPlot")
+                        ),
+                        column(6,
+                               h4("Cleaned Data"),
+                               girafeOutput("cleanedDataPlot")
+                        )
+                      ),
+                      textOutput("visualizationExplanation")
                )
              ),
              style='text-align: center',
@@ -161,43 +164,33 @@ global health management."),
                      a continous scale (for the units one should refer to the rasters 
                      where the data was extarcted). The deeper the intensity of the 
                      colour in a given ward the higher the value of that measure is 
-                     in the ward.")), 
+                     in the ward.")
+    ), 
     
     tabPanel("Composite Score distribution", 
-             # "Composite Score distribution", 
              tags$br(),tags$br(),
              sidebarLayout(
                sidebarPanel(
                  tags$h4("Select a variable in the dataset to visualise:"),
                  uiOutput("composite_variable_select"),
-                 
                  actionButton("plot_button", "calculate")
-                 
                ),
-               
                mainPanel(
-                 
                  girafeOutput("mapPlot"),
-                 
-                 tableOutput("dataTable") ,
+                 tableOutput("dataTable"),
                  style='text-align: center',
-                 
                  tags$h6(".")
                )
              )
     ),
     
-    # hr(),
-    
-    tabPanel(" box whisker plot", 
+    tabPanel("box whisker plot", 
              tags$br(),tags$br(),
-             
              plotlyOutput("boxwhiskerPlots", height = "800px"),
-             # rank the plots based of  the mean/median score
-             tags$br(),tags$br(), # Adds a single line break (adjust by adding more)
-             tags$br(),tags$br(),  
-             tags$br(),tags$br(),  
-             tags$br(),tags$br(),   
+             tags$br(),tags$br(),
+             tags$br(),tags$br(),
+             tags$br(),tags$br(),
+             tags$br(),tags$br(),
              tags$br(),tags$br(),
              style='text-align: center',
              tags$h6("The box and whisker plot visualizes the distribution of median 
@@ -222,9 +215,7 @@ global health management."),
                      variables if used in the algorithm will have more infuence in the
                      composite score.")
     )
-    
   ),
-  
   
   tags$br(),  
   tags$br(),  
@@ -234,7 +225,6 @@ global health management."),
   tags$br(),
   
   hr(),
-  
   
   div(
     style='text-align: center',
@@ -268,10 +258,11 @@ server <- function(input, output, session) {
   shinyjs::runjs("setTimeout(function() { $('.modal').modal('hide'); }, 60000);")
   
   # Reactive values for storing various data states
-  # Reactive values
   rv <- reactiveValues(
     raw_data = NULL,
     rawdata = NULL,
+    mismatched_wards = NULL,
+    cleaned_data = NULL,
     normalized_data = NULL,
     normalizeddata = NULL,
     data = NULL,
@@ -282,137 +273,34 @@ server <- function(input, output, session) {
     variable_impacts = NULL,
     na_handling_choice = NULL,
     na_handling_method = NULL,
+    variable_relationships = list(),
     csv_uploaded = FALSE,
     shp_uploaded = FALSE
   )
   
   
-  # Modal dialog function for the data cleaning pop-up
-  showDataCleaningModal <- function(data, mismatched_wards) {
-    variables <- setdiff(names(data), "WardName")
-    cols_with_missing <- check_missing_values(data)
-    
-    modalDialog(
-      title = "Data Cleaning",
-      
-      if (length(cols_with_missing) > 0) {
-        div(
-          style = "color: red;",
-          h4("Warning: Missing Values Detected"),
-          p("The following columns contain missing values:"),
-          tags$ul(
-            lapply(cols_with_missing, tags$li)
-          )
-        )
-      },
-      
-      if (length(mismatched_wards) > 0) {
-        div(
-          style = "color: red;",
-          h4("Warning: Wardname Mismatches Detected"),
-          p("The following ward names in the scoring data do not match with the shapefile:"),
-          tags$ul(
-            lapply(mismatched_wards, tags$li)
-          ),
-          p("Please correct these mismatches before proceeding.")
-        )
-      },
-      
-      h4("Handle NA Values"),
-      radioButtons("na_handling", "Choose NA handling method:",
-                   choices = c("Mean of neighbors" = "neighbor_mean",
-                               "Mean of entire region" = "region_mean",
-                               "Mode of entire region" = "region_mode"),
-                   selected = "neighbor_mean"),
-      
-      hr(),
-      
-      h4("Specify Variable Relationship on Malaria Risk"),
-      lapply(variables, function(var) {
-        selectInput(
-          inputId = paste0("impact_", var),
-          label = var,
-          choices = c("Direct" = "direct", "Inverse" = "inverse"),
-          selected = "direct"
-        )
-      }),
-      
-      footer = tagList(
-        modalButton("Cancel"),
-        actionButton("apply_cleaning", "Apply and Continue")
-      )
-    )
-  }
-  
+  # CSV file upload
   observeEvent(input$file_csv, {
     req(input$file_csv)
     
-    # Read the uploaded file
     csv_data <- if (tolower(tools::file_ext(input$file_csv$name)) %in% c("xlsx", "xls")) {
       readxl::read_excel(input$file_csv$datapath)
     } else {
       read.csv(input$file_csv$datapath)
     }
     
-    # Convert to data frame and rename columns
-    raw_dataframe <- rename_columns(as.data.frame(csv_data))
-    raw_dataframe <- filter_columns(raw_dataframe)  # Apply the filter here
+    rv$raw_data <- rename_columns(as.data.frame(csv_data))
+    rv$na_columns <- check_missing_values(rv$raw_data)
     
-    rv$raw_data <- raw_dataframe
-    
-  })
-  
-  observeEvent(input$apply_cleaning, {
-    req(rv$raw_data)
-    raw_dataframe <- rv$raw_data
-    
-    if (input$na_handling == "neighbor_mean") {
-      # Join data with shapefile
-      spatial_data <- left_join(rv$shp_data, raw_dataframe, by = "WardName")
-      
-      # Find neighbors
-      neighbors <- st_touches(spatial_data)
-      
-      # Function to calculate mean of neighbors
-      neighbor_mean <- function(i, column) {
-        neighbor_indices <- neighbors[[i]]
-        mean(spatial_data[[column]][neighbor_indices], na.rm = TRUE)
-      }
-      
-      # Apply neighbor mean to each column with NA values
-      for (col in names(raw_dataframe)) {
-        if (is.numeric(raw_dataframe[[col]])) {
-          na_indices <- which(is.na(raw_dataframe[[col]]))
-          for (i in na_indices) {
-            raw_dataframe[i, col] <- neighbor_mean(i, col)
-          }
-        }
-      }
+    if (length(rv$na_columns) > 0) {
+      showNotification(paste("Warning: Missing values (NAs) found in columns:", paste(rv$na_columns, collapse = ", ")), type = "warning")
     }
-    
-    # Handle variable impacts
-    variables <- setdiff(names(raw_dataframe), "WardName")
-    impacts <- sapply(variables, function(var) input[[paste0("impact_", var)]])
-    rv$variable_impacts <- impacts
-    
-    # Update raw_data with cleaned data
-    rv$raw_data <- raw_dataframe
-    
-    removeModal()
-    showNotification("Data cleaning applied successfully.", type = "message")
   })
   
-  # Observer for the "Re-open Data Cleaning" button
-  observeEvent(input$reopen_data_cleaning, {
-    req(rv$raw_data)
-    showModal(showDataCleaningModal(rv$raw_data, rv$mismatched_wards))
-  })
-  
-  # Handle shapefile upload
+  # Shapefile upload
   observeEvent(input$file_shp, {
     req(input$file_shp)
     
-    # Unzip and read shapefile
     temp_dir <- tempdir()
     unzip(input$file_shp$datapath, exdir = temp_dir)
     shapefile_files <- list.files(temp_dir, pattern = "\\.shp$", full.names = TRUE)
@@ -420,77 +308,183 @@ server <- function(input, output, session) {
     if (length(shapefile_files) > 0) {
       tryCatch({
         shp_data <- st_read(shapefile_files[1], quiet = TRUE)
-        
-        # Ensure the shapefile has a valid CRS
-        if (is.na(st_crs(shp_data))) {
-          showNotification("Warning: Shapefile has no CRS. Assuming WGS84.", type = "warning")
-          shp_data <- st_set_crs(shp_data, 4326)
-        }
-        
-        # Check for 'WardName' column and handle if missing
-        if (!"WardName" %in% names(shp_data)) {
-          potential_ward_cols <- grep("ward|name|district|HealthDistrict|NOM", names(shp_data), ignore.case = TRUE, value = TRUE)
-          if (length(potential_ward_cols) > 0) {
-            shp_data$WardName <- shp_data[[potential_ward_cols[1]]]
-            showNotification(paste("Using", potential_ward_cols[1], "as WardName"), type = "warning")
-          } else {
-            showNotification("No 'WardName' column found in shapefile. Please ensure your shapefile has a column for ward names.", type = "error")
-            return(NULL)
-          }
-        }
-        
         rv$shp_data <- shp_data
         showNotification("Shapefile loaded successfully.", type = "message")
+        
+        if (!is.null(rv$raw_data)) {
+          rv$mismatched_wards <- check_wardname_mismatches(rv$raw_data, rv$shp_data)
+          if (!is.null(rv$mismatched_wards)) {
+            showModal(wardNameMismatchModal())
+          }
+        }
       }, error = function(e) {
         showNotification(paste("Error loading shapefile:", e$message), type = "error")
       })
     } else {
       showNotification("No .shp file found in the uploaded zip file.", type = "error")
     }
-    
-    # Check for wardname mismatches if CSV is already uploaded
-    if (!is.null(rv$raw_data)) {
-      mismatched_wards <- check_wardname_mismatches(rv$raw_data, shp_data)
-      rv$mismatched_wards <- mismatched_wards
-      
-      # Show the Data Cleaning modal again with updated mismatch information
-      showModal(showDataCleaningModal(rv$raw_data, rv$mismatched_wards))
+  })
+  
+  # Add a button to reopen the ward name mismatch modal
+  output$reopen_mismatch_modal <- renderUI({
+    req(rv$mismatched_wards)
+    if (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0) {
+      actionButton("reopen_mismatch", "Review Ward Name Mismatches")
     }
   })
   
-  # Update variable selection UI
-  output$variable_select_input <- renderUI({
+  # Reopen ward name mismatch modal
+  observeEvent(input$reopen_mismatch, {
+    showModal(wardNameMismatchModal())
+  })
+  
+  # Ward name mismatch modal
+  wardNameMismatchModal <- function() {
+    modalDialog(
+      title = "Ward Name Mismatches",
+      "The following ward names in your CSV file do not match the shapefile:",
+      br(),
+      tableOutput("mismatch_table"),
+      br(),
+      "Please correct these ward names in your CSV file to match the Shapefile WardNames and re-upload the data.",
+      footer = tagList(
+        modalButton("Close")
+      ),
+      size = "l"  # Make the modal larger
+    )
+  }
+  
+  output$mismatch_table <- renderTable({
+    req(rv$mismatched_wards)
+    rv$mismatched_wards
+  }, align = 'l')
+  
+  
+  # Data Cleaning
+  observeEvent(input$data_cleaning, {
+    req(rv$raw_data, rv$shp_data)
+    
+    showModal(modalDialog(
+      title = "Data Cleaning",
+      
+      h4("Columns with Missing Values (NAs)"),
+      tableOutput("na_columns_table"),
+      
+      radioButtons("na_handling", "Choose NA handling method:",
+                   choices = c("Mean of neighbors" = "spatial_neighbor_mean",
+                               "Mean of entire region" = "region_mean",
+                               "Mode of entire region" = "region_mode"),
+                   selected = rv$na_handling_method),
+      
+      h4("Specify Variable Relationships with Malaria Risk"),
+      uiOutput("variable_relationships"),
+      
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("apply_cleaning", "Apply and Continue")
+      )
+    ))
+  })
+  
+  output$variable_relationships <- renderUI({
     req(rv$raw_data)
-    selectInput("visualize", "Select Variable", 
+    vars <- setdiff(names(rv$raw_data), "WardName")
+    
+    lapply(vars, function(var) {
+      fluidRow(
+        column(6, var),
+        column(6, 
+               radioButtons(paste0("relationship_", var), NULL,
+                            choices = c("Direct" = "direct", "Inverse" = "inverse"),
+                            selected = rv$variable_relationships[[var]] %||% "direct",  # Use stored value or default to "direct"
+                            inline = TRUE)
+        )
+      )
+    })
+  })
+  
+  # Apply cleaning
+  observeEvent(input$apply_cleaning, {
+    req(rv$raw_data, rv$shp_data)
+    
+    # Store NA handling method
+    rv$na_handling_method <- input$na_handling
+    
+    # Apply NA handling method
+    cleaned_data <- switch(rv$na_handling_method,
+                           "spatial_neighbor_mean" = handle_na_neighbor_mean(rv$raw_data, rv$shp_data),
+                           "region_mean" = handle_na_region_mean(rv$raw_data),
+                           "region_mode" = handle_na_region_mode(rv$raw_data))
+    
+    # Store and apply variable relationships
+    vars <- setdiff(names(cleaned_data), "WardName")
+    for (var in vars) {
+      relationship <- input[[paste0("relationship_", var)]]
+      rv$variable_relationships[[var]] <- relationship
+      if (relationship == "inverse") {
+        cleaned_data[[var]] <- max(cleaned_data[[var]], na.rm = TRUE) - cleaned_data[[var]]
+      }
+    }
+    
+    rv$cleaned_data <- cleaned_data
+    removeModal()
+    showNotification("Data cleaning applied successfully.", type = "message")
+  })
+  
+  # Raw data variable selection
+  output$variable_select <- renderUI({
+    req(rv$raw_data)
+    selectInput("visualize_var", "Select Variable", 
                 choices = setdiff(names(rv$raw_data), "WardName"),
                 selected = names(rv$raw_data)[2])
   })
   
-  # Update composite variable selection UI
-  output$composite_variable_select <- renderUI({
-    req(rv$raw_data)
-    selectInput("composite_vars", "Select Variables for Composite Score",
-                choices = setdiff(names(rv$raw_data), "WardName"),
-                selected = NULL, multiple = TRUE)
-  })
-  
-  # Handle raw data plot button click
-  observeEvent(input$plot_raw_data_button, {
-    req(rv$raw_data, rv$shp_data, input$visualize)
+  observeEvent(input$plot_data, {
+    req(rv$raw_data, rv$shp_data, input$visualize_var)
     
-    raw_data <- inner_join(rv$raw_data, rv$shp_data)
-    rv$rawdata <- raw_data
-    
-    output$rawdataPlots <- renderGirafe({
-      plot_map_00(variable_name = input$visualize,
+    output$rawDataPlot <- renderGirafe({
+      plot_map_00(variable_name = input$visualize_var,
                   shp_data_reactive = rv$shp_data,
-                  raw_dataframe_reactive = rv$rawdata)
+                  dataframe_reactive = rv$raw_data,
+                  title = "Raw Data")
+    })
+    
+    output$cleanedDataPlot <- renderGirafe({
+      if (!is.null(rv$cleaned_data)) {
+        plot_map_00(variable_name = input$visualize_var,
+                    shp_data_reactive = rv$shp_data,
+                    dataframe_reactive = rv$cleaned_data,
+                    title = "Cleaned Data")
+      } else {
+        plot_map_00(variable_name = input$visualize_var,
+                    shp_data_reactive = rv$shp_data,
+                    dataframe_reactive = rv$raw_data,
+                    title = "Data Not Cleaned Yet")
+      }
+    })
+    
+    output$visualizationExplanation <- renderText({
+      if (is.null(rv$cleaned_data)) {
+        "The left plot shows the raw data. The right plot will show cleaned data after you perform data cleaning."
+      } else {
+        paste("The left plot shows the raw data. The right plot shows the cleaned data, where missing values (NAs) have been handled using the", 
+              rv$na_handling_method, "method. Variable relationships have been applied as specified in the data cleaning step.")
+      }
     })
   })
   
-  # Handle main plot button click
+  
+  
+  # Composite Score
+  output$composite_variable_select <- renderUI({
+    req(rv$cleaned_data)
+    selectInput("composite_vars", "Select Variables for Composite Score",
+                choices = setdiff(names(rv$cleaned_data), "WardName"),
+                selected = NULL, multiple = TRUE)
+  })
+  
   observeEvent(input$plot_button, {
-    req(rv$raw_data, input$composite_vars, rv$variable_impacts)
+    req(rv$cleaned_data, input$composite_vars)
     
     if (length(input$composite_vars) < 2) {
       showNotification("Please select at least two variables for composite score calculation.", type = "warning")
@@ -498,15 +492,34 @@ server <- function(input, output, session) {
     }
     
     tryCatch({
+      print("Cleaned data structure:")
+      print(str(rv$cleaned_data))
+      
+      # Get variable impacts
+      variable_impacts <- sapply(input$composite_vars, function(var) input[[paste0("impact_", var)]])
+      print("Variable impacts:")
+      print(variable_impacts)
+      
       # Normalize data
-      normalized_data <- normalize_data(rv$raw_data, rv$variable_impacts)
+      normalized_data <- normalize_data(rv$cleaned_data[, c("WardName", input$composite_vars)], variable_impacts)
+      print("Normalized data summary:")
+      print(summary(normalized_data))
+      
+      if (is.null(normalized_data)) {
+        showNotification("Error in data normalization. Check the console for details.", type = "error")
+        return()
+      }
+      
       rv$normalized_data <- normalized_data
+      
+      print("Normalized data structure:")
+      print(str(normalized_data))
       
       # Calculate composite scores using only selected variables
       composite_scores <- composite_score_models(normalized_data, selected_vars = input$composite_vars)
       
-      if (nrow(composite_scores$final_data) == 0 || ncol(composite_scores$final_data) <= 1) {
-        showNotification("No valid models could be created. Please check your variable selection.", type = "error")
+      if (is.null(composite_scores)) {
+        showNotification("Error in composite score calculation. Check the console for details.", type = "error")
         return()
       }
       
@@ -531,30 +544,15 @@ server <- function(input, output, session) {
         rv$output_data
       })
       
-      # Normalization plot section
+      # Normalization plot
       output$normalizationplot <- renderGirafe({
         req(rv$normalized_data, rv$shp_data, input$composite_vars)
-        
-        normalized_data <- rv$normalized_data
-        shp_data <- rv$shp_data
-        
-        selected_norm_cols <- paste0("normalization_", tolower(input$composite_vars))
-        
-        combined_data <- left_join(normalized_data, shp_data, by = "WardName")
-        
-        if (!inherits(combined_data, "sf")) {
-          combined_data <- st_as_sf(combined_data)
-        }
-        
-        plot_data <- combined_data %>%
-          select(WardName, geometry, all_of(selected_norm_cols)) %>%
-          pivot_longer(cols = all_of(selected_norm_cols), 
-                       names_to = "variable", values_to = "value") %>%
-          mutate(class = cut(value, seq(0, 1, 0.2), include.lowest = TRUE))
-        
-        plot_normalized_map(shp_data = shp_data, processed_csv = plot_data)
+        plot_normalized_map(shp_data = rv$shp_data, 
+                            processed_csv = rv$normalized_data, 
+                            selected_vars = input$composite_vars)
       })
       
+      # Box whisker plot
       output$boxwhiskerPlots <- renderPlotly({
         box_plot_function(plottingdata = rv$data)
       })
@@ -571,16 +569,6 @@ server <- function(input, output, session) {
       showNotification(paste("Error:", e$message), type = "error")
     })
   })
-  
-  # Download example data
-  output$downloadData <- downloadHandler(
-    filename = function() {
-      "example.csv"
-    },
-    content = function(file) {
-      file.copy("example.csv", file)
-    }
-  )
 }
 
 shinyApp(ui = ui, server = server)

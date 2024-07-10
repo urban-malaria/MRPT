@@ -19,6 +19,8 @@ library(rlang)
 library(shiny)
 library(bslib)
 library(plotly)
+library(spdep)
+library(stringdist)
 
 # Function to generate a list of column name patterns
 generate_pattern_list <- function(df) {
@@ -82,27 +84,102 @@ theme_manuscript <- function(){
 
 
 
-# Function to plot an interactive map
-plot_map_00 <- function(variable_name, shp_data_reactive, raw_dataframe_reactive) {
-  plot <- ggplot(data = shp_data_reactive) +
-    geom_sf_interactive(color = "black", fill = "white") +
-    geom_sf_interactive(data = raw_dataframe_reactive,
-                        aes(geometry = geometry,
-                            fill = !!sym(variable_name),  
+# Function to handle NA values using spatial weights
+library(spdep)
+
+handle_na_neighbor_mean <- function(data, shp_data) {
+  # Merge data with shapefile
+  spatial_data <- left_join(shp_data, data, by = "WardName")
+  
+  # Create neighbor list
+  w <- spdep::poly2nb(spatial_data, queen = TRUE)
+  w_listw <- spdep::nb2listw(w, style = "W")
+  
+  for (col in names(data)) {
+    if (is.numeric(data[[col]]) && any(is.na(data[[col]]))) {
+      # Get the column data
+      col_data <- spatial_data[[col]]
+      
+      # Find indices of missing values
+      missing_indices <- which(is.na(col_data))
+      
+      # Impute missing values with the mean of neighboring values
+      for (index in missing_indices) {
+        neighbor_indices <- w[[index]]
+        neighbor_values <- col_data[neighbor_indices]
+        imputed_value <- mean(neighbor_values, na.rm = TRUE)
+        
+        # If all neighbors are NA, use the mean of the entire region
+        if (is.na(imputed_value)) {
+          imputed_value <- mean(col_data, na.rm = TRUE)
+        }
+        
+        col_data[index] <- imputed_value
+      }
+      
+      # Update the original data
+      data[[col]] <- col_data
+    }
+  }
+  
+  return(data)
+}
+
+
+# Function to handle NA values using mean of entire region
+handle_na_region_mean <- function(data) {
+  for (col in names(data)) {
+    if (is.numeric(data[[col]]) && any(is.na(data[[col]]))) {
+      data[[col]][is.na(data[[col]])] <- mean(data[[col]], na.rm = TRUE)
+    }
+  }
+  return(data)
+}
+
+# Function to handle NA values using mode of entire region
+handle_na_region_mode <- function(data) {
+  get_mode <- function(x) {
+    ux <- unique(x)
+    ux[which.max(tabulate(match(x, ux)))]
+  }
+  
+  for (col in names(data)) {
+    if (any(is.na(data[[col]]))) {
+      if (is.numeric(data[[col]])) {
+        data[[col]][is.na(data[[col]])] <- get_mode(data[[col]][!is.na(data[[col]])])
+      } else if (is.factor(data[[col]]) || is.character(data[[col]])) {
+        data[[col]][is.na(data[[col]])] <- get_mode(data[[col]][!is.na(data[[col]])])
+      }
+    }
+  }
+  return(data)
+}
+
+# Modified plot_map_00 function to work with both raw and cleaned data
+plot_map_00 <- function(variable_name, shp_data_reactive, dataframe_reactive, title) {
+  # Ensure the dataframe has a geometry column
+  if (!"geometry" %in% names(dataframe_reactive)) {
+    dataframe_reactive <- left_join(shp_data_reactive, dataframe_reactive, by = "WardName")
+  }
+  
+  plot <- ggplot() +
+    geom_sf_interactive(data = shp_data_reactive, color = "black", fill = "white") +
+    geom_sf_interactive(data = dataframe_reactive,
+                        aes(fill = !!sym(variable_name),  
                             tooltip = paste(WardName, "(", round(as.numeric(!!sym(variable_name)), 3), ")"))) +
-    scale_fill_distiller(name = "", palette = "YlGnBu", direction = 1) +
-    labs(title = variable_name, subtitle = '', fill = "", x = NULL, y = NULL) +
-    theme_classic() +
+    scale_fill_gradientn(colors = brewer.pal(9, "Blues"), name = "") +
+    labs(title = title, subtitle = variable_name, fill = "", x = NULL, y = NULL) +
+    theme_minimal() +
     theme(legend.position = "right",
           legend.title = element_text(size = 10),
           legend.text = element_text(size = 8),
           plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-          axis.line = element_blank(),
+          plot.subtitle = element_text(hjust = 0.5, size = 12),
           axis.text = element_blank(),
           axis.ticks = element_blank(),
-          axis.title = element_blank())
+          panel.grid = element_blank())
   
-  girafe(ggobj = plot)
+  girafe(ggobj = plot, width_svg = 10, height_svg = 8)
 }
 
 
@@ -120,51 +197,91 @@ check_missing_values <- function(data) {
 check_wardname_mismatches <- function(csv_data, shp_data) {
   csv_wardnames <- csv_data$WardName
   shp_wardnames <- shp_data$WardName
+  
   mismatched_wards <- setdiff(csv_wardnames, shp_wardnames)
-  return(mismatched_wards)
+  
+  if (length(mismatched_wards) > 0) {
+    mismatches <- data.frame(
+      CSV_WardNames = mismatched_wards,
+      Shapefile_WardNames = character(length(mismatched_wards)),
+      stringsAsFactors = FALSE
+    )
+    
+    for (i in seq_along(mismatched_wards)) {
+      distances <- stringdist(mismatched_wards[i], shp_wardnames, method = "lv")
+      closest_match <- shp_wardnames[which.min(distances)]
+      mismatches$Shapefile_WardNames[i] <- closest_match
+    }
+    
+    return(mismatches)
+  } else {
+    return(NULL)
+  }
 }
 
 
 # Normalization function
 normalize_data <- function(uploaded_data, variable_impacts) {
-  numeric_cols <- sapply(uploaded_data, is.numeric)
-  
-  scoring_data <- uploaded_data %>%
-    mutate(across(where(is.numeric), 
-                  ~{
-                    if (variable_impacts[cur_column()] == "inverse") {
-                      # Add a small constant to the denominator to prevent division by zero
-                      inverted <- 1 / (. + 1e-6) 
-                      normalized <- (inverted - min(inverted, na.rm = TRUE)) / 
-                        (max(inverted, na.rm = TRUE) - min(inverted, na.rm = TRUE) + 1e-6) 
-                    } else {
-                      normalized <- (. - min(., na.rm = TRUE)) / 
-                        (max(., na.rm = TRUE) - min(., na.rm = TRUE))
-                    }
-                    normalized
-                  },
-                  .names = "normalization_{tolower(.col)}"))
-  # Add debugging output
-  #print("Normalized data summary:")
-  #print(summary(scoring_data))
-  
-  return(scoring_data)
+  tryCatch({
+    print("Input data structure:")
+    print(str(uploaded_data))
+    print("Variable impacts:")
+    print(variable_impacts)
+    
+    scoring_data <- uploaded_data %>%
+      mutate(across(where(is.numeric), 
+                    ~{
+                      col_name <- cur_column()
+                      print(paste("Processing column:", col_name))
+                      if (variable_impacts[col_name] == "inverse") {
+                        print("Applying inverse transformation")
+                        # Use a different inverse transformation
+                        inverted <- 1 / (. + 1)  # Adding 1 to avoid division by zero and extreme values
+                        normalized <- (inverted - min(inverted, na.rm = TRUE)) / 
+                          (max(inverted, na.rm = TRUE) - min(inverted, na.rm = TRUE))
+                      } else {
+                        print("Applying direct normalization")
+                        normalized <- (. - min(., na.rm = TRUE)) / 
+                          (max(., na.rm = TRUE) - min(., na.rm = TRUE))
+                      }
+                      print(paste("Normalization complete for", col_name))
+                      normalized
+                    },
+                    .names = "normalization_{tolower(.col)}"))
+    
+    print("Normalized data summary:")
+    print(summary(scoring_data))
+    
+    return(scoring_data)
+  }, error = function(e) {
+    print(paste("Error in normalize_data:", e$message))
+    return(NULL)
+  })
 }
 
 
 # Function to plot normalized map
-plot_normalized_map <- function(shp_data, processed_csv) {
+plot_normalized_map <- function(shp_data, processed_csv, selected_vars) {
   palette_func <- brewer.pal(5, "YlOrRd")
+  
+  # Filter the processed_csv to include only the selected variables
+  selected_cols <- c("WardName", paste0("normalization_", tolower(selected_vars)))
+  filtered_data <- processed_csv %>% 
+    select(all_of(selected_cols)) %>%
+    pivot_longer(cols = -WardName, names_to = "variable", values_to = "value")
+  
+  # Join with shapefile data
+  combined_data <- left_join(filtered_data, shp_data, by = "WardName")
   
   plot <- ggplot(data = shp_data) +
     geom_sf_interactive(color = "black", fill = "white") + 
-    geom_sf_interactive(data = processed_csv,
-                        aes(geometry = geometry, fill = class, 
+    geom_sf_interactive(data = combined_data,
+                        aes(geometry = geometry, fill = value, 
                             tooltip = paste(WardName, variable, 
                                             "\nValue:", round(value, 3)))) +
     facet_wrap(~variable, ncol = 2) +
-    scale_fill_discrete(drop=FALSE, name="score", type = palette_func) +
-    labs(subtitle='', title='', fill = "score") +
+    scale_fill_gradientn(colours = palette_func, name = "Normalized Value") +
+    labs(subtitle='', title='Normalized Variables') +
     theme_void() +
     theme(panel.background = element_blank(),
           strip.text = element_text(size = 12),
@@ -179,12 +296,22 @@ plot_normalized_map <- function(shp_data, processed_csv) {
 # Function to calculate composite scores for different models
 
 composite_score_models <- function(normalized_data, selected_vars) {
+  print("Entering composite_score_models function")
+  print("Normalized data structure:")
+  print(str(normalized_data))
+  print("Selected variables:")
+  print(selected_vars)
+  
   # Get normalized column names for selected variables only
   norm_cols <- paste0("normalization_", tolower(selected_vars))
   norm_cols <- intersect(norm_cols, names(normalized_data))
   
+  print("Normalized columns to be used:")
+  print(norm_cols)
+  
   if (length(norm_cols) < 2) {
-    stop("Error: At least two valid variables are required for composite score calculation.")
+    print("Error: At least two valid variables are required for composite score calculation.")
+    return(NULL)
   }
   
   # Generate combinations
@@ -200,6 +327,8 @@ composite_score_models <- function(normalized_data, selected_vars) {
   }
   
   # Calculate composite scores
+  final_data <- normalized_data %>% select(WardName)
+  
   for (i in seq_along(model_combinations)) {
     model_name <- paste0("model_", i)
     vars <- model_combinations[[i]]
@@ -208,25 +337,35 @@ composite_score_models <- function(normalized_data, selected_vars) {
     print("Variables used:")
     print(vars)
     
-    normalized_data <- normalized_data %>% 
-      mutate(!!sym(model_name) := {
-        result <- rowSums(select(., all_of(vars))) / length(vars)
-        
-        print("Result summary:")
-        print(summary(result))
-        
-        if (model_name == "model_4") {
-          print("Detailed result for model_4:")
-          print(head(result, 10))
-        }
-        
-        result
-      })
+    tryCatch({
+      final_data <- final_data %>% 
+        mutate(!!sym(model_name) := {
+          result <- rowSums(select(normalized_data, all_of(vars))) / length(vars)
+          
+          print("Result summary:")
+          print(summary(result))
+          
+          if (model_name == "model_4") {
+            print("Detailed result for model_4:")
+            print(head(result, 10))
+          }
+          
+          result
+        })
+    }, error = function(e) {
+      print(paste("Error in composite_score_models for", model_name, ":", e$message))
+      print("Data causing the error:")
+      print(str(normalized_data))
+      print("Variables causing the error:")
+      print(vars)
+    })
   }
   
   # Prepare output
-  final_data <- normalized_data %>% 
-    select(WardName, starts_with("model_"))
+  if (ncol(final_data) <= 1) {
+    print("Error: No valid models could be created.")
+    return(NULL)
+  }
   
   list(model_formula = model_combinations, 
        final_data = final_data)
