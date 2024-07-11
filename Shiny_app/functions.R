@@ -85,85 +85,78 @@ theme_manuscript <- function(){
 
 
 # Function to handle NA values using spatial weights
-handle_na_neighbor_mean <- function(data, shp_data) {
-  print(paste("Initial rows in data:", nrow(data)))
-  print(paste("Initial rows in shp_data:", nrow(shp_data)))
+handle_na_neighbor_mean <- function(data, shp_data, col = NULL) {
+  if (is.null(col)) {
+    cols_to_process <- names(data)[sapply(data, function(x) any(is.na(x)))]
+  } else {
+    cols_to_process <- col
+  }
   
-  # Merge data with shapefile
   spatial_data <- left_join(shp_data, data, by = "WardName")
-  print(paste("Rows after merge:", nrow(spatial_data)))
-  
-  # Remove any rows that were added due to mismatches
   spatial_data <- spatial_data[!is.na(spatial_data$X),]
-  print(paste("Rows after removing mismatches:", nrow(spatial_data)))
   
-  # Create neighbor list
   w <- spdep::poly2nb(spatial_data, queen = TRUE)
   w_listw <- spdep::nb2listw(w, style = "W")
   
-  for (col in names(data)) {
-    if (is.numeric(data[[col]]) && any(is.na(data[[col]]))) {
-      print(paste("Processing column:", col))
+  for (current_col in cols_to_process) {
+    col_data <- spatial_data[[current_col]]
+    missing_indices <- which(is.na(col_data))
+    
+    for (index in missing_indices) {
+      neighbor_indices <- w[[index]]
+      neighbor_values <- col_data[neighbor_indices]
+      imputed_value <- mean(neighbor_values, na.rm = TRUE)
       
-      # Get the column data
-      col_data <- spatial_data[[col]]
-      
-      # Find indices of missing values
-      missing_indices <- which(is.na(col_data))
-      print(paste("Number of missing values:", length(missing_indices)))
-      
-      # Impute missing values with the mean of neighboring values
-      for (index in missing_indices) {
-        neighbor_indices <- w[[index]]
-        neighbor_values <- col_data[neighbor_indices]
-        imputed_value <- mean(neighbor_values, na.rm = TRUE)
-        
-        # If all neighbors are NA, use the mean of the entire region
-        if (is.na(imputed_value)) {
-          imputed_value <- mean(col_data, na.rm = TRUE)
-        }
-        
-        col_data[index] <- imputed_value
+      if (is.na(imputed_value)) {
+        imputed_value <- mean(col_data, na.rm = TRUE)
       }
       
-      # Update the original data
-      data[[col]] <- col_data
+      col_data[index] <- imputed_value
     }
+    
+    data[[current_col]] <- col_data
   }
   
-  print(paste("Final rows in data:", nrow(data)))
   return(data)
 }
 
-
 # Function to handle NA values using mean of entire region
-handle_na_region_mean <- function(data) {
-  for (col in names(data)) {
-    if (is.numeric(data[[col]]) && any(is.na(data[[col]]))) {
-      data[[col]][is.na(data[[col]])] <- mean(data[[col]], na.rm = TRUE)
-    }
+handle_na_region_mean <- function(data, col = NULL) {
+  if (is.null(col)) {
+    cols_to_process <- names(data)[sapply(data, function(x) any(is.na(x)))]
+  } else {
+    cols_to_process <- col
   }
+  
+  for (current_col in cols_to_process) {
+    data[[current_col]][is.na(data[[current_col]])] <- mean(data[[current_col]], na.rm = TRUE)
+  }
+  
   return(data)
 }
 
 # Function to handle NA values using mode of entire region
-handle_na_region_mode <- function(data) {
+handle_na_region_mode <- function(data, col = NULL) {
   get_mode <- function(x) {
     ux <- unique(x)
     ux[which.max(tabulate(match(x, ux)))]
   }
   
-  for (col in names(data)) {
-    if (any(is.na(data[[col]]))) {
-      if (is.numeric(data[[col]])) {
-        data[[col]][is.na(data[[col]])] <- get_mode(data[[col]][!is.na(data[[col]])])
-      } else if (is.factor(data[[col]]) || is.character(data[[col]])) {
-        data[[col]][is.na(data[[col]])] <- get_mode(data[[col]][!is.na(data[[col]])])
-      }
-    }
+  if (is.null(col)) {
+    cols_to_process <- names(data)[sapply(data, function(x) any(is.na(x)))]
+  } else {
+    cols_to_process <- col
   }
+  
+  for (current_col in cols_to_process) {
+    data[[current_col]][is.na(data[[current_col]])] <- get_mode(data[[current_col]][!is.na(data[[current_col]])])
+  }
+  
   return(data)
 }
+
+
+
 
 # Modified plot_map_00 function to work with both raw and cleaned data
 plot_map_00 <- function(variable_name, shp_data_reactive, dataframe_reactive, title) {

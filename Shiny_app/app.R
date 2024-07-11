@@ -431,19 +431,26 @@ server <- function(input, output, session) {
   # Data Cleaning
   observeEvent(input$data_cleaning, {
     req(rv$raw_data, rv$shp_data)
-    print(paste("Number of rows in cleaned_data:", nrow(rv$cleaned_data)))
+    
+    na_columns <- check_missing_values(rv$raw_data)
     
     showModal(modalDialog(
       title = "Data Cleaning",
       
       h4("Columns with Missing Values (NAs)"),
-      tableOutput("na_columns_table"),
       
-      radioButtons("na_handling", "Choose NA handling method:",
-                   choices = c("Mean of neighbors" = "spatial_neighbor_mean",
-                               "Mean of entire region" = "region_mean",
-                               "Mode of entire region" = "region_mode"),
-                   selected = rv$na_handling_method),
+      lapply(na_columns, function(col) {
+        fluidRow(
+          column(6, h5(col)),
+          column(6, 
+                 selectInput(paste0("na_handling_", col), NULL,
+                             choices = c("Spatial neighbor mean" = "spatial_neighbor_mean",
+                                         "Region mean" = "region_mean",
+                                         "Region mode" = "region_mode"),
+                             selected = "spatial_neighbor_mean")
+          )
+        )
+      }),
       
       h4("Specify Variable Relationships with Malaria Risk"),
       uiOutput("variable_relationships"),
@@ -454,6 +461,7 @@ server <- function(input, output, session) {
       )
     ))
   })
+  
   
   observeEvent(input$na_handling, {
     rv$na_handling_method <- input$na_handling
@@ -484,13 +492,17 @@ server <- function(input, output, session) {
     req(rv$raw_data, rv$shp_data)
     
     tryCatch({
-      # Apply NA handling method
-      cleaned_data <- switch(input$na_handling,
-                             "spatial_neighbor_mean" = handle_na_neighbor_mean(rv$raw_data, rv$shp_data),
-                             "region_mean" = handle_na_region_mean(rv$raw_data),
-                             "region_mode" = handle_na_region_mode(rv$raw_data))
+      cleaned_data <- rv$raw_data
+      na_columns <- check_missing_values(rv$raw_data)
       
-      print(paste("Rows in cleaned_data after NA handling:", nrow(cleaned_data)))
+      for (col in na_columns) {
+        method <- input[[paste0("na_handling_", col)]]
+        cleaned_data <- switch(method,
+                               "spatial_neighbor_mean" = handle_na_neighbor_mean(cleaned_data, rv$shp_data, col),
+                               "region_mean" = handle_na_region_mean(cleaned_data, col),
+                               "region_mode" = handle_na_region_mode(cleaned_data, col)
+        )
+      }
       
       # Store and apply variable relationships
       vars <- setdiff(names(cleaned_data), "WardName")
