@@ -262,7 +262,7 @@ server <- function(input, output, session) {
     raw_data = NULL,
     rawdata = NULL,
     mismatched_wards = NULL,
-    #corrected_wardnames = NULL,
+    na_handling_methods = list(),
     cleaned_data = NULL,
     normalized_data = NULL,
     normalizeddata = NULL,
@@ -447,7 +447,7 @@ server <- function(input, output, session) {
                              choices = c("Spatial neighbor mean" = "spatial_neighbor_mean",
                                          "Region mean" = "region_mean",
                                          "Region mode" = "region_mode"),
-                             selected = "spatial_neighbor_mean")
+                             selected = rv$na_handling_methods[[col]] %||% "spatial_neighbor_mean")
           )
         )
       }),
@@ -497,6 +497,7 @@ server <- function(input, output, session) {
       
       for (col in na_columns) {
         method <- input[[paste0("na_handling_", col)]]
+        rv$na_handling_methods[[col]] <- method  # Store the selected method
         cleaned_data <- switch(method,
                                "spatial_neighbor_mean" = handle_na_neighbor_mean(cleaned_data, rv$shp_data, col),
                                "region_mean" = handle_na_region_mean(cleaned_data, col),
