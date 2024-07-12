@@ -48,11 +48,7 @@ ui <- fluidPage(
     tabPanel("Instructions",
              tags$br(),
              h6("
-The tool's innovative approach lies in its ability to combine multiple data layers,
-offering a comprehensive visualization of risk factors that contribute to malaria spread. 
-This enables health authorities and stakeholders to prioritize resources and interventions 
-more effectively, focusing on high-risk zones identified through the tool's analytical 
-capabilities."),
+By integrating multiple data layers, this malaria risk mapping tool provides actionable insights for effective malaria control. Stakeholders can visualize and analyze converging risk factors, leading to better-informed decisions about resource prioritization and intervention strategies in high-risk areas."),
              
              fluidRow(
                column(6,
@@ -212,7 +208,7 @@ capabilities."),
                         wellPanel(
                           style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 600px; overflow-y: auto;",
                           h4("Understanding the Box and Whisker Plot"),
-                          p("This plot visualizes the distribution of median vulnerability scores across wards, ranked from least vulnerable (top) to most vulnerable (bottom)."),
+                          p("This plot visualizes the distribution of median vulnerability scores across wards, ranked from most vulnerable (top) to least vulnerable (bottom)."),
                           p("Each horizontal bar represents a ward:"),
                           tags$ul(
                             tags$li("The box shows the interquartile range (IQR) of vulnerability scores."),
@@ -228,21 +224,21 @@ capabilities."),
                         wellPanel(
                           style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 600px; overflow-y: auto;",
                           h4("Understanding the Vulnerability Map"),
-                          p("This map displays the median vulnerability score for each ward, providing a geographic perspective on malaria risk."),
+                          p("This map displays the overall vulnerability rank for each ward, providing a geographic perspective on malaria risk."),
                           p("Key features:"),
                           tags$ul(
-                            tags$li("Color intensity represents the vulnerability score, with darker colors indicating higher vulnerability and lighter colors indicating lower vulnerability."),
-                            tags$li("The color scale ranges from dark purple (highest vulnerability) to light yellow (lowest vulnerability)."),
-                            tags$li("Hover over each ward to see its name and exact median score."),
-                            tags$li("The map allows for easy identification of high-risk clusters and spatial patterns in vulnerability.")
+                            tags$li("Color intensity represents the vulnerability rank, with darker colors indicating higher vulnerability (higher rank) and lighter colors indicating lower vulnerability (lower rank)."),
+                            tags$li("The color scale ranges from light yellow (least vulnerable, lowest rank, 1) to dark purple (most vulnerable, highest rank)."),
+                            tags$li("Hover over each ward to see its name and exact rank."),
+                            tags$li("The map allows for easy identification of high-risk areas and spatial patterns in vulnerability.")
                           ),
                           p("Interpretation:"),
                           tags$ul(
-                            tags$li("Dark purple areas represent wards with the highest vulnerability scores, indicating a higher risk of malaria."),
-                            tags$li("Light yellow areas represent wards with the lowest vulnerability scores, indicating a lower risk of malaria."),
+                            tags$li("Dark purple areas represent wards with the highest ranks indicating the highest vulnerability and risk of malaria."),
+                            tags$li("Light yellow areas represent wards with the lowest ranks (1, 2, 3, etc.), indicating the lowest vulnerability and risk of malaria."),
                             tags$li("The gradients between these colors represent varying levels of vulnerability.")
                           ),
-                          p("Use this map to identify priority areas for intervention and to understand the spatial distribution of malaria risk factors across the region. Areas with darker colors may require more immediate attention and resources in malaria prevention efforts.")
+                          p("Use this map to identify priority areas for intervention. Wards with higher ranks (darker colors) may require more immediate attention and resources in malaria prevention efforts.")
                         )
                       )
                )
@@ -604,22 +600,15 @@ server <- function(input, output, session) {
   
   
   output$vulnerabilityMap <- renderGirafe({
-    req(rv$data)
+    req(rv$data, rv$ward_rankings, rv$shp_data)
     
-    # Calculate median vulnerability score for each ward
-    ward_medians <- rv$data %>%
-      group_by(WardName) %>%
-      summarize(median_score = median(value, na.rm = TRUE))
+    map_data <- left_join(rv$shp_data, rv$ward_rankings, by = "WardName")
     
-    # Join with shapefile data
-    map_data <- left_join(rv$shp_data, ward_medians, by = "WardName")
-    
-    # Create the map
     plot <- ggplot() +
-      geom_sf_interactive(data = map_data, aes(fill = median_score, 
-                                               tooltip = paste(WardName, "\nMedian Score:", round(median_score, 2)))) +
+      geom_sf_interactive(data = map_data, aes(fill = overall_rank, 
+                                               tooltip = paste(WardName, "\nRank:", overall_rank))) +
       scale_fill_viridis_c(option = "plasma", direction = -1, 
-                           name = "Vulnerability Score",
+                           name = "Vulnerability Rank",
                            guide = guide_colorbar(
                              title.position = "top",
                              title.hjust = 0.5,
@@ -859,8 +848,11 @@ server <- function(input, output, session) {
       
       # Box whisker plot
       output$boxwhiskerPlots <- renderPlotly({
-        box_plot_function(plottingdata = rv$data)
+        box_plot_results <- box_plot_function(rv$data)
+        rv$ward_rankings <- box_plot_results$ward_rankings
+        box_plot_results$plot
       })
+      
       
       # Show the number of model combinations generated
       num_models <- nrow(model_formulae_table)

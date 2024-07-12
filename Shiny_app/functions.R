@@ -456,7 +456,7 @@ plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_p
   
   # Create a named vector for facet labels
   facet_labels <- setNames(
-    paste(model_formulas$model, "\n", model_formulas$variables),
+    paste(gsub("_", " ", model_formulas$model), "\n", model_formulas$variables),
     model_formulas$model
   )
   
@@ -485,12 +485,12 @@ plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_p
            fill = "Malaria Risk Score") +
       theme_void() +
       theme(
-        strip.text = element_text(size = 10, face = "bold", lineheight = 0.9),
-        strip.background = element_rect(fill = "white", color = "black"),
+        strip.text = element_text(size = 14, face = "bold", lineheight = 0.9),
+        strip.background = element_blank(),  # This removes the box around the heading
         legend.position = "bottom",
         legend.title = element_text(size = 12, face = "bold"),
         legend.text = element_text(size = 10),
-        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
         plot.subtitle = element_text(size = 14, hjust = 0.5)
       )
     
@@ -508,13 +508,16 @@ box_plot_function <- function(plottingdata) {
   df_long <- plottingdata %>%
     select(WardName, variable, rank)
   
-  medians <- df_long %>%
+  ward_rankings <- df_long %>%
     group_by(WardName) %>%
-    summarize(median_value = median(rank)) %>%
-    arrange(median_value) %>%
-    .$WardName
+    summarize(median_rank = median(rank)) %>%
+    arrange(median_rank) %>%
+    mutate(overall_rank = row_number())
   
-  df_long$WardName <- factor(df_long$WardName, levels = medians)
+  df_long <- df_long %>%
+    left_join(ward_rankings, by = "WardName")
+  
+  df_long$WardName <- factor(df_long$WardName, levels = ward_rankings$WardName)
   
   p <- ggplot(df_long, aes(x = WardName, y = rank)) +
     geom_boxplot(fill = "#69b3a2", color = "#3c5e8b", alpha = 0.7) +
@@ -527,10 +530,12 @@ box_plot_function <- function(plottingdata) {
       plot.title = element_text(size = 14, hjust = 0.5, face = "bold")
     )
   
-  ggplotly(p, height = 700) %>%
+  plot <- ggplotly(p, height = 700) %>%
     layout(
       yaxis = list(fixedrange = FALSE),
       xaxis = list(fixedrange = TRUE)
     ) %>%
     config(scrollZoom = TRUE)
+  
+  return(list(plot = plot, ward_rankings = ward_rankings))
 }
