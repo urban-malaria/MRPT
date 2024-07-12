@@ -490,7 +490,7 @@ plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_p
         legend.position = "bottom",
         legend.title = element_text(size = 12, face = "bold"),
         legend.text = element_text(size = 10),
-        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
         plot.subtitle = element_text(size = 14, hjust = 0.5)
       )
     
@@ -530,7 +530,7 @@ box_plot_function <- function(plottingdata) {
       plot.title = element_text(size = 14, hjust = 0.5, face = "bold")
     )
   
-  plot <- ggplotly(p, height = 700) %>%
+  plot <- ggplotly(p, height = 750) %>%
     layout(
       yaxis = list(fixedrange = FALSE),
       xaxis = list(fixedrange = TRUE)
