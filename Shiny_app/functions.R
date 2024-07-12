@@ -21,6 +21,9 @@ library(bslib)
 library(plotly)
 library(spdep)
 library(stringdist)
+library(DiagrammeR)
+library(glue)
+
 
 # Function to generate a list of column name patterns
 generate_pattern_list <- function(df) {
@@ -51,6 +54,23 @@ filter_columns <- function(data) {
   
   selected_columns <- c("WardName", names(data)[(ward_name_index + 1):ncol(data)])
   return(data[, selected_columns])
+}
+
+
+get_columns_after_wardname <- function(data, specific_columns = NULL) {
+  ward_name_index <- which(names(data) == "WardName")
+  if (length(ward_name_index) == 0) {
+    warning("WardName column not found. Returning all columns.")
+    return(names(data))
+  }
+  
+  columns_after_wardname <- names(data)[(ward_name_index + 1):ncol(data)]
+  
+  if (!is.null(specific_columns)) {
+    columns_after_wardname <- intersect(columns_after_wardname, specific_columns)
+  }
+  
+  return(columns_after_wardname)
 }
 
 
@@ -92,15 +112,15 @@ handle_na_neighbor_mean <- function(data, shp_data, col = NULL) {
     cols_to_process <- col
   }
   
-  spatial_data <- left_join(shp_data, data, by = "WardName")
-  spatial_data <- spatial_data[!is.na(spatial_data$X),]
-  
-  w <- spdep::poly2nb(spatial_data, queen = TRUE)
-  w_listw <- spdep::nb2listw(w, style = "W")
+  # Create neighbor structure using shapefile data
+  w <- spdep::poly2nb(shp_data, queen = TRUE)
   
   for (current_col in cols_to_process) {
-    col_data <- spatial_data[[current_col]]
+    col_data <- data[[current_col]]
     missing_indices <- which(is.na(col_data))
+    
+    print(paste("Processing column:", current_col))
+    print(paste("Number of NAs:", length(missing_indices)))
     
     for (index in missing_indices) {
       neighbor_indices <- w[[index]]
@@ -112,9 +132,11 @@ handle_na_neighbor_mean <- function(data, shp_data, col = NULL) {
       }
       
       col_data[index] <- imputed_value
+      print(paste("Imputed value for index", index, ":", imputed_value))
     }
     
-    data[[current_col]] <- col_data
+    # Only update the NAs in the original data
+    data[[current_col]][missing_indices] <- col_data[missing_indices]
   }
   
   return(data)
@@ -159,10 +181,20 @@ handle_na_region_mode <- function(data, col = NULL) {
 
 
 # Modified plot_map_00 function to work with both raw and cleaned data
-plot_map_00 <- function(variable_name, shp_data_reactive, dataframe_reactive, title) {
+plot_map_00 <- function(variable_name, 
+                        shp_data_reactive, 
+                        dataframe_reactive, 
+                        title, 
+                        na_handling_method = NULL) {
   # Ensure the dataframe has a geometry column
   if (!"geometry" %in% names(dataframe_reactive)) {
     dataframe_reactive <- left_join(shp_data_reactive, dataframe_reactive, by = "WardName")
+  }
+  
+  na_method_text <- if (!is.null(na_handling_method)) {
+    paste("\nNA Handling: ", na_handling_method)
+  } else {
+    ""
   }
   
   plot <- ggplot() +
@@ -171,13 +203,13 @@ plot_map_00 <- function(variable_name, shp_data_reactive, dataframe_reactive, ti
                         aes(fill = !!sym(variable_name),  
                             tooltip = paste(WardName, "(", round(as.numeric(!!sym(variable_name)), 3), ")"))) +
     scale_fill_gradientn(colors = brewer.pal(9, "Blues"), name = "") +
-    labs(title = title, subtitle = variable_name, fill = "", x = NULL, y = NULL) +
+    labs(title = paste(title, na_method_text), subtitle = variable_name, fill = "", x = NULL, y = NULL) +
     theme_minimal() +
     theme(legend.position = "right",
-          legend.title = element_text(size = 10),
-          legend.text = element_text(size = 8),
-          plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
-          plot.subtitle = element_text(hjust = 0.5, size = 12),
+          legend.title = element_text(size = 14),
+          legend.text = element_text(size = 12),
+          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          plot.subtitle = element_text(hjust = 0.5, size = 14),
           axis.text = element_blank(),
           axis.ticks = element_blank(),
           panel.grid = element_blank())
@@ -193,7 +225,7 @@ plot_map_00 <- function(variable_name, shp_data_reactive, dataframe_reactive, ti
 check_missing_values <- function(data) {
   missing_cols <- sapply(data, function(x) any(is.na(x)))
   cols_with_missing <- names(missing_cols[missing_cols])
-  return(cols_with_missing)
+  return(list(columns = cols_with_missing, data = data))
 }
 
 # Function to check for wardname mismatches:
@@ -217,31 +249,38 @@ check_wardname_mismatches <- function(csv_data, shp_data) {
 
 
 # Normalization function
-normalize_data <- function(uploaded_data, variable_impacts) {
+# Modify normalize_data 
+normalize_data <- function(cleaned_data, variable_relationships) { 
   tryCatch({
-    print("Input data structure:")
-    print(str(uploaded_data))
-    print("Variable impacts:")
-    print(variable_impacts)
+    print("Input data structure (cleaned data):")
+    print(str(cleaned_data))
+    print("Variable relationships:")
+    print(variable_relationships) 
     
-    scoring_data <- uploaded_data %>%
-      mutate(across(where(is.numeric), 
+    # Identify numeric columns for normalization
+    numeric_cols <- names(cleaned_data)[sapply(cleaned_data, is.numeric)]
+    numeric_cols <- intersect(numeric_cols, names(variable_relationships))
+    
+    print("Numeric columns to be normalized:")
+    print(numeric_cols)
+    
+    if (length(numeric_cols) == 0) {
+      stop("No numeric columns found for normalization!")
+    }
+    
+    # Apply normalization to numeric columns based on relationships
+    scoring_data <- cleaned_data %>% 
+      mutate(across(all_of(numeric_cols), 
                     ~{
                       col_name <- cur_column()
-                      print(paste("Processing column:", col_name))
-                      if (variable_impacts[col_name] == "inverse") {
-                        print("Applying inverse transformation")
-                        # Use a different inverse transformation
-                        inverted <- 1 / (. + 1)  # Adding 1 to avoid division by zero and extreme values
-                        normalized <- (inverted - min(inverted, na.rm = TRUE)) / 
+                      if (variable_relationships[col_name] == "inverse") {
+                        inverted <- 1 / (. + 1) 
+                        (inverted - min(inverted, na.rm = TRUE)) / 
                           (max(inverted, na.rm = TRUE) - min(inverted, na.rm = TRUE))
-                      } else {
-                        print("Applying direct normalization")
-                        normalized <- (. - min(., na.rm = TRUE)) / 
-                          (max(., na.rm = TRUE) - min(., na.rm = TRUE))
+                      } else { 
+                        (. - min(., na.rm = TRUE)) / 
+                          (max(., na.rm = TRUE) - min(., na.rm = TRUE)) 
                       }
-                      print(paste("Normalization complete for", col_name))
-                      normalized
                     },
                     .names = "normalization_{tolower(.col)}"))
     
@@ -249,25 +288,28 @@ normalize_data <- function(uploaded_data, variable_impacts) {
     print(summary(scoring_data))
     
     return(scoring_data)
+    
   }, error = function(e) {
     print(paste("Error in normalize_data:", e$message))
+    print(traceback()) 
     return(NULL)
   })
-}
+} 
+
 
 
 # Function to plot normalized map
 plot_normalized_map <- function(shp_data, processed_csv, selected_vars) {
   palette_func <- brewer.pal(5, "YlOrRd")
   
-  # Filter the processed_csv to include only the selected variables
-  selected_cols <- c("WardName", paste0("normalization_", tolower(selected_vars)))
-  filtered_data <- processed_csv %>% 
-    select(all_of(selected_cols)) %>%
-    pivot_longer(cols = -WardName, names_to = "variable", values_to = "value")
+  # Use processed_csv directly, not as a function
+  selected_cols <- c("WardName", selected_vars)
+  filtered_data <- processed_csv %>%  
+    select(all_of(selected_cols)) %>% 
+    pivot_longer(cols = -WardName, names_to = "variable", values_to = "value") 
   
-  # Join with shapefile data
-  combined_data <- left_join(filtered_data, shp_data, by = "WardName")
+  # Join with shapefile data 
+  combined_data <- left_join(filtered_data, shp_data, by = "WardName") 
   
   plot <- ggplot(data = shp_data) +
     geom_sf_interactive(color = "black", fill = "white") + 
@@ -409,62 +451,86 @@ process_model_score <- function(data_to_process){
 
 
 # Function to plot model score map
-plot_model_score_map <- function(shp_data, processed_csv) {
+plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_per_page = 4) {
   palette_func <- brewer.pal(5, "YlOrRd")
   
-  plot <- ggplot(data = shp_data) +
-    geom_sf_interactive(color = "black", fill = "white") +
-    geom_sf_interactive(data = processed_csv, 
-                        aes(geometry = geometry, fill = class, tooltip = wardname_rank)) +
-    facet_wrap(~variable, ncol = 3) +
-    scale_fill_discrete(drop=FALSE, name="score", type = palette_func)+
-    labs(subtitle='', title='', fill = "score")+
-    theme(panel.background = element_blank(), size = 20)+
-    theme_void()
+  # Create a named vector for facet labels
+  facet_labels <- setNames(
+    paste(model_formulas$model, "\n", model_formulas$variables),
+    model_formulas$model
+  )
   
-  girafe(ggobj = plot)
+  # Split the data into pages
+  total_models <- nrow(model_formulas)
+  pages <- ceiling(total_models / maps_per_page)
+  
+  plot_list <- list()
+  
+  for (page in 1:pages) {
+    start_index <- (page - 1) * maps_per_page + 1
+    end_index <- min(page * maps_per_page, total_models)
+    
+    current_models <- model_formulas$model[start_index:end_index]
+    current_data <- processed_csv %>% filter(variable %in% current_models)
+    
+    plot <- ggplot(data = shp_data) +
+      geom_sf_interactive(color = "black", fill = "white") +
+      geom_sf_interactive(data = current_data, 
+                          aes(geometry = geometry, fill = class, tooltip = wardname_rank)) +
+      facet_wrap(~variable, ncol = 2, labeller = labeller(variable = facet_labels)) +
+      scale_fill_discrete(drop=FALSE, name="Malaria Risk Score", type = palette_func,
+                          labels = c("Very Low", "Low", "Medium", "High", "Very High")) +
+      labs(subtitle=paste("Page", page, "of", pages), 
+           title='Composite Score Distribution by Model', 
+           fill = "Malaria Risk Score") +
+      theme_void() +
+      theme(
+        strip.text = element_text(size = 10, face = "bold", lineheight = 0.9),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.position = "bottom",
+        legend.title = element_text(size = 12, face = "bold"),
+        legend.text = element_text(size = 10),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 14, hjust = 0.5)
+      )
+    
+    plot_list[[page]] <- plot
+  }
+  
+  # Return a list of girafe objects
+  return(lapply(plot_list, function(p) girafe(ggobj = p, width_svg = 12, height_svg = 10)))
 }
 
+
+
+#Function for boxplots
 box_plot_function <- function(plottingdata) {
-  
   df_long <- plottingdata %>%
     select(WardName, variable, rank)
   
   medians <- df_long %>%
     group_by(WardName) %>%
     summarize(median_value = median(rank)) %>%
-    arrange(desc(median_value)) %>%
+    arrange(median_value) %>%
     .$WardName
   
   df_long$WardName <- factor(df_long$WardName, levels = medians)
   
-  # Create the base ggplot
   p <- ggplot(df_long, aes(x = WardName, y = rank)) +
     geom_boxplot(fill = "#69b3a2", color = "#3c5e8b", alpha = 0.7) +
     coord_flip() +
     labs(title = "Ward Rankings Distribution", x = "", y = "Rank") +
-    scale_y_continuous(limits = c(0, max(df_long$rank)), 
-                       breaks = seq(0, max(df_long$rank), by = 5)) +
     theme_minimal() +
     theme(
       axis.text.y = element_text(size = 8),
-      axis.text.x = element_text(size = 10),
-      axis.title.x = element_text(size = 12, margin = margin(t = 10)),
-      plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
-      panel.grid.major.y = element_blank(),
-      panel.grid.minor.y = element_blank(),
-      panel.background = element_rect(fill = "white"),
-      plot.margin = margin(10, 10, 10, 10)
+      axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+      plot.title = element_text(size = 14, hjust = 0.5, face = "bold")
     )
   
-  # Convert to plotly for interactivity
-  ggplotly(p, tooltip = c("y", "x")) %>%
+  ggplotly(p, height = 800) %>%
     layout(
-      hoverlabel = list(bgcolor = "white"),
-      plot_bgcolor = "rgba(0,0,0,0)",
-      paper_bgcolor = "rgba(0,0,0,0)",
-      height = 800  # Increase plot height
+      yaxis = list(fixedrange = FALSE),
+      xaxis = list(fixedrange = TRUE)
     ) %>%
-    config(scrollZoom = TRUE, displayModeBar = TRUE) %>%
-    style(hoverlabel = list(bgcolor = "white"))
+    config(scrollZoom = TRUE)
 }

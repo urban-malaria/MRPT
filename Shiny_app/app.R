@@ -48,34 +48,11 @@ ui <- fluidPage(
     tabPanel("Instructions",
              tags$br(),
              h6("
-Malaria remains a significant public health challenge globally, necessitating 
-optimal and efficient strategies for risk management and intervention. 
-Ozodiegwu et-al's study introduces a novel Malaria Risk Mapping Tool (MRMT), designed to
-facilitate the microstratification of malaria risk across diverse geographical 
-landscapes. The MRMT integrates environmental, socio-economic, 
-and health-related data to generate high-resolution risk maps. Key variables, 
-including the Enhanced Vegetation Index (EVI), settlement types, test positivity 
-rates, and proximity to water bodies, are analyzed to identify areas of high 
-transmission potential.
-
-
 The tool's innovative approach lies in its ability to combine multiple data layers,
 offering a comprehensive visualization of risk factors that contribute to malaria spread. 
 This enables health authorities and stakeholders to prioritize resources and interventions 
 more effectively, focusing on high-risk zones identified through the tool's analytical 
-capabilities. Initial deployment and testing in a pilot region demonstrated the MRMT's efficacy 
-in revealing previously unrecognized areas of vulnerability, facilitating targeted mosquito control
-measures, health education campaigns, and infrastructure improvements (see Ozodiegwu et al).
-
-Furthermore, the MRMT supports dynamic updating and scalability, allowing for the incorporation 
-of new data and adaptation to different geographical regions. Its user-friendly interface ensures 
-accessibility to a wide range of users, from public health officials to research institutions.
-
-By providing a granular view of malaria risk, the MRMT represents a significant advancement 
-in the field of public health, offering a potent tool for the strategic planning of malaria control 
-and elimination efforts. Future developments will focus on integrating real-time data feeds and
-expanding the tool's application to other vector-borne diseases, further enhancing its utility in 
-global health management."),
+capabilities."),
              
              fluidRow(
                column(6,
@@ -127,7 +104,7 @@ global health management."),
     
     tabPanel("Input variables (data and shapefiles)", 
              fluidRow(
-               column(4,
+               column(3,
                       h3("Upload the shapefile and analysis data:"),
                       fileInput("file_csv", "Choose CSV File", 
                                 accept = c(".csv", ".xlsx", ".xls")),
@@ -143,29 +120,47 @@ global health management."),
                       hr(),
                       actionButton("data_cleaning", "Data Cleaning (Click to clean data)")
                ),
-               column(8,
+               column(9,
                       fluidRow(
-                        column(6,
-                               
-                               girafeOutput("rawDataPlot")
-                        ),
-                        column(6,
-                               
-                               girafeOutput("cleanedDataPlot")
-                        )
+                        column(6, girafeOutput("rawDataPlot", height = "500px")),
+                        column(6, girafeOutput("cleanedDataPlot", height = "500px"))
                       ),
-                      textOutput("visualizationExplanation")
+                      htmlOutput("visualizationExplanation"),
+                      tags$p(style = "font-style: italic; margin-top: 10px;", 
+                             "Hover over the maps to see detailed information for each ward.")
                )
              ),
-             style='text-align: center',
-             tags$h6("The plot shows the distribution of the varibles selected for
-                     evaluation accross the region of interest before they have been 
-                     normalized using the min-max method. Each measure is presented on 
-                     a continous scale (for the units one should refer to the rasters 
-                     where the data was extarcted). The deeper the intensity of the 
-                     colour in a given ward the higher the value of that measure is 
-                     in the ward.")
+
     ), 
+    
+    
+    tabPanel("Normalization", 
+             sidebarLayout(
+               sidebarPanel(
+                 actionButton("specify_relationships", "SPECIFY VARIABLE RELATIONSHIPS"),
+                 tags$br(), 
+                 tags$br(),
+                 uiOutput("normalized_variable_select"),
+                 tags$br(),
+                 actionButton("plot_normalized", "PLOT NORMALIZED MAP")
+               ),
+               mainPanel(
+                 girafeOutput("normalizationplot")
+               )
+             ),
+             tags$br(),
+             tags$p(style = "font-style: italic; margin-top: 10px;", 
+                    "Hover over the maps to see detailed information for each ward."),
+             style='text-align: center',
+             tags$h6("The plot shows the distribution of the variables selected for
+                  evaluation across the region of interest after they have been 
+                  normalized using the min-max method. The values are now all on 
+                  the same scale ranging from 0 to 1. This range of values are put 
+                  into 5 classes (see legend). The plot highlights which of the
+                  variables if used in the algorithm will have more influence in the
+                  composite score.")
+    ),
+    
     
     tabPanel("Composite Score distribution", 
              tags$br(),tags$br(),
@@ -173,48 +168,99 @@ global health management."),
                sidebarPanel(
                  tags$h4("Select a variable in the dataset to visualise:"),
                  uiOutput("composite_variable_select"),
-                 actionButton("plot_button", "calculate")
+                 actionButton("plot_button", "Calculate")
                ),
                mainPanel(
-                 girafeOutput("mapPlot"),
+                 uiOutput("mapPlot"),
+                 tags$br(),
+                 tags$div(
+                   style = "text-align: justify; font-size: 12px; color: #666;",
+                   "The maps above show the distribution of malaria risk scores across different wards, calculated using various combinations of variables. Each map represents a different model, with the variables used listed in the title. The color scale ranges from yellow (very low risk) to dark red (very high risk). This visualization helps identify areas of high concern and compare how different combinations of factors affect the risk assessment."
+                 ),
+                 tags$br(),
                  tableOutput("dataTable"),
-                 style='text-align: center',
-                 tags$h6(".")
+                 tags$p(style = "font-style: italic; margin-top: 10px; font-size: 12px;", 
+                        "Hover over the maps to see detailed information for each ward.")
                )
              )
     ),
     
-    tabPanel("box whisker plot", 
-             tags$br(),tags$br(),
-             plotlyOutput("boxwhiskerPlots", height = "800px"),
-             tags$br(),tags$br(),
-             tags$br(),tags$br(),
-             tags$br(),tags$br(),
-             tags$br(),tags$br(),
-             tags$br(),tags$br(),
-             style='text-align: center',
-             tags$h6("The box and whisker plot visualizes the distribution of median 
-                     vulnerability scores across wards, ranked from least to most 
-                     vulnerable based on outcomes from models tailored with combinations 
-                     of variables such as enhanced vegetation index, settlement type, 
-                     test positivity rate, and distance to water bodies. Each model, 
-                     integrating at least two or all mentioned variables, 
-                     contributes to deriving the wards' median scores, showcasing 
-                     the variance in vulnerability efficiently.") 
+    tabPanel("Box and Whisker Plot", 
+             fluidRow(
+               column(12,
+                      h3("Ward Vulnerability Distribution"),
+                      p("This visualization shows the distribution of vulnerability scores across wards, helping to identify areas of high and low risk."),
+                      br(),
+                      checkboxInput("show_map", "Show Map View", value = FALSE),
+                      br()
+               )
+             ),
+             fluidRow(
+               column(8,
+                      conditionalPanel(
+                        condition = "input.show_map == false",
+                        plotlyOutput("boxwhiskerPlots", height = "600px")
+                      ),
+                      conditionalPanel(
+                        condition = "input.show_map == true",
+                        girafeOutput("vulnerabilityMap", height = "600px")
+                      )
+               ),
+               column(4,
+                      conditionalPanel(
+                        condition = "input.show_map == false",
+                        wellPanel(
+                          style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 600px; overflow-y: auto;",
+                          h4("Understanding the Box and Whisker Plot"),
+                          p("This plot visualizes the distribution of median vulnerability scores across wards, ranked from least vulnerable (top) to most vulnerable (bottom)."),
+                          p("Each horizontal bar represents a ward:"),
+                          tags$ul(
+                            tags$li("The box shows the interquartile range (IQR) of vulnerability scores."),
+                            tags$li("The vertical line inside the box represents the median score."),
+                            tags$li("The whiskers extend to show the full range of scores, excluding outliers."),
+                            tags$li("Any points beyond the whiskers are considered outliers.")
+                          ),
+                          p("This visualization helps identify which areas may need more attention or resources in malaria prevention efforts.")
+                        )
+                      ),
+                      conditionalPanel(
+                        condition = "input.show_map == true",
+                        wellPanel(
+                          style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 600px; overflow-y: auto;",
+                          h4("Understanding the Vulnerability Map"),
+                          p("This map displays the median vulnerability score for each ward, providing a geographic perspective on malaria risk."),
+                          p("Key features:"),
+                          tags$ul(
+                            tags$li("Color intensity represents the vulnerability score, with darker colors indicating higher vulnerability and lighter colors indicating lower vulnerability."),
+                            tags$li("The color scale ranges from dark purple (highest vulnerability) to light yellow (lowest vulnerability)."),
+                            tags$li("Hover over each ward to see its name and exact median score."),
+                            tags$li("The map allows for easy identification of high-risk clusters and spatial patterns in vulnerability.")
+                          ),
+                          p("Interpretation:"),
+                          tags$ul(
+                            tags$li("Dark purple areas represent wards with the highest vulnerability scores, indicating a higher risk of malaria."),
+                            tags$li("Light yellow areas represent wards with the lowest vulnerability scores, indicating a lower risk of malaria."),
+                            tags$li("The gradients between these colors represent varying levels of vulnerability.")
+                          ),
+                          p("Use this map to identify priority areas for intervention and to understand the spatial distribution of malaria risk factors across the region. Areas with darker colors may require more immediate attention and resources in malaria prevention efforts.")
+                        )
+                      )
+               )
+             )
     ),
     
-    tabPanel("normalization", 
-             tags$br(),tags$br(),
-             girafeOutput("normalizationplot"),
-             style='text-align: center',
-             tags$h6("The plot shows the distribution of the varibles selected for
-                     evaluation accross the region of interest after they have been 
-                     normalized using the min-max method. The values are now all on 
-                     the same scale ranging from 0 to 1. This range of values are put 
-                     into 5 classes (see legend). The plot highlights which of the
-                     variables if used in the algorithm will have more infuence in the
-                     composite score.")
-    )
+    
+    tabPanel("Decision Tree",
+             fluidRow(
+               column(12,
+                      h3("Decision Tree Visualization"),
+                      p("This decision tree illustrates the process of variable selection and risk mapping."),
+                      br(),
+                      DiagrammeROutput("decisionTreePlot", height = "600px")
+               )
+             )
+    ),
+    
   ),
   
   tags$br(),  
@@ -260,23 +306,15 @@ server <- function(input, output, session) {
   # Reactive values for storing various data states
   rv <- reactiveValues(
     raw_data = NULL,
-    rawdata = NULL,
+    cleaned_data = NULL,
+    normalized_data = reactiveVal(NULL),
+    shp_data = NULL,
     mismatched_wards = NULL,
     na_handling_methods = list(),
-    cleaned_data = NULL,
-    normalized_data = NULL,
-    normalizeddata = NULL,
-    data = NULL,
-    shp_data = NULL,
-    csv_data = NULL,
-    output_data = NULL,
-    composite_scores = NULL,
-    variable_impacts = NULL,
-    na_handling_choice = NULL,
-    na_handling_method = NULL,
     variable_relationships = list(),
-    csv_uploaded = FALSE,
-    shp_uploaded = FALSE
+    composite_scores = NULL,
+    data = NULL,
+    output_data = NULL
   )
   
   
@@ -291,17 +329,31 @@ server <- function(input, output, session) {
     }
     
     rv$raw_data <- rename_columns(as.data.frame(csv_data))
-    print(paste("Number of rows in raw_data:", nrow(rv$raw_data)))
-    rv$na_columns <- check_missing_values(rv$raw_data)
+    missing_data <- check_missing_values(rv$raw_data)
+    rv$na_columns <- missing_data$columns
+    rv$raw_data <- missing_data$data
     
-    if (length(rv$na_columns) > 0) {
-      showNotification(paste("Warning: Missing values (NAs) found in columns:", paste(rv$na_columns, collapse = ", ")), type = "warning")
-    }
+    # Set cleaned_data to raw_data initially
+    rv$cleaned_data <- rv$raw_data
     
-    if (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0) {
-      showModal(wardNameMismatchModal(rv$mismatched_wards))
+    # Get columns after WardName
+    columns_after_wardname <- get_columns_after_wardname(rv$cleaned_data)
+    
+    # Populate variable relationships for columns after WardName
+    rv$variable_relationships <- setNames(rep("direct", length(columns_after_wardname)), columns_after_wardname)
+    
+    if (rv$needs_cleaning()) {
+      if (length(rv$na_columns) > 0) {
+        showNotification(paste("Warning: Missing values (NAs) found in columns:", paste(rv$na_columns, collapse = ", ")), type = "warning")
+      }
+      if (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0) {
+        showModal(wardNameMismatchModal(rv$mismatched_wards))
+      }
+    } else {
+      showNotification("Data is already clean. No cleaning necessary.", type = "message")
     }
   })
+  
   
   # Shapefile upload
   observeEvent(input$file_shp, {
@@ -333,7 +385,7 @@ server <- function(input, output, session) {
   })
   
   
- # add this reactive value
+  # add this reactive value
   rv$corrected_wardnames <- reactiveVal(data.frame(original = character(), corrected = character(), stringsAsFactors = FALSE))
   
   # Modify the observeEvent for apply_corrections
@@ -428,18 +480,34 @@ server <- function(input, output, session) {
     showModal(wardNameMismatchModal(rv$mismatched_wards))
   })
   
+  
+  
+  output$variable_select <- renderUI({
+    req(rv$raw_data)
+    columns_after_wardname <- get_columns_after_wardname(rv$raw_data)
+    selectInput("visualize_var", "Select Variable to Visualize", 
+                choices = columns_after_wardname,
+                selected = columns_after_wardname[1])
+  })
+  
+  # Reactive expression for needs_cleaning
+  rv$needs_cleaning <- reactive({
+    req(rv$raw_data, rv$shp_data) # Ensure both files are loaded
+    length(rv$na_columns) > 0 || (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0)
+  })
+  
+  
+  
   # Data Cleaning
   observeEvent(input$data_cleaning, {
     req(rv$raw_data, rv$shp_data)
-    
-    na_columns <- check_missing_values(rv$raw_data)
     
     showModal(modalDialog(
       title = "Data Cleaning",
       
       h4("Columns with Missing Values (NAs)"),
       
-      lapply(na_columns, function(col) {
+      lapply(rv$na_columns, function(col) {
         fluidRow(
           column(6, h5(col)),
           column(6, 
@@ -452,15 +520,13 @@ server <- function(input, output, session) {
         )
       }),
       
-      h4("Specify Variable Relationships with Malaria Risk"),
-      uiOutput("variable_relationships"),
-      
       footer = tagList(
         modalButton("Cancel"),
-        actionButton("apply_cleaning", "Apply and Continue")
+        actionButton("apply_na_handling", "Apply")
       )
     ))
   })
+  
   
   
   observeEvent(input$na_handling, {
@@ -469,105 +535,233 @@ server <- function(input, output, session) {
     print(rv$na_handling_method)
   })
   
+
+  
+  # Apply cleaning
+  observeEvent(input$apply_na_handling, {
+    req(rv$raw_data, rv$na_columns)
+    
+    rv$cleaned_data <- rv$raw_data
+    
+    for (col in rv$na_columns) {
+      method <- input[[paste0("na_handling_", col)]]
+      rv$na_handling_methods[[col]] <- method
+      rv$cleaned_data <- switch(method,
+                                "spatial_neighbor_mean" = handle_na_neighbor_mean(rv$cleaned_data, rv$shp_data, col),
+                                "region_mean" = handle_na_region_mean(rv$cleaned_data, col),
+                                "region_mode" = handle_na_region_mode(rv$cleaned_data, col)
+      )
+    }
+    
+    removeModal()
+    showNotification("NA handling methods applied and stored.", type = "message")
+  })
+  
+  
+  output$data_cleaning_button <- renderUI({
+    if (rv$needs_cleaning()) {
+      actionButton("data_cleaning", "Data Cleaning (Click to clean data)")
+    }
+  })
+  
+  
+  
+  # Move the variable relationships specification to a modal in the Normalization tab
+  observeEvent(input$specify_relationships, {
+    req(rv$cleaned_data)
+    
+    showModal(modalDialog(
+      title = "Specify Variable Relationships with Malaria Risk",
+      uiOutput("variable_relationships"),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("apply_relationships", "Apply Relationships")
+      )
+    ))
+  })
   
   output$variable_relationships <- renderUI({
-    req(rv$raw_data)
-    vars <- setdiff(names(rv$raw_data), "WardName")
+    req(rv$cleaned_data)
+    columns_after_wardname <- get_columns_after_wardname(rv$cleaned_data)
     
-    lapply(vars, function(var) {
+    lapply(columns_after_wardname, function(var) {
       fluidRow(
         column(6, var),
         column(6, 
                radioButtons(paste0("relationship_", var), NULL,
                             choices = c("Direct" = "direct", "Inverse" = "inverse"),
-                            selected = rv$variable_relationships[[var]] %||% "direct",  # Use stored value or default to "direct"
+                            selected = rv$variable_relationships[[var]] %||% "direct",
                             inline = TRUE)
         )
       )
     })
   })
   
-  # Apply cleaning
-  observeEvent(input$apply_cleaning, {
-    req(rv$raw_data, rv$shp_data)
+  
+  output$vulnerabilityMap <- renderGirafe({
+    req(rv$data)
     
-    tryCatch({
-      cleaned_data <- rv$raw_data
-      na_columns <- check_missing_values(rv$raw_data)
+    # Calculate median vulnerability score for each ward
+    ward_medians <- rv$data %>%
+      group_by(WardName) %>%
+      summarize(median_score = median(value, na.rm = TRUE))
+    
+    # Join with shapefile data
+    map_data <- left_join(rv$shp_data, ward_medians, by = "WardName")
+    
+    # Create the map
+    plot <- ggplot() +
+      geom_sf_interactive(data = map_data, aes(fill = median_score, 
+                                               tooltip = paste(WardName, "\nMedian Score:", round(median_score, 2)))) +
+      scale_fill_viridis_c(option = "plasma", direction = -1, 
+                           name = "Vulnerability Score",
+                           guide = guide_colorbar(
+                             title.position = "top",
+                             title.hjust = 0.5,
+                             label.theme = element_text(size = 8),
+                             barwidth = 10,
+                             barheight = 0.5
+                           )) +
+      theme_void() +
+      labs(title = "Ward Vulnerability Map") +
+      theme(legend.position = "bottom",
+            legend.box = "vertical",
+            legend.margin = margin(t = 10, b = 10),
+            plot.title = element_text(size = 14, face = "bold", hjust = 0.5))
+    
+    # Add text annotations for low and high vulnerability
+    plot <- plot +
+      annotate("text", x = -Inf, y = -Inf, label = "Low Vulnerability", 
+               hjust = 0, vjust = -1, size = 3, color = "darkred") +
+      annotate("text", x = Inf, y = -Inf, label = "High Vulnerability", 
+               hjust = 1, vjust = -1, size = 3, color = "darkblue")
+    
+    girafe(ggobj = plot, width_svg = 10, height_svg = 8)
+  })
+  
+  
+  observeEvent(input$apply_relationships, {
+    req(rv$cleaned_data)
+    
+    columns_after_wardname <- get_columns_after_wardname(rv$cleaned_data)
+    
+    # Store variable relationships
+    for (var in columns_after_wardname) {
+      relationship <- input[[paste0("relationship_", var)]]
+      rv$variable_relationships[[var]] <- relationship
+    }
+    
+    removeModal()
+    showNotification("Variable relationships applied successfully.", type = "message")
+    
+    
+    # Define variable_impacts CORRECTLY here
+    variable_impacts <- reactive({
+      req(data_to_use)
+      vars <- setdiff(names(data_to_use), "WardName")
+      sapply(vars, function(var) input[[paste0("relationship_", var)]])
+    })
+    
+    # Normalize the data
+    rv$normalized_data <- reactive({
+      normalize_data(rv$cleaned_data, rv$variable_relationships) 
+    })
+    
+    # Generate and store the plot  
+    output$normalizationplot <- renderGirafe({
+      req(rv$normalized_data(), input$visualize_normalized_var)
+      plot_normalized_map(shp_data = rv$shp_data, 
+                          processed_csv = rv$normalized_data(), 
+                          selected_vars = input$visualize_normalized_var)
+    })
+    
+    print("Normalized data after normalization:") 
+    print(str(rv$normalized_data))
+    
+    # Update the UI with variable selection
+    output$normalized_variable_select <- renderUI({
+      print("Normalized data structure:")
+      print(str(rv$normalized_data())) # Check the structure HERE
       
-      for (col in na_columns) {
-        method <- input[[paste0("na_handling_", col)]]
-        rv$na_handling_methods[[col]] <- method  # Store the selected method
-        cleaned_data <- switch(method,
-                               "spatial_neighbor_mean" = handle_na_neighbor_mean(cleaned_data, rv$shp_data, col),
-                               "region_mean" = handle_na_region_mean(cleaned_data, col),
-                               "region_mode" = handle_na_region_mode(cleaned_data, col)
-        )
-      }
       
-      # Store and apply variable relationships
-      vars <- setdiff(names(cleaned_data), "WardName")
-      for (var in vars) {
-        relationship <- input[[paste0("relationship_", var)]]
-        rv$variable_relationships[[var]] <- relationship
-        if (relationship == "inverse") {
-          cleaned_data[[var]] <- max(cleaned_data[[var]], na.rm = TRUE) - cleaned_data[[var]]
-        }
-      }
-      
-      rv$cleaned_data <- cleaned_data
-      print(paste("Final rows in cleaned_data:", nrow(rv$cleaned_data)))
-      
-      removeModal()
-      showNotification("Data cleaning applied successfully.", type = "message")
-    }, error = function(e) {
-      print(paste("Error in data cleaning:", e$message))
-      print("Structure of raw_data:")
-      print(str(rv$raw_data))
-      print("Structure of shp_data:")
-      print(str(rv$shp_data))
-      showNotification(paste("Error in data cleaning:", e$message), type = "error")
+      tryCatch({
+        req(rv$normalized_data())
+        print("Normalized data structure:")
+        print(str(rv$normalized_data()))
+        norm_vars <- grep("^normalization_", names(rv$normalized_data()), value = TRUE)
+        #columns_after_wardname <- get_columns_after_wardname(rv$normalized_data(), norm_vars)
+        selectInput("visualize_normalized_var", "Select a Normalized Variable to visualise", 
+                    choices = norm_vars,
+                    selected = norm_vars[1],
+                    multiple = TRUE)
+      }, error = function(e) {
+        print(paste("Error in normalized_variable_select:", e$message))
+        print("Normalized data:")
+        print(str(rv$normalized_data()))
+        NULL
+      })
     })
   })
   
-  # Raw data variable selection
-  output$variable_select <- renderUI({
-    req(rv$raw_data)
-    selectInput("visualize_var", "Select Variable", 
-                choices = setdiff(names(rv$raw_data), "WardName"),
-                selected = names(rv$raw_data)[2])
+  
+  observeEvent(input$plot_normalized, {
+    req(rv$normalized_data, input$visualize_normalized_var, rv$shp_data)
+    
+    output$normalizationplot <- renderGirafe({
+      plot_normalized_map(shp_data = rv$shp_data, 
+                          processed_csv = rv$normalized_data, 
+                          selected_vars = input$visualize_normalized_var)
+    })
   })
   
+  
+  # Raw data variable selection
   observeEvent(input$plot_data, {
     req(rv$raw_data, rv$shp_data, input$visualize_var)
+    
+    data_to_plot <- if (!is.null(rv$cleaned_data)) rv$cleaned_data else rv$raw_data
     
     output$rawDataPlot <- renderGirafe({
       plot_map_00(variable_name = input$visualize_var,
                   shp_data_reactive = rv$shp_data,
-                  dataframe_reactive = rv$raw_data,
-                  title = "Raw Data")
+                  dataframe_reactive = data_to_plot,
+                  title = if (rv$needs_cleaning()) "Raw Data" else "Clean Data",
+                  na_handling_method = NULL)
     })
     
-    output$cleanedDataPlot <- renderGirafe({
-      if (!is.null(rv$cleaned_data)) {
-        plot_map_00(variable_name = input$visualize_var,
-                    shp_data_reactive = rv$shp_data,
-                    dataframe_reactive = rv$cleaned_data,
-                    title = "Cleaned Data")
-      } else {
-        plot_map_00(variable_name = input$visualize_var,
-                    shp_data_reactive = rv$shp_data,
-                    dataframe_reactive = rv$raw_data,
-                    title = "Data Not Cleaned Yet")
-      }
-    })
+    if (rv$needs_cleaning()) {
+      output$cleanedDataPlot <- renderGirafe({
+        if (!is.null(rv$cleaned_data)) {
+          plot_map_00(variable_name = input$visualize_var,
+                      shp_data_reactive = rv$shp_data,
+                      dataframe_reactive = rv$cleaned_data,
+                      title = "Cleaned Data",
+                      na_handling_method = rv$na_handling_methods[[input$visualize_var]] %||% "None")
+        } else {
+          plot_map_00(variable_name = input$visualize_var,
+                      shp_data_reactive = rv$shp_data,
+                      dataframe_reactive = rv$raw_data,
+                      title = "Data Not Cleaned Yet",
+                      na_handling_method = NULL)
+        }
+      })
+    } else {
+      output$cleanedDataPlot <- renderUI(NULL)  # Hide the cleaned data plot if cleaning is not needed
+    }
     
+    # Update the explanation text
     output$visualizationExplanation <- renderText({
-      if (is.null(rv$cleaned_data)) {
-        "The left plot shows the raw data. The right plot will show cleaned data after you perform data cleaning."
+      if (rv$needs_cleaning()) {
+        if (is.null(rv$cleaned_data)) {
+          "The maps below illustrate the geographic distribution of the selected variable across different wards. The left map displays the variable's values directly from the uploaded dataset (raw data). The right map, currently identical to the left, will reflect the cleaned data after you apply data cleaning techniques."
+        } else {
+          paste("These maps showcase the effect of data cleaning on the selected variable's distribution. The left map represents the original, raw data. In contrast, the right map reveals the data after addressing missing values using the '",
+                rv$na_handling_methods[[input$visualize_var]] %||% "None",
+                "' method. The color gradients reflect the variable's magnitude, providing a clear visual comparison between the raw and cleaned datasets."
+          )
+        }
       } else {
-        paste("The left plot shows the raw data. The right plot shows the cleaned data, where missing values (NAs) have been handled using the", 
-              rv$na_handling_method, "method. Variable relationships have been applied as specified in the data cleaning step.")
+        "The map below illustrates the geographic distribution of the selected variable across different wards. As the uploaded data was already clean, no additional cleaning was necessary."
       }
     })
   })
@@ -577,15 +771,16 @@ server <- function(input, output, session) {
   # Composite Score
   output$composite_variable_select <- renderUI({
     req(rv$cleaned_data)
+    columns_after_wardname <- get_columns_after_wardname(rv$cleaned_data)
     selectInput("composite_vars", "Select Variables for Composite Score",
-                choices = setdiff(names(rv$cleaned_data), "WardName"),
+                choices = columns_after_wardname,
                 selected = NULL, multiple = TRUE)
   })
   
   observeEvent(input$plot_button, {
     req(rv$cleaned_data, input$composite_vars)
-    print(paste("Number of rows in cleaned_data:", nrow(rv$cleaned_data)))
-    print(paste("Number of rows in shp_data:", nrow(rv$shp_data)))
+    #print(paste("Number of rows in cleaned_data:", nrow(rv$cleaned_data)))
+    #print(paste("Number of rows in shp_data:", nrow(rv$shp_data)))
     
     
     if (length(input$composite_vars) < 2) {
@@ -612,7 +807,6 @@ server <- function(input, output, session) {
         return()
       }
       
-      rv$normalized_data <- normalized_data
       
       print("Normalized data structure:")
       print(str(normalized_data))
@@ -637,9 +831,37 @@ server <- function(input, output, session) {
       rv$output_data <- model_formulae_table
       
       # Update plots and tables
-      output$mapPlot <- renderGirafe({
-        plot_model_score_map(shp_data = rv$shp_data,
-                             processed_csv = rv$data)
+      # Inside the server function, replace the existing mapPlot output with this:
+      output$mapPlot <- renderUI({
+        req(rv$data, rv$output_data)
+        
+        plots <- plot_model_score_map(shp_data = rv$shp_data,
+                                      processed_csv = rv$data,
+                                      model_formulas = rv$output_data,
+                                      maps_per_page = 4)  # Adjust this number as needed
+        
+        # Create a tabset panel for pagination
+        do.call(tabsetPanel, lapply(seq_along(plots), function(i) {
+          tabPanel(paste("Page", i), girafeOutput(paste0("mapPlot_", i)))
+        }))
+      })
+      
+      # Add these observers to render each plot
+      observe({
+        req(rv$data, rv$output_data)
+        plots <- plot_model_score_map(shp_data = rv$shp_data,
+                                      processed_csv = rv$data,
+                                      model_formulas = rv$output_data,
+                                      maps_per_page = 4)  # Adjust this number as needed
+        
+        for (i in seq_along(plots)) {
+          local({
+            local_i <- i
+            output[[paste0("mapPlot_", local_i)]] <- renderGirafe({
+              plots[[local_i]]
+            })
+          })
+        }
       })
       
       output$dataTable <- renderTable({
@@ -648,10 +870,10 @@ server <- function(input, output, session) {
       
       # Normalization plot
       output$normalizationplot <- renderGirafe({
-        req(rv$normalized_data, rv$shp_data, input$composite_vars)
+        req(rv$normalized_data(), input$visualize_normalized_var)
         plot_normalized_map(shp_data = rv$shp_data, 
-                            processed_csv = rv$normalized_data, 
-                            selected_vars = input$composite_vars)
+                            processed_csv = rv$normalized_data(), 
+                            selected_vars = input$visualize_normalized_var)
       })
       
       # Box whisker plot
@@ -671,6 +893,72 @@ server <- function(input, output, session) {
       showNotification(paste("Error:", e$message), type = "error")
     })
   })
+ 
+  
+  # Text wrapping function
+  wrap_text <- function(text, width = 30) {
+    paste(strwrap(text, width = width), collapse = "\n")
+  }
+  
+  decision_tree_function <- function(all_variables, selected_variables, excluded_variables) {
+    # Create nodes DataFrame
+    nodes <- create_node_df(
+      n = 7,
+      label = c(
+        wrap_text(paste(("The dataset had the following variables:"), 
+                        paste(all_variables, collapse = ", "))),
+        "Check the map plot to determine if it depicts the variable under consideration", 
+        wrap_text(paste("Variables included in the composite score:", 
+                        paste(selected_variables, collapse = ", "))),
+        wrap_text(paste("Variables excluded from the composite score:", 
+                        paste(excluded_variables, collapse = ", "))), 
+        "Normalization and composite score calculation",
+        "Malaria risk maps generated from various combinations of all included variables", 
+        "Malaria risk map recommended by the box and whisker plot"
+      ),
+      shape = c("box", "diamond", "ellipse", "ellipse", "box", "ellipse", "ellipse")
+    )
+    
+    # Create edges DataFrame
+    edges <- create_edge_df(
+      from = c(1, 2, 2, 3, 5, 5),
+      to = c(2, 3, 4, 5, 6, 7),
+      label = c("", "yes", "no", "", "all variables", "recommended")
+    )
+    
+    # Create graph
+    graph <- create_graph(nodes_df = nodes, edges_df = edges)
+    
+    # Render the graph
+    render_graph(graph)
+  }
+  
+  
+  # Define all_variables as a reactive expression
+  all_variables <- reactive({
+    req(rv$cleaned_data)
+    setdiff(names(rv$cleaned_data), "WardName")
+  })
+  
+  excluded_variables <- reactive({
+    req(all_variables(), input$composite_vars)
+    setdiff(all_variables(), input$composite_vars)
+  })
+  
+  output$decisionTreePlot <- renderDiagrammeR({
+    req(all_variables(), input$composite_vars)
+    
+    selected_variables <- input$composite_vars
+    excluded_vars <- excluded_variables()
+    
+    tryCatch({
+      decision_tree_function(all_variables(), selected_variables, excluded_vars)
+    }, error = function(e) {
+      message("Error in decision tree function: ", e$message)
+      return(NULL)
+    })
+  })
+  
 }
 
 shinyApp(ui = ui, server = server)
