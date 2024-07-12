@@ -527,7 +527,7 @@ box_plot_function <- function(plottingdata) {
       plot.title = element_text(size = 14, hjust = 0.5, face = "bold")
     )
   
-  ggplotly(p, height = 800) %>%
+  ggplotly(p, height = 700) %>%
     layout(
       yaxis = list(fixedrange = FALSE),
       xaxis = list(fixedrange = TRUE)

@@ -317,6 +317,8 @@ server <- function(input, output, session) {
     output_data = NULL
   )
   
+  # new reactive value to track whether cleaning was performed
+  rv$cleaning_performed <- reactiveVal(FALSE)
   
   # CSV file upload
   observeEvent(input$file_csv, {
@@ -553,6 +555,7 @@ server <- function(input, output, session) {
       )
     }
     
+    rv$cleaning_performed(TRUE)
     removeModal()
     showNotification("NA handling methods applied and stored.", type = "message")
   })
@@ -566,9 +569,11 @@ server <- function(input, output, session) {
   
   
   
-  # Move the variable relationships specification to a modal in the Normalization tab
+  # Modify the normalization process
   observeEvent(input$specify_relationships, {
-    req(rv$cleaned_data)
+    req(rv$raw_data)
+    
+    data_to_use <- if(rv$cleaning_performed()) rv$cleaned_data else rv$raw_data
     
     showModal(modalDialog(
       title = "Specify Variable Relationships with Malaria Risk",
@@ -640,10 +645,13 @@ server <- function(input, output, session) {
   })
   
   
+  # Update the normalize_data function call
   observeEvent(input$apply_relationships, {
-    req(rv$cleaned_data)
+    req(rv$raw_data)
     
-    columns_after_wardname <- get_columns_after_wardname(rv$cleaned_data)
+    data_to_use <- if(rv$cleaning_performed()) rv$cleaned_data else rv$raw_data
+    
+    columns_after_wardname <- get_columns_after_wardname(data_to_use)
     
     # Store variable relationships
     for (var in columns_after_wardname) {
@@ -651,55 +659,28 @@ server <- function(input, output, session) {
       rv$variable_relationships[[var]] <- relationship
     }
     
-    removeModal()
-    showNotification("Variable relationships applied successfully.", type = "message")
-    
-    
-    # Define variable_impacts CORRECTLY here
-    variable_impacts <- reactive({
-      req(data_to_use)
-      vars <- setdiff(names(data_to_use), "WardName")
-      sapply(vars, function(var) input[[paste0("relationship_", var)]])
-    })
-    
     # Normalize the data
     rv$normalized_data <- reactive({
-      normalize_data(rv$cleaned_data, rv$variable_relationships) 
+      normalize_data(data_to_use[, c("WardName", columns_after_wardname)], rv$variable_relationships) 
     })
     
-    # Generate and store the plot  
+    removeModal()
+    showNotification("Variable relationships applied and data normalized successfully.", type = "message")
+    
+    
+    output$normalized_variable_select <- renderUI({
+      norm_vars <- grep("^normalization_", names(rv$normalized_data()), value = TRUE)
+      selectInput("visualize_normalized_var", "Select Variables to Visualize", 
+                  choices = norm_vars,
+                  multiple = TRUE)
+    })
+    
+    # Update the normalization plot
     output$normalizationplot <- renderGirafe({
       req(rv$normalized_data(), input$visualize_normalized_var)
       plot_normalized_map(shp_data = rv$shp_data, 
                           processed_csv = rv$normalized_data(), 
                           selected_vars = input$visualize_normalized_var)
-    })
-    
-    print("Normalized data after normalization:") 
-    print(str(rv$normalized_data))
-    
-    # Update the UI with variable selection
-    output$normalized_variable_select <- renderUI({
-      print("Normalized data structure:")
-      print(str(rv$normalized_data())) # Check the structure HERE
-      
-      
-      tryCatch({
-        req(rv$normalized_data())
-        print("Normalized data structure:")
-        print(str(rv$normalized_data()))
-        norm_vars <- grep("^normalization_", names(rv$normalized_data()), value = TRUE)
-        #columns_after_wardname <- get_columns_after_wardname(rv$normalized_data(), norm_vars)
-        selectInput("visualize_normalized_var", "Select a Normalized Variable to visualise", 
-                    choices = norm_vars,
-                    selected = norm_vars[1],
-                    multiple = TRUE)
-      }, error = function(e) {
-        print(paste("Error in normalized_variable_select:", e$message))
-        print("Normalized data:")
-        print(str(rv$normalized_data()))
-        NULL
-      })
     })
   })
   
@@ -709,7 +690,7 @@ server <- function(input, output, session) {
     
     output$normalizationplot <- renderGirafe({
       plot_normalized_map(shp_data = rv$shp_data, 
-                          processed_csv = rv$normalized_data, 
+                          processed_csv = rv$normalized_data(), 
                           selected_vars = input$visualize_normalized_var)
     })
   })
