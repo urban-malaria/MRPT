@@ -98,7 +98,7 @@ ui <- fluidPage(
                       h4("Feedback"),
                       p("As you explore each feature, please note any issues, inconsistencies, or suggestions for improvement. Your feedback is crucial for refining this tool. Report any bugs or share your thoughts with the development team."),
                       h4("Note on Data Privacy"),
-                      p("Remember, this is a testing phase. Please use only the provided test data or non-sensitive data. Do not upload any real, sensitive, or personal data to this application during testing."),
+                      p("Remember, this is a testing phase. Please use only the provided test data or non-sensitive data."),
                       p("Thank you for your participation in testing the Malaria Risk Mapping Tool!")
                ),
                # Column for the image
@@ -299,7 +299,22 @@ ui <- fluidPage(
     '@ Loyola University Chicago, Parkinson School of Public Health, Department of Health Informatics and Data Science'
   ),
   
-  br()
+  br(),
+
+div(
+  style='text-align: center; font-style: italic; font-size: 1.1em;',
+  tags$strong('If you use this tool in your work, please cite:'),
+  br(),
+  'Mhlanga, L., Boateng, B.O., Jamiu, Y., Bamgboye, E.A., Adeniji, H., Ademu, C., Okoronkwo, C., Galatas, B., & Ozodiegwu, I. (2024).',
+  br(),
+  'Malaria Risk Mapping Tool. Urban Malaria Project, Loyola University Chicago.',
+  br(),
+  'Available at: ',
+  tags$a(href="https://bbofori90.shinyapps.io/Shiny_app/", 
+         target="_blank", 
+         "https://bbofori90.shinyapps.io/Shiny_app/")
+),
+br()
 )
 
 
