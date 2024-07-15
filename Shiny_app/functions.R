@@ -23,6 +23,7 @@ library(spdep)
 library(stringdist)
 library(DiagrammeR)
 library(glue)
+library(DT)
 
 
 # Function to generate a list of column name patterns

@@ -39,6 +39,13 @@ ui <- fluidPage(
         0% {opacity: 0;}
         100% {opacity: 1;}
       }
+      
+      .shiny-progress-container {
+      top: 0px;
+    }
+    .progress-bar {
+      background-color: #337ab7;
+    }
     "))
   ),
   
@@ -178,6 +185,8 @@ ui <- fluidPage(
                  tags$h4("Select a variable in the dataset to visualise:"),
                  tags$p("Select at least two variables:", style = "color: black;"),
                  uiOutput("composite_variable_select"),
+                 # Add this div for the progress bar
+                 div(id = "progress-bar-container", style = "margin-top: 10px;"),
                  actionButton("plot_button", "Calculate")
                ),
                mainPanel(
@@ -439,6 +448,9 @@ server <- function(input, output, session) {
     req(mismatches)
     corrected_names <- rv$corrected_wardnames()
     
+    # Sort mismatches alphabetically by CSV_WardName
+    mismatches <- mismatches[order(mismatches$CSV_WardName), ]
+    
     modalDialog(
       title = "Data Cleaning",
       
@@ -455,7 +467,7 @@ server <- function(input, output, session) {
       
       lapply(1:nrow(mismatches), function(i) {
         ward <- mismatches$CSV_WardName[i]
-        options <- c("None", mismatches$Shapefile_Options[[i]])
+        options <- c("None", sort(mismatches$Shapefile_Options[[i]]))  # Sort options alphabetically
         
         selected_value <- if (!is.null(corrected_names) && nrow(corrected_names) > 0) {
           corrected <- corrected_names$corrected[corrected_names$original == ward]
@@ -791,126 +803,120 @@ server <- function(input, output, session) {
   
   observeEvent(input$plot_button, {
     req(rv$cleaned_data, input$composite_vars)
-    #print(paste("Number of rows in cleaned_data:", nrow(rv$cleaned_data)))
-    #print(paste("Number of rows in shp_data:", nrow(rv$shp_data)))
-    
     
     if (length(input$composite_vars) < 2) {
       showNotification("Please select at least two variables for composite score calculation.", type = "warning")
       return()
     }
     
-    tryCatch({
-      print("Cleaned data structure:")
-      print(str(rv$cleaned_data))
-      
-      # Get variable impacts
-      variable_impacts <- sapply(input$composite_vars, function(var) input[[paste0("impact_", var)]])
-      print("Variable impacts:")
-      print(variable_impacts)
-      
-      # Normalize data
-      normalized_data <- normalize_data(rv$cleaned_data[, c("WardName", input$composite_vars)], variable_impacts)
-      print("Normalized data summary:")
-      print(summary(normalized_data))
-      
-      if (is.null(normalized_data)) {
-        showNotification("Error in data normalization. Check the console for details.", type = "error")
-        return()
-      }
-      
-      
-      print("Normalized data structure:")
-      print(str(normalized_data))
-      
-      # Calculate composite scores using only selected variables
-      composite_scores <- composite_score_models(normalized_data, selected_vars = input$composite_vars)
-      
-      if (is.null(composite_scores)) {
-        showNotification("Error in composite score calculation. Check the console for details.", type = "error")
-        return()
-      }
-      
-      # Process composite scores for plotting
-      processed_scores <- process_model_score(composite_scores$final_data)
-      
-      # Join with shapefile data
-      combined_data <- left_join(processed_scores, rv$shp_data, by = "WardName")
-      rv$data <- combined_data
-      
-      # Generate model formulas table
-      model_formulae_table <- models_formulas(composite_scores$model_formula)
-      rv$output_data <- model_formulae_table
-      
-      # Update plots and tables
-      # Inside the server function, replace the existing mapPlot output with this:
-      output$mapPlot <- renderUI({
-        req(rv$data, rv$output_data)
+    withProgress(message = 'Calculating composite scores', value = 0, {
+      tryCatch({
+        # Step 1: Get variable impacts
+        incProgress(0.1, detail = "Getting variable impacts...")
+        variable_impacts <- sapply(input$composite_vars, function(var) rv$variable_relationships[[var]])
         
-        plots <- plot_model_score_map(shp_data = rv$shp_data,
-                                      processed_csv = rv$data,
-                                      model_formulas = rv$output_data,
-                                      maps_per_page = 4)  # Adjust this number as needed
+        # Step 2: Normalize data
+        incProgress(0.2, detail = "Normalizing data...")
+        normalized_data <- normalize_data(rv$cleaned_data[, c("WardName", input$composite_vars)], variable_impacts)
         
-        # Create a tabset panel for pagination
-        do.call(tabsetPanel, lapply(seq_along(plots), function(i) {
-          tabPanel(paste("Page", i), girafeOutput(paste0("mapPlot_", i)))
-        }))
-      })
-      
-      # Add these observers to render each plot
-      observe({
-        req(rv$data, rv$output_data)
-        plots <- plot_model_score_map(shp_data = rv$shp_data,
-                                      processed_csv = rv$data,
-                                      model_formulas = rv$output_data,
-                                      maps_per_page = 4)  # Adjust this number as needed
-        
-        for (i in seq_along(plots)) {
-          local({
-            local_i <- i
-            output[[paste0("mapPlot_", local_i)]] <- renderGirafe({
-              plots[[local_i]]
-            })
-          })
+        if (is.null(normalized_data)) {
+          showNotification("Error in data normalization. Check the console for details.", type = "error")
+          return()
         }
-      })
-      
-      output$dataTable <- renderTable({
-        rv$output_data
-      })
-      
-      # Normalization plot
-      output$normalizationplot <- renderGirafe({
-        req(rv$normalized_data(), input$visualize_normalized_var)
-        plot_normalized_map(shp_data = rv$shp_data, 
-                            processed_csv = rv$normalized_data(), 
-                            selected_vars = input$visualize_normalized_var)
-      })
-      
-      # Box whisker plot
-      output$boxwhiskerPlots <- renderPlotly({
-        box_plot_results <- box_plot_function(rv$data)
-        rv$ward_rankings <- box_plot_results$ward_rankings
-        box_plot_results$plot
         
-        # disable zoom for x and y axes
-        box_plot_results$plot %>% 
-          layout(xaxis = list(fixedrange = TRUE), 
-                 yaxis = list(fixedrange = TRUE)) 
+        # Step 3: Calculate composite scores
+        incProgress(0.3, detail = "Calculating composite scores...")
+        composite_scores <- composite_score_models(normalized_data, selected_vars = input$composite_vars)
+        
+        if (is.null(composite_scores)) {
+          showNotification("Error in composite score calculation. Check the console for details.", type = "error")
+          return()
+        }
+        
+        # Step 4: Process composite scores for plotting
+        incProgress(0.4, detail = "Processing scores...")
+        processed_scores <- process_model_score(composite_scores$final_data)
+        
+        # Step 5: Join with shapefile data
+        incProgress(0.5, detail = "Joining with shapefile data...")
+        combined_data <- left_join(processed_scores, rv$shp_data, by = "WardName")
+        rv$data <- combined_data
+        
+        # Step 6: Generate model formulas table
+        incProgress(0.6, detail = "Generating model formulas...")
+        model_formulae_table <- models_formulas(composite_scores$model_formula)
+        rv$output_data <- model_formulae_table
+        
+        # Step 7: Update plots and tables
+        incProgress(0.7, detail = "Updating plots and tables...")
+        
+        # Update mapPlot
+        output$mapPlot <- renderUI({
+          req(rv$data, rv$output_data)
+          
+          plots <- plot_model_score_map(shp_data = rv$shp_data,
+                                        processed_csv = rv$data,
+                                        model_formulas = rv$output_data,
+                                        maps_per_page = 4)
+          
+          do.call(tabsetPanel, lapply(seq_along(plots), function(i) {
+            tabPanel(paste("Page", i), girafeOutput(paste0("mapPlot_", i)))
+          }))
+        })
+        
+        # Render individual plots
+        observe({
+          req(rv$data, rv$output_data)
+          plots <- plot_model_score_map(shp_data = rv$shp_data,
+                                        processed_csv = rv$data,
+                                        model_formulas = rv$output_data,
+                                        maps_per_page = 4)
+          
+          for (i in seq_along(plots)) {
+            local({
+              local_i <- i
+              output[[paste0("mapPlot_", local_i)]] <- renderGirafe({
+                plots[[local_i]]
+              })
+            })
+          }
+        })
+        
+        # Update dataTable
+        output$dataTable <- renderTable({
+          rv$output_data
+        })
+        
+        # Update normalizationplot
+        output$normalizationplot <- renderGirafe({
+          req(rv$normalized_data(), input$visualize_normalized_var)
+          plot_normalized_map(shp_data = rv$shp_data, 
+                              processed_csv = rv$normalized_data(), 
+                              selected_vars = input$visualize_normalized_var)
+        })
+        
+        # Update boxwhiskerPlots
+        incProgress(0.8, detail = "Generating box plots...")
+        output$boxwhiskerPlots <- renderPlotly({
+          box_plot_results <- box_plot_function(rv$data)
+          rv$ward_rankings <- box_plot_results$ward_rankings
+          box_plot_results$plot %>% 
+            layout(xaxis = list(fixedrange = TRUE), 
+                   yaxis = list(fixedrange = TRUE))
+        })
+        
+        # Step 8: Show completion notification
+        incProgress(1, detail = "Completed!")
+        num_models <- nrow(model_formulae_table)
+        if (length(input$composite_vars) == 2) {
+          showNotification("Generated 1 model combination using the two selected variables.", type = "message")
+        } else {
+          showNotification(paste("Generated", num_models, "model combinations."), type = "message")
+        }
+        
+      }, error = function(e) {
+        showNotification(paste("Error:", e$message), type = "error")
       })
-      
-      
-      # Show the number of model combinations generated
-      num_models <- nrow(model_formulae_table)
-      if (length(input$composite_vars) == 2) {
-        showNotification("Generated 1 model combination using the two selected variables.", type = "message")
-      } else {
-        showNotification(paste("Generated", num_models, "model combinations."), type = "message")
-      }
-      
-    }, error = function(e) {
-      showNotification(paste("Error:", e$message), type = "error")
     })
   })
  
