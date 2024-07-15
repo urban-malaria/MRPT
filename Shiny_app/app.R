@@ -98,7 +98,7 @@ ui <- fluidPage(
                       h4("Feedback"),
                       p("As you explore each feature, please note any issues, inconsistencies, or suggestions for improvement. Your feedback is crucial for refining this tool. Report any bugs or share your thoughts with the development team."),
                       h4("Note on Data Privacy"),
-                      p("Remember, this is a testing phase. Please use only the provided test data or non-sensitive data."),
+                      p("Do not upload any real, sensitive, or personal data to this application during testing."),
                       p("Thank you for your participation in testing the Malaria Risk Mapping Tool!")
                ),
                # Column for the image
