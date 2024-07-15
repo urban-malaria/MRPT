@@ -78,9 +78,9 @@ ui <- fluidPage(
                       ),
                       h4("3. Normalization Tab"),
                       tags$ul( 
-                        tags$li("Click 'SPECIFY VARIABLE RELATIONSHIPS' to define how each variable relates to malaria risk (direct or inverse)."),
+                        tags$li("Click 'Specify Variable Relationships' to define how each variable relates to malaria risk (direct or inverse)."),
                         tags$li("Select a normalized variable to visualize from the dropdown menu."),
-                        tags$li("Click 'PLOT NORMALIZED MAP' to see the distribution of the normalized variable.")
+                        tags$li("Click 'Plot Normalized Map' to see the distribution of the normalized variable.")
                       ),
                       h4("4. Composite Score Distribution Tab"),
                       tags$ul(
