@@ -47,56 +47,63 @@ ui <- fluidPage(
   tabsetPanel(
     tabPanel("Instructions",
              tags$br(),
-             h6("
-By integrating multiple data layers, this malaria risk mapping tool provides actionable insights for effective malaria control. Stakeholders can visualize and analyze converging risk factors, leading to better-informed decisions about resource prioritization and intervention strategies in high-risk areas."),
-             
+             # Use a fluidRow to create a two-column layout
              fluidRow(
+               # Column for text instructions 
                column(6,
-                      tags$br(),tags$br(),
-                      h3("Instructions to Using the Application"),
-                      HTML("
-        <ol>
-          <li>Ensure you have a dataset with the variables of interest. 
-          Your dataset should include column names, please download the example.csv file to edit. 
-          Click on the varible name you will be redirected to the sites where you can download 
-          the respective raster files. Note: Some countries may not be listed on the provided sites.
-            <ul>
-              <li>Ward name</li>
-              <li>Distance to water bodies</li>
-              <li>Population density</li>
-              <li>Population size</li>
-              <li>Test positivity rate</li>
-              <li>Housing quality</li>
-              <li>Enhanced Vegetation Index</li>
-              <li>Surface temperature and humidity</li>
-              <li>Rainfall</li>
-              <li>Dump sites</li>
-              <li>ITN distribution per capita</li>
-              <li>Settlement type</li>
-            </ul>
-          </li>
-          <li>Download the shapefile for your region of interest.</li>
-          <li>Save the shapefile in the same folder as the variable dataset and compress it into a .zip format.</li>
-          <li>Proceed to the next tab to upload the data file and shapefile and visualize the output.
-            <ul>
-              <li><b>Visualize Tab:</b> Visualize the distribution of each variable across wards. Hover over a polygon to see the ward name and variable measure.</li>
-              <li><b>Normalized Tab:</b> Select variables for the composite score. This tab allows for normalization and visualization of each variable's impact on the composite score.</li>
-              <li><b>Composite Score Tab:</b> Shows the effect of each variable within the composite score. Select the variables you want to see in the composite function.</li>
-              <li><b>Composite Score Summary Tab:</b> Analyzes ward ranks to produce box/whisker plots, highlighting wards with the lowest risk.</li>
-            </ul>
-          </li>
-        </ol>
-      ")
+                      h3("Instructions for Using the Malaria Risk Mapping Tool (Testing Phase)"),
+                      p("Welcome to the testing phase of our Malaria Risk Mapping Tool. Please follow these steps to explore the application's features:"),
+                      h4("1. Preparing Your Data"),
+                      tags$ul(
+                        tags$li(a("Download the test dataset from this Google Drive link:", 
+                                  href="https://drive.google.com/drive/u/0/folders/1iB103WqBbeIEhhMZ1axHTRaC3zZVnE-S", 
+                                  target="_blank")),
+                        tags$li("Ensure you have both the CSV file with variable data and the corresponding shapefile for your region of interest."),
+                        tags$li("The CSV file should include columns for WardName and various risk factors (e.g., settlement quality, rainfall, etc.)."),
+                        tags$li("Compress the shapefile components into a zip file.")
+                      ),
+                      h4("2. Input Variables (Data and Shapefiles) Tab"),
+                      tags$ul( 
+                        tags$li("Upload your CSV file and zipped shapefile using the respective upload buttons."),
+                        tags$li("If there are mismatches between ward names in your CSV and shapefile, you'll be prompted to resolve them."),
+                        tags$li("Select a variable to visualize from the dropdown menu and click 'Plot Maps' to see its distribution."),
+                        tags$li("If your data has missing values, use the 'Click to fill in missing values' button to handle them.")
+                      ),
+                      h4("3. Normalization Tab"),
+                      tags$ul( 
+                        tags$li("Click 'SPECIFY VARIABLE RELATIONSHIPS' to define how each variable relates to malaria risk (direct or inverse)."),
+                        tags$li("Select a normalized variable to visualize from the dropdown menu."),
+                        tags$li("Click 'PLOT NORMALIZED MAP' to see the distribution of the normalized variable.")
+                      ),
+                      h4("4. Composite Score Distribution Tab"),
+                      tags$ul(
+                        tags$li("Select at least two variables to include in your composite risk score."),
+                        tags$li("Click 'Calculate' to generate composite score maps for different combinations of your selected variables."),
+                        tags$li("Examine the resulting maps to see how different variable combinations affect the risk distribution.")
+                      ),
+                      h4("5. Box and Whisker Plot Tab"),
+                      tags$ul( 
+                        tags$li("This tab shows the distribution of vulnerability scores across wards."),
+                        tags$li("Toggle between the box plot view and map view using the 'Show Map View' checkbox."),
+                        tags$li("In the box plot view, examine the distribution of ranks for each ward."),
+                        tags$li("In the map view, see the geographic distribution of overall vulnerability ranks.")
+                      ),
+                      h4("Feedback"),
+                      p("As you explore each feature, please note any issues, inconsistencies, or suggestions for improvement. Your feedback is crucial for refining this tool. Report any bugs or share your thoughts with the development team."),
+                      h4("Note on Data Privacy"),
+                      p("Remember, this is a testing phase. Please use only the provided test data or non-sensitive data. Do not upload any real, sensitive, or personal data to this application during testing."),
+                      p("Thank you for your participation in testing the Malaria Risk Mapping Tool!")
                ),
-               column(6,
-                      tags$br(),tags$br(),tags$br(),tags$br(),
+               # Column for the image
+               column(6, 
+                      tags$br(), tags$br(), tags$br(), tags$br(), 
                       tags$img(src = "digital_abstract.png", height = "600px", width = "auto"),
-                      style='text-align: center',
+                      style = 'text-align: center',
                       tags$h6("The figure above shows a digital abstract first presented in Ozodiegwu et-al (in-press), 
-            and it shows how the application was used to develop the malaria risk map in Ilorin")
+                              and it shows how the application was used to develop the malaria risk map in Ilorin")
                )
-             )
-    ), 
+             ), # Close fluidRow
+    ),  
     
     tabPanel("Input variables (data and shapefiles)", 
              fluidRow(
@@ -114,12 +121,11 @@ By integrating multiple data layers, this malaria risk mapping tool provides act
                       uiOutput("variable_select"),
                       actionButton("plot_data", "Plot Maps"),
                       hr(),
-                      actionButton("data_cleaning", "Data Cleaning (Click to clean data)")
+                      actionButton("data_cleaning", "Click to fill in missing values")
                ),
                column(9,
                       fluidRow(
-                        column(6, girafeOutput("rawDataPlot", height = "500px")),
-                        column(6, girafeOutput("cleanedDataPlot", height = "500px"))
+                        uiOutput("plotLayout")
                       ),
                       htmlOutput("visualizationExplanation"),
                       tags$p(style = "font-style: italic; margin-top: 10px;", 
@@ -141,20 +147,27 @@ By integrating multiple data layers, this malaria risk mapping tool provides act
                  actionButton("plot_normalized", "PLOT NORMALIZED MAP")
                ),
                mainPanel(
-                 girafeOutput("normalizationplot")
+                 # Make the plot conditional on button click:
+                 conditionalPanel(
+                   condition = "input.plot_normalized > 0", 
+                   girafeOutput("normalizationplot")
+                 )
                )
              ),
              tags$br(),
              tags$p(style = "font-style: italic; margin-top: 10px;", 
-                    "Hover over the maps to see detailed information for each ward."),
-             style='text-align: center',
-             tags$h6("The plot shows the distribution of the variables selected for
-                  evaluation across the region of interest after they have been 
-                  normalized using the min-max method. The values are now all on 
-                  the same scale ranging from 0 to 1. This range of values are put 
-                  into 5 classes (see legend). The plot highlights which of the
-                  variables if used in the algorithm will have more influence in the
-                  composite score.")
+                    "Hover over the map to see detailed information for each ward."),
+             tags$div(
+               style = "margin-top: 20px; padding: 10px; background-color: #f0f0f0; border-radius: 5px;",
+               tags$h4("Understanding the Normalized Plot", style = "text-align: center;"),
+               tags$p("The plot shows the distribution of the variables selected for
+            evaluation across the region of interest after they have been 
+            normalized using the min-max method. The values are now all on 
+            the same scale ranging from 0 to 1. This range of values are put 
+            into 5 classes (see legend). The plot highlights which of the
+            variables if used in the algorithm will have more influence in the
+            composite score.", style = "text-align: justify;")
+             )
     ),
     
     
@@ -163,6 +176,7 @@ By integrating multiple data layers, this malaria risk mapping tool provides act
              sidebarLayout(
                sidebarPanel(
                  tags$h4("Select a variable in the dataset to visualise:"),
+                 tags$p("Select at least two variables:", style = "color: black;"),
                  uiOutput("composite_variable_select"),
                  actionButton("plot_button", "Calculate")
                ),
@@ -246,16 +260,16 @@ By integrating multiple data layers, this malaria risk mapping tool provides act
     ),
     
     
-    tabPanel("Decision Tree",
-             fluidRow(
-               column(12,
-                      h3("Decision Tree Visualization"),
-                      p("This decision tree illustrates the process of variable selection and risk mapping."),
-                      br(),
-                      DiagrammeROutput("decisionTreePlot", height = "600px")
-               )
-             )
-    ),
+#    tabPanel("Decision Tree",
+#             fluidRow(
+#               column(12,
+#                      h3("Decision Tree Visualization"),
+#                      p("This decision tree illustrates the process of variable selection and risk mapping."),
+#                      br(),
+#                      DiagrammeROutput("decisionTreePlot", height = "600px")
+#               )
+#             )
+#    ),
     
   ),
   
@@ -504,7 +518,11 @@ server <- function(input, output, session) {
       title = "Data Cleaning",
       
       h4("Columns with Missing Values (NAs)"),
-      
+      tags$ul(
+        tags$li(strong("Spatial neighbor mean:"), "Replaces missing values with the mean of neighboring wards."),
+        tags$li(strong("Region mean:"), "Replaces missing values with the mean of the entire region."),
+        tags$li(strong("Region mode:"), "Replaces missing values with the most common value in the region.")
+      ),
       lapply(rv$na_columns, function(col) {
         fluidRow(
           column(6, h5(col)),
@@ -559,7 +577,7 @@ server <- function(input, output, session) {
   
   output$data_cleaning_button <- renderUI({
     if (rv$needs_cleaning()) {
-      actionButton("data_cleaning", "Data Cleaning (Click to clean data)")
+      actionButton("data_cleaning", "Click to fill in missing values")
     }
   })
   
@@ -573,7 +591,18 @@ server <- function(input, output, session) {
     
     showModal(modalDialog(
       title = "Specify Variable Relationships with Malaria Risk",
-      uiOutput("variable_relationships"),
+      tags$div(
+        tags$h4("Understanding Variable Relationships"),
+        tags$p("Specifying variable relationships helps determine how each factor contributes to malaria risk:"),
+        tags$ul(
+          tags$li(strong("Direct relationship:"), "As the variable increases, malaria risk increases."),
+          tags$li(strong("Inverse relationship:"), "As the variable increases, malaria risk decreases.")
+        ),
+        tags$p("This information is crucial for accurately calculating the composite risk score."),
+        
+        uiOutput("variable_relationships")
+      ),
+      
       footer = tagList(
         modalButton("Cancel"),
         actionButton("apply_relationships", "Apply Relationships")
@@ -598,6 +627,14 @@ server <- function(input, output, session) {
     })
   })
   
+  output$normalized_variable_select <- renderUI({
+    req(rv$normalized_data)
+    norm_vars <- grep("^normalization_", names(rv$normalized_data()), value = TRUE)
+    selectInput("visualize_normalized_var", "Select Variable to Visualize", 
+                choices = norm_vars,
+                selected = norm_vars[1])
+  })
+  
   
   output$vulnerabilityMap <- renderGirafe({
     req(rv$data, rv$ward_rankings, rv$shp_data)
@@ -612,25 +649,25 @@ server <- function(input, output, session) {
                            guide = guide_colorbar(
                              title.position = "top",
                              title.hjust = 0.5,
-                             label.theme = element_text(size = 8),
-                             barwidth = 10,
-                             barheight = 0.5
+                             label.theme = element_text(size = 12), # Increase legend labels size
+                             barwidth = 15, # Increase legend width 
+                             barheight = 1 # Increase legend height
                            )) +
       theme_void() +
       labs(title = "Ward Vulnerability Map") +
       theme(legend.position = "bottom",
             legend.box = "vertical",
             legend.margin = margin(t = 10, b = 10),
-            plot.title = element_text(size = 14, face = "bold", hjust = 0.5))
+            plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) 
     
-    # Add text annotations for low and high vulnerability
+    # Improved Annotations for Clarity:
     plot <- plot +
-      annotate("text", x = -Inf, y = -Inf, label = "Low Vulnerability", 
-               hjust = 0, vjust = -1, size = 3, color = "darkred") +
-      annotate("text", x = Inf, y = -Inf, label = "High Vulnerability", 
-               hjust = 1, vjust = -1, size = 3, color = "darkblue")
+      annotate("text", x = -Inf, y = -Inf, label = "Low Vulnerability (Rank 1)", # Clearer label
+               hjust = 0, vjust = -1, size = 4, color = "darkred", fontface = "bold") +
+      annotate("text", x = Inf, y = -Inf, label = "High Vulnerability (Highest Rank)", # Clearer label
+               hjust = 1, vjust = -1, size = 4, color = "darkblue", fontface = "bold")
     
-    girafe(ggobj = plot, width_svg = 10, height_svg = 8)
+    girafe(ggobj = plot, width_svg = 10, height_svg = 8) 
   })
   
   
@@ -659,9 +696,9 @@ server <- function(input, output, session) {
     
     output$normalized_variable_select <- renderUI({
       norm_vars <- grep("^normalization_", names(rv$normalized_data()), value = TRUE)
-      selectInput("visualize_normalized_var", "Select Variables to Visualize", 
+      selectInput("visualize_normalized_var", "Select Normalized Variables to Visualize", 
                   choices = norm_vars,
-                  multiple = TRUE)
+                  selected = norm_vars[1])
     })
     
     # Update the normalization plot
@@ -689,49 +726,54 @@ server <- function(input, output, session) {
   observeEvent(input$plot_data, {
     req(rv$raw_data, rv$shp_data, input$visualize_var)
     
-    data_to_plot <- if (!is.null(rv$cleaned_data)) rv$cleaned_data else rv$raw_data
-    
-    output$rawDataPlot <- renderGirafe({
-      plot_map_00(variable_name = input$visualize_var,
-                  shp_data_reactive = rv$shp_data,
-                  dataframe_reactive = data_to_plot,
-                  title = if (rv$needs_cleaning()) "Raw Data" else "Clean Data",
-                  na_handling_method = NULL)
-    })
-    
-    if (rv$needs_cleaning()) {
-      output$cleanedDataPlot <- renderGirafe({
-        if (!is.null(rv$cleaned_data)) {
-          plot_map_00(variable_name = input$visualize_var,
-                      shp_data_reactive = rv$shp_data,
-                      dataframe_reactive = rv$cleaned_data,
-                      title = "Cleaned Data",
-                      na_handling_method = rv$na_handling_methods[[input$visualize_var]] %||% "None")
-        } else {
-          plot_map_00(variable_name = input$visualize_var,
-                      shp_data_reactive = rv$shp_data,
-                      dataframe_reactive = rv$raw_data,
-                      title = "Data Not Cleaned Yet",
-                      na_handling_method = NULL)
-        }
+    if (!rv$cleaning_performed()) {
+      # Before cleaning: One centered plot
+      output$plotLayout <- renderUI({
+        column(12, align = "center", girafeOutput("singlePlot", height = "500px"))
+      })
+      
+      output$singlePlot <- renderGirafe({
+        plot_map_00(variable_name = input$visualize_var,
+                    shp_data_reactive = rv$shp_data,
+                    dataframe_reactive = rv$raw_data,
+                    title = "Original Data",
+                    na_handling_method = NULL)
       })
     } else {
-      output$cleanedDataPlot <- renderUI(NULL)  # Hide the cleaned data plot if cleaning is not needed
+      # After cleaning: Two side-by-side plots
+      output$plotLayout <- renderUI({
+        fluidRow(
+          column(6, girafeOutput("rawDataPlot", height = "500px")),
+          column(6, girafeOutput("cleanedDataPlot", height = "500px"))
+        )
+      })
+      
+      output$rawDataPlot <- renderGirafe({
+        plot_map_00(variable_name = input$visualize_var,
+                    shp_data_reactive = rv$shp_data,
+                    dataframe_reactive = rv$raw_data,
+                    title = "Raw Data",
+                    na_handling_method = NULL)
+      })
+      
+      output$cleanedDataPlot <- renderGirafe({
+        plot_map_00(variable_name = input$visualize_var,
+                    shp_data_reactive = rv$shp_data,
+                    dataframe_reactive = rv$cleaned_data,
+                    title = "Cleaned Data",
+                    na_handling_method = rv$na_handling_methods[[input$visualize_var]] %||% "None")
+      })
     }
     
     # Update the explanation text
     output$visualizationExplanation <- renderText({
-      if (rv$needs_cleaning()) {
-        if (is.null(rv$cleaned_data)) {
-          "The maps below illustrate the geographic distribution of the selected variable across different wards. The left map displays the variable's values directly from the uploaded dataset (raw data). The right map, currently identical to the left, will reflect the cleaned data after you apply data cleaning techniques."
-        } else {
-          paste("These maps showcase the effect of data cleaning on the selected variable's distribution. The left map represents the original, raw data. In contrast, the right map reveals the data after addressing missing values using the '",
-                rv$na_handling_methods[[input$visualize_var]] %||% "None",
-                "' method. The color gradients reflect the variable's magnitude, providing a clear visual comparison between the raw and cleaned datasets."
-          )
-        }
+      if (!rv$cleaning_performed()) {
+        "The map below shows the geographic distribution of the selected variable across various wards. If there are missing values in the plot, please click the (Fill in Missing Values) button. If no values are missing, proceed to the next tab."
       } else {
-        "The map below illustrates the geographic distribution of the selected variable across different wards. As the uploaded data was already clean, no additional cleaning was necessary."
+        paste("These maps showcase the effect of data cleaning on the selected variable's distribution. The left map represents the original, raw data. In contrast, the right map reveals the data after addressing missing values using the '",
+              rv$na_handling_methods[[input$visualize_var]] %||% "None",
+              "' method. The color gradients reflect the variable's magnitude, providing a clear visual comparison between the raw and cleaned datasets."
+        )
       }
     })
   })
@@ -851,6 +893,11 @@ server <- function(input, output, session) {
         box_plot_results <- box_plot_function(rv$data)
         rv$ward_rankings <- box_plot_results$ward_rankings
         box_plot_results$plot
+        
+        # disable zoom for x and y axes
+        box_plot_results$plot %>% 
+          layout(xaxis = list(fixedrange = TRUE), 
+                 yaxis = list(fixedrange = TRUE)) 
       })
       
       
@@ -868,69 +915,69 @@ server <- function(input, output, session) {
   })
  
   
-  # Text wrapping function
-  wrap_text <- function(text, width = 30) {
-    paste(strwrap(text, width = width), collapse = "\n")
-  }
-  
-  decision_tree_function <- function(all_variables, selected_variables, excluded_variables) {
-    # Create nodes DataFrame
-    nodes <- create_node_df(
-      n = 7,
-      label = c(
-        wrap_text(paste(("The dataset had the following variables:"), 
-                        paste(all_variables, collapse = ", "))),
-        "Check the map plot to determine if it depicts the variable under consideration", 
-        wrap_text(paste("Variables included in the composite score:", 
-                        paste(selected_variables, collapse = ", "))),
-        wrap_text(paste("Variables excluded from the composite score:", 
-                        paste(excluded_variables, collapse = ", "))), 
-        "Normalization and composite score calculation",
-        "Malaria risk maps generated from various combinations of all included variables", 
-        "Malaria risk map recommended by the box and whisker plot"
-      ),
-      shape = c("box", "diamond", "ellipse", "ellipse", "box", "ellipse", "ellipse")
-    )
-    
-    # Create edges DataFrame
-    edges <- create_edge_df(
-      from = c(1, 2, 2, 3, 5, 5),
-      to = c(2, 3, 4, 5, 6, 7),
-      label = c("", "yes", "no", "", "all variables", "recommended")
-    )
-    
-    # Create graph
-    graph <- create_graph(nodes_df = nodes, edges_df = edges)
-    
-    # Render the graph
-    render_graph(graph)
-  }
-  
-  
-  # Define all_variables as a reactive expression
-  all_variables <- reactive({
-    req(rv$cleaned_data)
-    setdiff(names(rv$cleaned_data), "WardName")
-  })
-  
-  excluded_variables <- reactive({
-    req(all_variables(), input$composite_vars)
-    setdiff(all_variables(), input$composite_vars)
-  })
-  
-  output$decisionTreePlot <- renderDiagrammeR({
-    req(all_variables(), input$composite_vars)
-    
-    selected_variables <- input$composite_vars
-    excluded_vars <- excluded_variables()
-    
-    tryCatch({
-      decision_tree_function(all_variables(), selected_variables, excluded_vars)
-    }, error = function(e) {
-      message("Error in decision tree function: ", e$message)
-      return(NULL)
-    })
-  })
+  # # Text wrapping function
+  # wrap_text <- function(text, width = 30) {
+  #   paste(strwrap(text, width = width), collapse = "\n")
+  # }
+  # 
+  # decision_tree_function <- function(all_variables, selected_variables, excluded_variables) {
+  #   # Create nodes DataFrame
+  #   nodes <- create_node_df(
+  #     n = 7,
+  #     label = c(
+  #       wrap_text(paste(("The dataset had the following variables:"), 
+  #                       paste(all_variables, collapse = ", "))),
+  #       "Check the map plot to determine if it depicts the variable under consideration", 
+  #       wrap_text(paste("Variables included in the composite score:", 
+  #                       paste(selected_variables, collapse = ", "))),
+  #       wrap_text(paste("Variables excluded from the composite score:", 
+  #                       paste(excluded_variables, collapse = ", "))), 
+  #       "Normalization and composite score calculation",
+  #       "Malaria risk maps generated from various combinations of all included variables", 
+  #       "Malaria risk map recommended by the box and whisker plot"
+  #     ),
+  #     shape = c("box", "diamond", "ellipse", "ellipse", "box", "ellipse", "ellipse")
+  #   )
+  #   
+  #   # Create edges DataFrame
+  #   edges <- create_edge_df(
+  #     from = c(1, 2, 2, 3, 5, 5),
+  #     to = c(2, 3, 4, 5, 6, 7),
+  #     label = c("", "yes", "no", "", "all variables", "recommended")
+  #   )
+  #   
+  #   # Create graph
+  #   graph <- create_graph(nodes_df = nodes, edges_df = edges)
+  #   
+  #   # Render the graph
+  #   render_graph(graph)
+  # }
+  # 
+  # 
+  # # Define all_variables as a reactive expression
+  # all_variables <- reactive({
+  #   req(rv$cleaned_data)
+  #   setdiff(names(rv$cleaned_data), "WardName")
+  # })
+  # 
+  # excluded_variables <- reactive({
+  #   req(all_variables(), input$composite_vars)
+  #   setdiff(all_variables(), input$composite_vars)
+  # })
+  # 
+  # output$decisionTreePlot <- renderDiagrammeR({
+  #   req(all_variables(), input$composite_vars)
+  #   
+  #   selected_variables <- input$composite_vars
+  #   excluded_vars <- excluded_variables()
+  #   
+  #   tryCatch({
+  #     decision_tree_function(all_variables(), selected_variables, excluded_vars)
+  #   }, error = function(e) {
+  #     message("Error in decision tree function: ", e$message)
+  #     return(NULL)
+  #   })
+  # })
   
 }
 

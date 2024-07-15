@@ -302,13 +302,11 @@ normalize_data <- function(cleaned_data, variable_relationships) {
 plot_normalized_map <- function(shp_data, processed_csv, selected_vars) {
   palette_func <- brewer.pal(5, "YlOrRd")
   
-  # Use processed_csv directly, not as a function
   selected_cols <- c("WardName", selected_vars)
   filtered_data <- processed_csv %>%  
     select(all_of(selected_cols)) %>% 
     pivot_longer(cols = -WardName, names_to = "variable", values_to = "value") 
   
-  # Join with shapefile data 
   combined_data <- left_join(filtered_data, shp_data, by = "WardName") 
   
   plot <- ggplot(data = shp_data) +
@@ -317,15 +315,17 @@ plot_normalized_map <- function(shp_data, processed_csv, selected_vars) {
                         aes(geometry = geometry, fill = value, 
                             tooltip = paste(WardName, variable, 
                                             "\nValue:", round(value, 3)))) +
-    facet_wrap(~variable, ncol = 2) +
     scale_fill_gradientn(colours = palette_func, name = "Normalized Value") +
-    labs(subtitle='', title='Normalized Variables') +
+    labs(title = paste('Normalized Variable:', gsub("normalization_", "", selected_vars))) +
     theme_void() +
     theme(panel.background = element_blank(),
-          strip.text = element_text(size = 12),
+          plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
           legend.position = "right",
           legend.key.size = unit(0.8, 'cm'),
-          legend.text = element_text(size = 10))
+          legend.text = element_text(size = 10),
+          axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          axis.line = element_blank())  # This line removes the axis lines
   
   girafe(ggobj = plot, width_svg = 10, height_svg = 8)
 }
