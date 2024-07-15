@@ -455,12 +455,18 @@ process_model_score <- function(data_to_process){
 plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_per_page = 4) {
   palette_func <- brewer.pal(5, "YlOrRd")
   
-  # Create a named vector for facet labels
+  # Create facet labels with line breaks
   facet_labels <- setNames(
-    paste(gsub("_", " ", model_formulas$model), "\n", model_formulas$variables),
+    sapply(model_formulas$variables, function(x) {
+      var_names <- strsplit(x, " \\+ ")[[1]]
+      paste(gsub("_", " ", var_names), collapse = " +\n")
+    }),
     model_formulas$model
   )
   
+  # Calculate consistent plot height based on maps per page
+  plot_height <- 10 / ceiling(sqrt(maps_per_page)) 
+
   # Split the data into pages
   total_models <- nrow(model_formulas)
   pages <- ceiling(total_models / maps_per_page)
@@ -486,22 +492,23 @@ plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_p
            fill = "Malaria Risk Score") +
       theme_void() +
       theme(
-        strip.text = element_text(size = 14, face = "bold", lineheight = 0.9),
-        strip.background = element_blank(),  # This removes the box around the heading
+        strip.text = element_text(size = 6, face = "bold", lineheight = 0.9),
+        strip.background = element_blank(), 
         legend.position = "bottom",
-        legend.title = element_text(size = 12, face = "bold"),
-        legend.text = element_text(size = 10),
-        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-        plot.subtitle = element_text(size = 14, hjust = 0.5)
+        legend.title = element_text(size = 4, face = "bold"),
+        legend.text = element_text(size = 4),
+        plot.title = element_text(size = 6, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 10, hjust = 0.5),
+        # Control spacing to maintain consistent plot sizes
+        panel.spacing = unit(1.5, "lines") 
       )
     
-    plot_list[[page]] <- plot
+    # Use girafe for interactivity with fixed plot height
+    plot_list[[page]] <- girafe(ggobj = plot, height_svg = plot_height) 
   }
   
-  # Return a list of girafe objects
-  return(lapply(plot_list, function(p) girafe(ggobj = p, width_svg = 12, height_svg = 10)))
+  return(plot_list)
 }
-
 
 
 #Function for boxplots

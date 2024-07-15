@@ -323,15 +323,16 @@ server <- function(input, output, session) {
   # Show initial modal
   showModal(modalDialog(
     title = "Information",
-    "Welcome to the de-prioritization web application, a powerful tool for 
+    HTML("Welcome to the de-prioritization web application, a powerful tool for 
     visualizing the distribution of variables associated with malaria risk 
     at a granular level. It uniquely focuses on a finer scale, analyzing data 
-    down to the ward level rather than the broader Local Government Area (LGA). 
+    down to the ward level rather than the broader Local Government Area (LGA).
+    <br><br>
     This detailed approach, combined with geocoding technology, allows for 
     enhanced de-prioritization, enabling stakeholders to make decisions at the 
-    smallest scale of settlement type. This specificity ensures that de-prioritization
-    of resources like bed nets happens effectively, targeting areas with the highest
-    need and optimizing malaria control efforts."
+    smallest scale of settlement type. This specificity ensures that 
+    \"de-prioritization of resources like bed nets happens effectively, targeting 
+    areas with the highest need and optimizing malaria control efforts.\"")
   ))
   
   # Use JavaScript to close the modal after 60 seconds
