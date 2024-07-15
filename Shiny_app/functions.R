@@ -495,8 +495,8 @@ plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_p
         strip.text = element_text(size = 6, face = "bold", lineheight = 0.9),
         strip.background = element_blank(), 
         legend.position = "bottom",
-        legend.title = element_text(size = 4, face = "bold"),
-        legend.text = element_text(size = 4),
+        legend.title = element_text(size = 6, face = "bold"),
+        legend.text = element_text(size = 6),
         plot.title = element_text(size = 6, face = "bold", hjust = 0.5),
         plot.subtitle = element_text(size = 10, hjust = 0.5),
         # Control spacing to maintain consistent plot sizes
