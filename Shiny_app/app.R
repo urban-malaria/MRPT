@@ -95,6 +95,16 @@ ui <- fluidPage(
                         tags$li("In the box plot view, examine the distribution of ranks for each ward."),
                         tags$li("In the map view, see the geographic distribution of overall vulnerability ranks.")
                       ),
+                      
+                      h4("6. Decision Tree Tab"),
+                      tags$ul(
+                        tags$li("This tab provides a visual representation of the decision-making process in creating the malaria risk maps."),
+                        tags$li("The tree is automatically generated based on the variables you selected in the Composite Score Distribution tab."),
+                        tags$li("It shows all available variables, which were included or excluded from your analysis, and the steps taken to create the final risk maps."),
+                        tags$li("Use this tree to understand how your variable selections impact the final risk assessment."),
+                        tags$li("The 'recommended' path in the tree leads to the risk map suggested by the box and whisker plot analysis.")
+                      ),
+                      
                       h4("Feedback"),
                       p("As you explore each feature, please note any issues, inconsistencies, or suggestions for improvement. Your feedback is crucial for refining this tool. Report any bugs or share your thoughts with the development team."),
                       h4("Note on Data Privacy"),
@@ -269,16 +279,24 @@ ui <- fluidPage(
     ),
     
     
-#    tabPanel("Decision Tree",
-#             fluidRow(
-#               column(12,
-#                      h3("Decision Tree Visualization"),
-#                      p("This decision tree illustrates the process of variable selection and risk mapping."),
-#                      br(),
-#                      DiagrammeROutput("decisionTreePlot", height = "600px")
-#               )
-#             )
-#    ),
+    tabPanel("Decision Tree",
+             fluidRow(
+               column(12,
+                      h3("Malaria Risk Assessment Decision Tree"),
+                      p("This decision tree visualizes the process of creating the malaria risk map based on the variables you selected in the Composite Score Distribution tab."),
+                      p("How to interpret the tree:"),
+                      tags$ul(
+                        tags$li("The top node shows all variables available in the dataset."),
+                        tags$li("The second level shows which variables were included or excluded from your analysis."),
+                        tags$li("The lower levels show the steps taken to create the final risk maps."),
+                        tags$li("The 'recommended' path leads to the risk map suggested by the box and whisker plot analysis.")
+                      ),
+                      p("Use this tree to understand how your variable selections impact the final risk assessment."),
+                      br(),
+                      grVizOutput("decisionTree", width = "100%", height = "600px")
+               )
+             )
+    ),
     
   ),
   
@@ -796,7 +814,7 @@ server <- function(input, output, session) {
     # Update the explanation text
     output$visualizationExplanation <- renderText({
       if (!rv$cleaning_performed()) {
-        "The map below shows the geographic distribution of the selected variable across various wards. If there are missing values in the plot, please click the (Fill in Missing Values) button. If no values are missing, proceed to the next tab."
+        "The map below shows the geographic distribution of the selected variable across various wards. If there are missing values in the plot, please click the (Fill in Missing Values) button and after that click the (Plot Maps) button again to visualised the original and cleaned data. If no values are missing, proceed to the next tab."
       } else {
         paste("These maps showcase the effect of data cleaning on the selected variable's distribution. The left map represents the original, raw data. In contrast, the right map reveals the data after addressing missing values using the '",
               rv$na_handling_methods[[input$visualize_var]] %||% "None",
@@ -937,69 +955,76 @@ server <- function(input, output, session) {
   })
  
   
-  # # Text wrapping function
-  # wrap_text <- function(text, width = 30) {
-  #   paste(strwrap(text, width = width), collapse = "\n")
-  # }
-  # 
-  # decision_tree_function <- function(all_variables, selected_variables, excluded_variables) {
-  #   # Create nodes DataFrame
-  #   nodes <- create_node_df(
-  #     n = 7,
-  #     label = c(
-  #       wrap_text(paste(("The dataset had the following variables:"), 
-  #                       paste(all_variables, collapse = ", "))),
-  #       "Check the map plot to determine if it depicts the variable under consideration", 
-  #       wrap_text(paste("Variables included in the composite score:", 
-  #                       paste(selected_variables, collapse = ", "))),
-  #       wrap_text(paste("Variables excluded from the composite score:", 
-  #                       paste(excluded_variables, collapse = ", "))), 
-  #       "Normalization and composite score calculation",
-  #       "Malaria risk maps generated from various combinations of all included variables", 
-  #       "Malaria risk map recommended by the box and whisker plot"
-  #     ),
-  #     shape = c("box", "diamond", "ellipse", "ellipse", "box", "ellipse", "ellipse")
-  #   )
-  #   
-  #   # Create edges DataFrame
-  #   edges <- create_edge_df(
-  #     from = c(1, 2, 2, 3, 5, 5),
-  #     to = c(2, 3, 4, 5, 6, 7),
-  #     label = c("", "yes", "no", "", "all variables", "recommended")
-  #   )
-  #   
-  #   # Create graph
-  #   graph <- create_graph(nodes_df = nodes, edges_df = edges)
-  #   
-  #   # Render the graph
-  #   render_graph(graph)
-  # }
-  # 
-  # 
-  # # Define all_variables as a reactive expression
-  # all_variables <- reactive({
-  #   req(rv$cleaned_data)
-  #   setdiff(names(rv$cleaned_data), "WardName")
-  # })
-  # 
-  # excluded_variables <- reactive({
-  #   req(all_variables(), input$composite_vars)
-  #   setdiff(all_variables(), input$composite_vars)
-  # })
-  # 
-  # output$decisionTreePlot <- renderDiagrammeR({
-  #   req(all_variables(), input$composite_vars)
-  #   
-  #   selected_variables <- input$composite_vars
-  #   excluded_vars <- excluded_variables()
-  #   
-  #   tryCatch({
-  #     decision_tree_function(all_variables(), selected_variables, excluded_vars)
-  #   }, error = function(e) {
-  #     message("Error in decision tree function: ", e$message)
-  #     return(NULL)
-  #   })
-  # })
+  wrap_text <- function(text, width = 30) {
+    paste(strwrap(text, width = width), collapse = "\n")
+  }
+  
+  decision_tree_function <- function(all_variables, selected_variables, excluded_variables) {
+    node_data <- data.frame(
+      Name = c("Node1", "Node2", "Node3", "Node4", "Node5", "Node6", "Node7"),
+      Label = c(
+        wrap_text(paste("The dataset had the following variables:", paste(all_variables, collapse = ", "))),
+        wrap_text("Check the map plot to determine if it depicts the variable under consideration"),
+        wrap_text(paste("Variables included in the composite score:", paste(selected_variables, collapse = ", "))),
+        wrap_text(paste("Variables excluded from the composite score:", paste(excluded_variables, collapse = ", "))),
+        wrap_text("Normalization and composite score calculation"),
+        wrap_text("Malaria risk maps generated from various combinations of all included variables"),
+        wrap_text("Malaria risk map recommended by the box and whisker plot")
+      ),
+      Shape = c("box", "diamond", "ellipse", "ellipse", "box", "ellipse", "ellipse"),
+      stringsAsFactors = FALSE
+    )
+    
+    nodes <- paste0(
+      node_data$Name, " [label = '", node_data$Label, "', shape = ", node_data$Shape, "]",
+      collapse = "\n "
+    )
+    
+    edges <- "Node1 -> Node2\n Node2 -> Node3 [label = 'yes']\n Node2 -> Node4 [label = 'no']\n Node3 -> Node5\n Node5 -> Node6 [label = 'all variables']\n Node5 -> Node7 [label = 'recommended']"
+    
+    graph_string <- glue("
+    digraph flowchart {{
+      rankdir=TB
+      node [style = filled, fillcolor = lightblue, fontname = Helvetica, fontsize = 12]
+      {nodes}
+      {{ rank = same; Node3; Node4; }}
+      {edges}
+    }}
+  ")
+    
+    grViz(graph_string)
+  }
+  
+  
+  # Dynamic UI for variable selection
+  output$decision_tree_variables <- renderUI({
+    req(rv$cleaned_data)
+    all_vars <- get_columns_after_wardname(rv$cleaned_data)
+    checkboxGroupInput("selected_vars", "Select Variables:",
+                       choices = all_vars,
+                       selected = all_vars)
+  })
+  
+  # Initialize the decision tree
+  output$decisionTree <- renderGrViz({
+    req(rv$cleaned_data)
+    all_vars <- get_columns_after_wardname(rv$cleaned_data)
+    selected_vars <- input$selected_vars
+    excluded_vars <- setdiff(all_vars, selected_vars)
+    decision_tree_function(all_vars, selected_vars, excluded_vars)
+  })
+  
+  # Update the decision tree when the button is clicked
+  observe({
+    req(input$composite_vars)
+    all_vars <- get_columns_after_wardname(rv$cleaned_data)
+    selected_vars <- input$composite_vars
+    excluded_vars <- setdiff(all_vars, selected_vars)
+    
+    output$decisionTree <- renderGrViz({
+      decision_tree_function(all_vars, selected_vars, excluded_vars)
+    })
+  })
   
 }
 
