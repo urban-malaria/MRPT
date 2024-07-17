@@ -54,9 +54,7 @@ ui <- fluidPage(
   tabsetPanel(
     tabPanel("Instructions",
              tags$br(),
-             # Use a fluidRow to create a two-column layout
              fluidRow(
-               # Column for text instructions 
                column(6,
                       h3("Instructions for Using the Malaria Risk Mapping Tool (Testing Phase)"),
                       p("Welcome to the testing phase of our Malaria Risk Mapping Tool. Please follow these steps to explore the application's features:"),
@@ -95,7 +93,6 @@ ui <- fluidPage(
                         tags$li("In the box plot view, examine the distribution of ranks for each ward."),
                         tags$li("In the map view, see the geographic distribution of overall vulnerability ranks.")
                       ),
-                      
                       h4("6. Decision Tree Tab"),
                       tags$ul(
                         tags$li("This tab provides a visual representation of the decision-making process in creating the malaria risk maps."),
@@ -104,14 +101,12 @@ ui <- fluidPage(
                         tags$li("Use this tree to understand how your variable selections impact the final risk assessment."),
                         tags$li("The 'recommended' path in the tree leads to the risk map suggested by the box and whisker plot analysis.")
                       ),
-                      
                       h4("Feedback"),
                       p("As you explore each feature, please note any issues, inconsistencies, or suggestions for improvement. Your feedback is crucial for refining this tool. Report any bugs or share your thoughts with the development team."),
                       h4("Note on Data Privacy"),
                       p("Do not upload any real, sensitive, or personal data to this application during testing."),
                       p("Thank you for your participation in testing the Malaria Risk Mapping Tool!")
                ),
-               # Column for the image
                column(6, 
                       tags$br(), tags$br(), tags$br(), tags$br(), 
                       tags$img(src = "digital_abstract.png", height = "600px", width = "auto"),
@@ -119,7 +114,7 @@ ui <- fluidPage(
                       tags$h6("The figure above shows a digital abstract first presented in Ozodiegwu et-al (in-press), 
                               and it shows how the application was used to develop the malaria risk map in Ilorin")
                )
-             ), # Close fluidRow
+             ),
     ),  
     
     tabPanel("Input variables (data and shapefiles)", 
@@ -148,10 +143,8 @@ ui <- fluidPage(
                       tags$p(style = "font-style: italic; margin-top: 10px;", 
                              "Hover over the maps to see detailed information for each ward.")
                )
-             ),
-
+             )
     ), 
-    
     
     tabPanel("Normalization", 
              sidebarLayout(
@@ -164,29 +157,30 @@ ui <- fluidPage(
                  actionButton("plot_normalized", "PLOT NORMALIZED MAP")
                ),
                mainPanel(
-                 # Make the plot conditional on button click:
                  conditionalPanel(
                    condition = "input.plot_normalized > 0", 
                    girafeOutput("normalizationplot")
                  )
                )
              ),
-             tags$br(),
-             tags$p(style = "font-style: italic; margin-top: 10px;", 
-                    "Hover over the map to see detailed information for each ward."),
-             tags$div(
-               style = "margin-top: 20px; padding: 10px; background-color: #f0f0f0; border-radius: 5px;",
-               tags$h4("Understanding the Normalized Plot", style = "text-align: center;"),
-               tags$p("The plot shows the distribution of the variables selected for
-            evaluation across the region of interest after they have been 
-            normalized using the min-max method. The values are now all on 
-            the same scale ranging from 0 to 1. This range of values are put 
-            into 5 classes (see legend). The plot highlights which of the
-            variables if used in the algorithm will have more influence in the
-            composite score.", style = "text-align: justify;")
+             conditionalPanel(
+               condition = "input.plot_normalized > 0",
+               tags$br(),
+               tags$p(style = "font-style: italic; margin-top: 10px;",
+                      "Hover over the map to see detailed information for each ward."),
+               tags$div(
+                 style = "margin-top: 20px; padding: 10px; background-color: #f0f0f0; border-radius: 5px;",
+                 tags$h4("Understanding the Normalized Plot", style = "text-align: center;"),
+                 tags$p("The plot shows the distribution of the variables selected for
+                            evaluation across the region of interest after they have been
+                            normalized using the min-max method. The values are now all on
+                            the same scale ranging from 0 to 1. This range of values are put
+                            into 5 classes (see legend). The plot highlights which of the
+                            variables if used in the algorithm will have more influence in the
+                            composite score.", style = "text-align: justify;")
+               )
              )
     ),
-    
     
     tabPanel("Composite Score distribution", 
              tags$br(),tags$br(),
@@ -195,21 +189,23 @@ ui <- fluidPage(
                  tags$h4("Select a variable in the dataset to visualise:"),
                  tags$p("Select at least two variables:", style = "color: black;"),
                  uiOutput("composite_variable_select"),
-                 # Add this div for the progress bar
                  div(id = "progress-bar-container", style = "margin-top: 10px;"),
                  actionButton("plot_button", "Calculate")
                ),
                mainPanel(
                  uiOutput("mapPlot"),
-                 tags$br(),
-                 tags$div(
-                   style = "text-align: justify; font-size: 12px; color: #666;",
-                   "The maps above show the distribution of malaria risk scores across different wards, calculated using various combinations of variables. Each map represents a different model, with the variables used listed in the title. The color scale ranges from yellow (very low risk) to dark red (very high risk). This visualization helps identify areas of high concern and compare how different combinations of factors affect the risk assessment."
-                 ),
-                 tags$br(),
-                 tableOutput("dataTable"),
-                 tags$p(style = "font-style: italic; margin-top: 10px; font-size: 12px;", 
-                        "Hover over the maps to see detailed information for each ward.")
+                 conditionalPanel(
+                   condition = "input.plot_button > 0",
+                   tags$br(),
+                   tags$div(
+                     style = "text-align: justify; font-size: 12px; color: #666;",
+                     "The maps above show the distribution of malaria risk scores across different wards, calculated using various combinations of variables. Each map represents a different model, with the variables used listed in the title. The color scale ranges from yellow (very low risk) to dark red (very high risk). This visualization helps identify areas of high concern and compare how different combinations of factors affect the risk assessment."
+                   ),
+                   tags$br(),
+                   tableOutput("dataTable"),
+                   tags$p(style = "font-style: italic; margin-top: 10px; font-size: 12px;",
+                          "Hover over the maps to see detailed information for each ward.")
+                 )
                )
              )
     ),
@@ -278,7 +274,6 @@ ui <- fluidPage(
              )
     ),
     
-    
     tabPanel("Decision Tree",
              fluidRow(
                column(12,
@@ -297,7 +292,6 @@ ui <- fluidPage(
                )
              )
     ),
-    
   ),
   
   tags$br(),  
@@ -323,14 +317,21 @@ div(
   style='text-align: center; font-style: italic; font-size: 1.1em;',
   tags$strong('If you use this tool in your work, please cite:'),
   br(),
-  'Mhlanga, L., Boateng, B.O., Jamiu, Y., Bamgboye, E.A., Adeniji, H., Ademu, C., Okoronkwo, C., Galatas, B., & Ozodiegwu, I. (2024).',
+  'Mhlanga, L.,* Boateng, B.O.,* Jamiu, Y., Bamgboye, E.A., Adeniji, H., Ademu, C., Okoronkwo, C., Galatas, B., & Ozodiegwu, I. (2024).',
   br(),
   'Malaria Risk Mapping Tool. Urban Malaria Project, Loyola University Chicago.',
   br(),
   'Available at: ',
   tags$a(href="https://bbofori90.shinyapps.io/Shiny_app/", 
          target="_blank", 
-         "https://bbofori90.shinyapps.io/Shiny_app/")
+         "https://bbofori90.shinyapps.io/Shiny_app/"),
+  tags$br(),
+  tags$br(),
+  tags$strong('Developers:'),
+  tags$br(),
+  'Mhlanga Laurette* - Email: laurette@aims.ac.tz',
+  tags$br(),
+  'Boateng Bernard* - Email: bboateng1@luc.edu'
 ),
 br()
 )
@@ -618,6 +619,12 @@ server <- function(input, output, session) {
     rv$cleaning_performed(TRUE)
     removeModal()
     showNotification("NA handling methods applied and stored.", type = "message")
+    
+    # Trigger plot update by updating the reactive value that the plot depends on 
+    rv$cleaned_data <- rv$cleaned_data # This line triggers the update
+    
+    # Update variable selection (optional, to refresh choices if needed)
+    updateSelectInput(session, "visualize_var", selected = input$visualize_var)
   })
   
   
@@ -769,8 +776,9 @@ server <- function(input, output, session) {
   
   
   # Raw data variable selection
-  observeEvent(input$plot_data, {
+  observeEvent(c(input$plot_data, rv$cleaned_data), { # Observe both button and data change
     req(rv$raw_data, rv$shp_data, input$visualize_var)
+    
     
     if (!rv$cleaning_performed()) {
       # Before cleaning: One centered plot
