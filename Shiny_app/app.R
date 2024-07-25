@@ -107,7 +107,7 @@ ui <- fluidPage(
                       p("Do not upload any real, sensitive, or personal data to this application during testing."),
                       p(
                         "For issues or technical support with the application, email ",
-                        tags$a(href="mailto:laurette@aims.ac.tz", "laurette@aims.ac.tz"),
+                        tags$a(href="mailto:lmhlanga@luc.edu", "lmhlanga@luc.edu"),
                         " or ",
                         tags$a(href="mailto:bboateng1@luc.edu", "bboateng1@luc.edu")
                       ),
