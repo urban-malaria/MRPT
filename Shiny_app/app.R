@@ -64,7 +64,7 @@ ui <- fluidPage(
                                   href="https://drive.google.com/drive/u/0/folders/1iB103WqBbeIEhhMZ1axHTRaC3zZVnE-S", 
                                   target="_blank")),
                         tags$li("Ensure you have both the CSV file with variable data and the corresponding shapefile for your region of interest."),
-                        tags$li("The CSV file should include columns for WardName and various risk factors (e.g., settlement quality, rainfall, etc.)."),
+                        tags$li("The CSV file should include columns for WardName and various risk factors (e.g., settlement type, enhanced vegetation index, rainfall, etc.)."),
                         tags$li("Compress the shapefile components into a zip file.")
                       ),
                       h4("2. Input Variables (Data and Shapefiles) Tab"),
@@ -105,6 +105,12 @@ ui <- fluidPage(
                       p("As you explore each feature, please note any issues, inconsistencies, or suggestions for improvement. Your feedback is crucial for refining this tool. Report any bugs or share your thoughts with the development team."),
                       h4("Note on Data Privacy"),
                       p("Do not upload any real, sensitive, or personal data to this application during testing."),
+                      p(
+                        "For issues or technical support with the application, email ",
+                        tags$a(href="mailto:laurette@aims.ac.tz", "laurette@aims.ac.tz"),
+                        " or ",
+                        tags$a(href="mailto:bboateng1@luc.edu", "bboateng1@luc.edu")
+                      ),
                       p("Thank you for your participation in testing the Malaria Risk Mapping Tool!")
                ),
                column(6, 
@@ -202,7 +208,7 @@ ui <- fluidPage(
                      "The maps above show the distribution of malaria risk scores across different wards, calculated using various combinations of variables. Each map represents a different model, with the variables used listed in the title. The color scale ranges from yellow (very low risk) to dark red (very high risk). This visualization helps identify areas of high concern and compare how different combinations of factors affect the risk assessment."
                    ),
                    tags$br(),
-                   tableOutput("dataTable"),
+                   tableOutput("flagged_models_table"),
                    tags$p(style = "font-style: italic; margin-top: 10px; font-size: 12px;",
                           "Hover over the maps to see detailed information for each ward.")
                  )
@@ -312,28 +318,21 @@ ui <- fluidPage(
   ),
   
   br(),
-
-div(
-  style='text-align: center; font-style: italic; font-size: 1.1em;',
-  tags$strong('If you use this tool in your work, please cite:'),
-  br(),
-  'Mhlanga, L.,* Boateng, B.O.,* Jamiu, Y., Bamgboye, E.A., Adeniji, H., Ademu, C., Okoronkwo, C., Galatas, B., & Ozodiegwu, I. (2024).',
-  br(),
-  'Malaria Risk Mapping Tool. Urban Malaria Project, Loyola University Chicago.',
-  br(),
-  'Available at: ',
-  tags$a(href="https://bbofori90.shinyapps.io/Shiny_app/", 
-         target="_blank", 
-         "https://bbofori90.shinyapps.io/Shiny_app/"),
-  tags$br(),
-  tags$br(),
-  tags$strong('Developers:'),
-  tags$br(),
-  'Mhlanga Laurette* - Email: laurette@aims.ac.tz',
-  tags$br(),
-  'Boateng Bernard* - Email: bboateng1@luc.edu'
-),
-br()
+  
+  div(
+    style='text-align: center; font-style: italic; font-size: 1.1em;',
+    tags$strong('If you use this tool in your work, please cite:'),
+    br(),
+    'Mhlanga, L.,* Boateng, B.O.,* Jamiu, Y., Bamgboye, E.A., Adeniji, H., Ademu, C., Okoronkwo, C., Galatas, B., & Ozodiegwu, I. (2024).',
+    br(),
+    'Malaria Risk Mapping Tool. Urban Malaria Project, Loyola University Chicago.',
+    br(),
+    'Available at: ',
+    tags$a(href="https://bbofori90.shinyapps.io/Shiny_app/", 
+           target="_blank", 
+           "https://bbofori90.shinyapps.io/Shiny_app/")
+  ),
+  br()
 )
 
 
@@ -371,8 +370,17 @@ server <- function(input, output, session) {
     output_data = NULL
   )
   
+  rv$decision_tree_progress <- reactiveVal(list(
+    data_loaded = FALSE,
+    variables_selected = FALSE,
+    normalization_done = FALSE,
+    composite_scores_calculated = FALSE
+  ))
+  
   # new reactive value to track whether cleaning was performed
   rv$cleaning_performed <- reactiveVal(FALSE)
+  
+  rv$flagged_models <- reactiveVal(NULL)
   
   # CSV file upload
   observeEvent(input$file_csv, {
@@ -422,7 +430,8 @@ server <- function(input, output, session) {
     if (length(shapefile_files) > 0) {
       tryCatch({
         shp_data <- st_read(shapefile_files[1], quiet = TRUE)
-        rv$shp_data <- shp_data
+        rv$shp_data <- shp_data %>% 
+          mutate(Urban = as.character(Urban))  # Ensure Urban is character type
         print(paste("Number of rows in shp_data:", nrow(rv$shp_data)))
         showNotification("Shapefile loaded successfully.", type = "message")
         
@@ -575,10 +584,10 @@ server <- function(input, output, session) {
           column(6, h5(col)),
           column(6, 
                  selectInput(paste0("na_handling_", col), NULL,
-                             choices = c("Spatial neighbor mean" = "spatial_neighbor_mean",
-                                         "Region mean" = "region_mean",
-                                         "Region mode" = "region_mode"),
-                             selected = rv$na_handling_methods[[col]] %||% "spatial_neighbor_mean")
+                             choices = c("Spatial neighbor mean" = "spatial neighbor mean",
+                                         "Region mean" = "region mean",
+                                         "Region mode" = "region mode"),
+                             selected = rv$na_handling_methods[[col]] %||% "spatial neighbor mean")
           )
         )
       }),
@@ -598,7 +607,7 @@ server <- function(input, output, session) {
     print(rv$na_handling_method)
   })
   
-
+  
   
   # Apply cleaning
   observeEvent(input$apply_na_handling, {
@@ -610,9 +619,9 @@ server <- function(input, output, session) {
       method <- input[[paste0("na_handling_", col)]]
       rv$na_handling_methods[[col]] <- method
       rv$cleaned_data <- switch(method,
-                                "spatial_neighbor_mean" = handle_na_neighbor_mean(rv$cleaned_data, rv$shp_data, col),
-                                "region_mean" = handle_na_region_mean(rv$cleaned_data, col),
-                                "region_mode" = handle_na_region_mode(rv$cleaned_data, col)
+                                "spatial neighbor mean" = handle_na_neighbor_mean(rv$cleaned_data, rv$shp_data, col),
+                                "region mean" = handle_na_region_mean(rv$cleaned_data, col),
+                                "region mode" = handle_na_region_mode(rv$cleaned_data, col)
       )
     }
     
@@ -822,7 +831,7 @@ server <- function(input, output, session) {
     # Update the explanation text
     output$visualizationExplanation <- renderText({
       if (!rv$cleaning_performed()) {
-        "The map below shows the geographic distribution of the selected variable across various wards. If there are missing values in the plot, please click the (Fill in Missing Values) button and after that click the (Plot Maps) button again to visualised the original and cleaned data. If no values are missing, proceed to the next tab."
+        "The map below shows the geographic distribution of the selected variable across various wards. If there are missing values in the plot, please click the (Fill in Missing Values) button to handle missing values. If no values are missing, proceed to the next tab."
       } else {
         paste("These maps showcase the effect of data cleaning on the selected variable's distribution. The left map represents the original, raw data. In contrast, the right map reveals the data after addressing missing values using the '",
               rv$na_handling_methods[[input$visualize_var]] %||% "None",
@@ -868,7 +877,7 @@ server <- function(input, output, session) {
         
         # Step 3: Calculate composite scores
         incProgress(0.3, detail = "Calculating composite scores...")
-        composite_scores <- composite_score_models(normalized_data, selected_vars = input$composite_vars)
+        composite_scores <- composite_score_models(normalized_data, selected_vars = input$composite_vars, shp_data = rv$shp_data)
         
         if (is.null(composite_scores)) {
           showNotification("Error in composite score calculation. Check the console for details.", type = "error")
@@ -878,6 +887,11 @@ server <- function(input, output, session) {
         # Step 4: Process composite scores for plotting
         incProgress(0.4, detail = "Processing scores...")
         processed_scores <- process_model_score(composite_scores$final_data)
+        
+        rv$flagged_models(processed_scores %>% 
+                            filter(flag_not_ideal) %>% 
+                            group_by(variable) %>% 
+                            summarise(flagged_wards = paste(WardName, collapse = ", ")))
         
         # Step 5: Join with shapefile data
         incProgress(0.5, detail = "Joining with shapefile data...")
@@ -924,10 +938,13 @@ server <- function(input, output, session) {
           }
         })
         
-        # Update dataTable
-        output$dataTable <- renderTable({
-          rv$output_data
-        })
+        
+        
+        # output$flagged_models_table <- renderTable({
+        #   req(rv$flagged_models())
+        #   rv$flagged_models() %>%
+        #     rename("Model" = variable, "Flagged Wards (Non-urban in top 5)" = flagged_wards)
+        # })
         
         # Update normalizationplot
         output$normalizationplot <- renderGirafe({
@@ -961,18 +978,29 @@ server <- function(input, output, session) {
       })
     })
   })
- 
   
-  wrap_text <- function(text, width = 30) {
+  # Decision Tree
+  
+  observe({
+    rv$decision_tree_progress(modifyList(rv$decision_tree_progress(), list(
+      data_loaded = TRUE,
+      variables_selected = TRUE,
+      normalization_done = TRUE,
+      composite_scores_calculated = TRUE
+    )))
+  })
+  
+  
+  wrap_text <- function(text, width = 20) {
     paste(strwrap(text, width = width), collapse = "\n")
   }
   
-  decision_tree_function <- function(all_variables, selected_variables, excluded_variables) {
+  decision_tree_function <- function(all_variables, selected_variables, excluded_variables, progress) {
     node_data <- data.frame(
       Name = c("Node1", "Node2", "Node3", "Node4", "Node5", "Node6", "Node7"),
       Label = c(
         wrap_text(paste("The dataset had the following variables:", paste(all_variables, collapse = ", "))),
-        wrap_text("Check the map plot to determine if it depicts the variable under consideration"),
+        wrap_text("Check the map plotted to determine if it depicts the variable under consideration"),
         wrap_text(paste("Variables included in the composite score:", paste(selected_variables, collapse = ", "))),
         wrap_text(paste("Variables excluded from the composite score:", paste(excluded_variables, collapse = ", "))),
         wrap_text("Normalization and composite score calculation"),
@@ -980,25 +1008,36 @@ server <- function(input, output, session) {
         wrap_text("Malaria risk map recommended by the box and whisker plot")
       ),
       Shape = c("box", "diamond", "ellipse", "ellipse", "box", "ellipse", "ellipse"),
+      Color = "lightgrey",
       stringsAsFactors = FALSE
     )
     
+    # Update colors based on progress
+    if (progress$data_loaded) node_data$Color[1] = "lightblue"
+    if (progress$variables_selected) {
+      node_data$Color[2:4] = "lightblue"
+    }
+    if (progress$normalization_done) node_data$Color[5] = "lightblue"
+    if (progress$composite_scores_calculated) {
+      node_data$Color[6:7] = "lightblue"
+    }
+    
     nodes <- paste0(
-      node_data$Name, " [label = '", node_data$Label, "', shape = ", node_data$Shape, "]",
+      node_data$Name, " [label = '", node_data$Label, "', shape = ", node_data$Shape, ", style = filled, fillcolor = ", node_data$Color, "]",
       collapse = "\n "
     )
     
     edges <- "Node1 -> Node2\n Node2 -> Node3 [label = 'yes']\n Node2 -> Node4 [label = 'no']\n Node3 -> Node5\n Node5 -> Node6 [label = 'all variables']\n Node5 -> Node7 [label = 'recommended']"
     
     graph_string <- glue("
-    digraph flowchart {{
-      rankdir=TB
-      node [style = filled, fillcolor = lightblue, fontname = Helvetica, fontsize = 12]
-      {nodes}
-      {{ rank = same; Node3; Node4; }}
-      {edges}
-    }}
-  ")
+  digraph flowchart {{
+    rankdir=LR
+    node [fontname = Helvetica, fontsize = 12]
+    {nodes}
+    {{ rank = same; Node3; Node4; }}
+    {edges}
+  }}
+")
     
     grViz(graph_string)
   }
@@ -1017,20 +1056,22 @@ server <- function(input, output, session) {
   output$decisionTree <- renderGrViz({
     req(rv$cleaned_data)
     all_vars <- get_columns_after_wardname(rv$cleaned_data)
-    selected_vars <- input$selected_vars
-    excluded_vars <- setdiff(all_vars, selected_vars)
-    decision_tree_function(all_vars, selected_vars, excluded_vars)
-  })
-  
-  # Update the decision tree when the button is clicked
-  observe({
-    req(input$composite_vars)
-    all_vars <- get_columns_after_wardname(rv$cleaned_data)
     selected_vars <- input$composite_vars
     excluded_vars <- setdiff(all_vars, selected_vars)
     
+    decision_tree_function(all_vars, selected_vars, excluded_vars, rv$decision_tree_progress())
+  })
+  
+  # Update the decision tree 
+  observe({
+    req(rv$decision_tree_progress())
     output$decisionTree <- renderGrViz({
-      decision_tree_function(all_vars, selected_vars, excluded_vars)
+      req(rv$cleaned_data)
+      all_vars <- get_columns_after_wardname(rv$cleaned_data)
+      selected_vars <- input$composite_vars
+      excluded_vars <- setdiff(all_vars, selected_vars)
+      
+      decision_tree_function(all_vars, selected_vars, excluded_vars, rv$decision_tree_progress())
     })
   })
   
