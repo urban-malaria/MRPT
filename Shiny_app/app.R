@@ -1090,7 +1090,7 @@ server <- function(input, output, session) {
     top_5_wards <- if (!is.null(rv$ward_rankings)) {
       rv$ward_rankings %>%
         arrange(desc(overall_rank)) %>%
-        slice_head(n = 15) %>%
+        slice_head(n = 5) %>%
         pull(WardName)
     } else {
       character(0)
@@ -1111,7 +1111,7 @@ server <- function(input, output, session) {
       top_5_wards <- if (!is.null(rv$ward_rankings)) {
         rv$ward_rankings %>%
           arrange(overall_rank) %>%
-          slice_head(n = 15) %>%
+          slice_head(n = 5) %>%
           pull(WardName)
       } else {
         character(0)
@@ -1269,7 +1269,7 @@ server <- function(input, output, session) {
     req(rv$ward_rankings)
     rv$ward_rankings %>%
       arrange(overall_rank) %>% 
-      slice_head(n = 15) %>% 
+      slice_head(n = 5) %>% 
       pull(WardName)
   })
   
