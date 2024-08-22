@@ -51,3 +51,6 @@ rsconnect/
 
 
 datafiles/
+
+www/data/csv/*
+www/data/shapefiles/*

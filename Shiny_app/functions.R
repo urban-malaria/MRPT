@@ -24,6 +24,14 @@ library(stringdist)
 library(DiagrammeR)
 library(glue)
 library(DT)
+library(ggtext)
+library(googledrive)
+library(leaflet)
+library(reticulate)
+library(rgee)
+
+use_python("C:/Users/bbofo/miniconda3/envs/shinyapp-env/python.exe", required = TRUE)
+reticulate::py_run_file("C:/Users/bbofo/OneDrive/Desktop/MRMT/Shiny_app/app.py")
 
 
 # Function to generate a list of column name patterns
@@ -476,11 +484,11 @@ plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_p
   facet_labels <- setNames(
     sapply(seq_along(model_formulas$model), function(i) {
       var_names <- strsplit(model_formulas$variables[i], " \\+ ")[[1]]
-      base_label <- paste(gsub("_", " ", var_names), collapse = " +\n")
+      base_label <- paste(var_names, collapse = " +<br>")
       
       # Check if the model is flagged
       if (any(processed_csv$flag_not_ideal[processed_csv$variable == model_formulas$model[i]])) {
-        base_label <- paste(base_label, "(Model Not Ideal)")
+        base_label <- paste0(base_label, "<br><span style='color:red;'>(Model Not Ideal)</span>")
       }
       
       base_label
@@ -521,7 +529,7 @@ plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_p
            caption = "Blue outline indicates non-urban wards ranked in top 5 for de-prioritization (model may not be ideal)") +
       theme_void() +
       theme(
-        strip.text = element_text(size = 6, face = "bold", lineheight = 0.9),
+        strip.text = element_markdown(size = 7, face = "bold", lineheight = 1.0),
         strip.background = element_blank(), 
         legend.position = "bottom",
         legend.title = element_text(size = 6, face = "bold"),

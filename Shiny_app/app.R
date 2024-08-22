@@ -298,6 +298,18 @@ ui <- fluidPage(
                )
              )
     ),
+    
+    tabPanel("Manual Labelling",
+             sidebarLayout(
+               sidebarPanel(
+                 uiOutput("ward_select"),
+                 actionButton("plot_ward_map", "Plot Map")
+               ),
+               mainPanel(
+                 leafletOutput("ward_map", height = 600)
+               )
+             )
+    ),
   ),
   
   tags$br(),  
@@ -939,13 +951,6 @@ server <- function(input, output, session) {
         })
         
         
-        
-        # output$flagged_models_table <- renderTable({
-        #   req(rv$flagged_models())
-        #   rv$flagged_models() %>%
-        #     rename("Model" = variable, "Flagged Wards (Non-urban in top 5)" = flagged_wards)
-        # })
-        
         # Update normalizationplot
         output$normalizationplot <- renderGirafe({
           req(rv$normalized_data(), input$visualize_normalized_var)
@@ -995,9 +1000,16 @@ server <- function(input, output, session) {
     paste(strwrap(text, width = width), collapse = "\n")
   }
   
-  decision_tree_function <- function(all_variables, selected_variables, excluded_variables, progress) {
+  decision_tree_function <- function(all_variables, selected_variables, excluded_variables, progress, top_5_wards = character(0)) {
+    # Format top 5 wards with numbered bullets, each on a new line
+    formatted_top_5 <- if (length(top_5_wards) > 0) {
+      paste(sapply(seq_along(top_5_wards), function(i) paste0(i, ". ", top_5_wards[i])), collapse = "\\n")
+    } else {
+      "No wards available"
+    }
+    
     node_data <- data.frame(
-      Name = c("Node1", "Node2", "Node3", "Node4", "Node5", "Node6", "Node7"),
+      Name = c("Node1", "Node2", "Node3", "Node4", "Node5", "Node6", "Node7", "Node8"),
       Label = c(
         wrap_text(paste("The dataset had the following variables:", paste(all_variables, collapse = ", "))),
         wrap_text("Check the map plotted to determine if it depicts the variable under consideration"),
@@ -1005,9 +1017,10 @@ server <- function(input, output, session) {
         wrap_text(paste("Variables excluded from the composite score:", paste(excluded_variables, collapse = ", "))),
         wrap_text("Normalization and composite score calculation"),
         wrap_text("Malaria risk maps generated from various combinations of all included variables"),
-        wrap_text("Malaria risk map recommended by the box and whisker plot")
+        wrap_text("Malaria risk map recommended by the box and whisker plot"),
+        paste0("Top 5 wards for de-prioritization:\\n", formatted_top_5)  
       ),
-      Shape = c("box", "diamond", "ellipse", "ellipse", "box", "ellipse", "ellipse"),
+      Shape = c("box", "diamond", "ellipse", "ellipse", "box", "ellipse", "ellipse", "box"),
       Color = "lightgrey",
       stringsAsFactors = FALSE
     )
@@ -1019,7 +1032,7 @@ server <- function(input, output, session) {
     }
     if (progress$normalization_done) node_data$Color[5] = "lightblue"
     if (progress$composite_scores_calculated) {
-      node_data$Color[6:7] = "lightblue"
+      node_data$Color[6:8] = "lightblue"
     }
     
     nodes <- paste0(
@@ -1027,7 +1040,7 @@ server <- function(input, output, session) {
       collapse = "\n "
     )
     
-    edges <- "Node1 -> Node2\n Node2 -> Node3 [label = 'yes']\n Node2 -> Node4 [label = 'no']\n Node3 -> Node5\n Node5 -> Node6 [label = 'all variables']\n Node5 -> Node7 [label = 'recommended']"
+    edges <- "Node1 -> Node2\n Node2 -> Node3 [label = 'yes']\n Node2 -> Node4 [label = 'no']\n Node3 -> Node5\n Node5 -> Node6 [label = 'all variables']\n Node5 -> Node7 [label = 'recommended']\n Node7 -> Node8"
     
     graph_string <- glue("
   digraph flowchart {{
@@ -1059,10 +1072,19 @@ server <- function(input, output, session) {
     selected_vars <- input$composite_vars
     excluded_vars <- setdiff(all_vars, selected_vars)
     
-    decision_tree_function(all_vars, selected_vars, excluded_vars, rv$decision_tree_progress())
+    top_5_wards <- if (!is.null(rv$ward_rankings)) {
+      rv$ward_rankings %>%
+        arrange(desc(overall_rank)) %>%
+        slice_head(n = 15) %>%
+        pull(WardName)
+    } else {
+      character(0)
+    }
+    
+    decision_tree_function(all_vars, selected_vars, excluded_vars, rv$decision_tree_progress(), top_5_wards)
   })
   
-  # Update the decision tree 
+  # In the observe block
   observe({
     req(rv$decision_tree_progress())
     output$decisionTree <- renderGrViz({
@@ -1071,7 +1093,190 @@ server <- function(input, output, session) {
       selected_vars <- input$composite_vars
       excluded_vars <- setdiff(all_vars, selected_vars)
       
-      decision_tree_function(all_vars, selected_vars, excluded_vars, rv$decision_tree_progress())
+      top_5_wards <- if (!is.null(rv$ward_rankings)) {
+        rv$ward_rankings %>%
+          arrange(overall_rank) %>%
+          slice_head(n = 15) %>%
+          pull(WardName)
+      } else {
+        character(0)
+      }
+      
+      decision_tree_function(all_vars, selected_vars, excluded_vars, rv$decision_tree_progress(), top_5_wards)
+    })
+  })
+  
+  
+  # Manual Labelling Tab
+  
+  # Set the directories for the shapefiles and CSV files
+  shapefile_dir <- "www/data/shapefiles"
+  csv_dir <- "www/data/csv"
+  
+  # Function to process and view shapefile and CSV for a given ward
+  process_and_view_shapefile_and_csv <- function(ward_name, shapefile_dir, csv_dir) {
+    # Get the full path to the directories
+    shapefile_dir <- file.path(getwd(), shapefile_dir)
+    csv_dir <- file.path(getwd(), csv_dir)
+    # Split the selected ward name into parts
+    ward_parts <- unlist(strsplit(tolower(ward_name), " "))
+    
+    # Find matching shapefile ZIP file using partial matching
+    shapefile_zip_files <- list.files(shapefile_dir, pattern = ".zip$", full.names = TRUE)
+    matching_shapefile <- shapefile_zip_files[Reduce(`&`, lapply(ward_parts, function(x) grepl(x, tolower(shapefile_zip_files))))]
+    
+    # Check if a single matching shapefile is found
+    if (length(matching_shapefile) != 1) {
+      stop(paste("Found", length(matching_shapefile), "matching shapefiles for ward:", ward_name))
+    }
+    
+    shapefile_zip_path <- matching_shapefile
+    cat("Extracting shapefile from:", shapefile_zip_path, "\n")
+    
+    # Extract the shapefile from the ZIP archive
+    temp_dir <- tempdir()
+    unzip(shapefile_zip_path, exdir = temp_dir)
+    
+    # Find the shapefile path within the extracted files
+    shapefile_path <- list.files(temp_dir, pattern = "\\.shp$", full.names = TRUE)
+    
+    if (length(shapefile_path) == 0) {
+      stop("No shapefile (.shp) found in the extracted archive.")
+    } else if (length(shapefile_path) > 1) {
+      # If multiple shapefiles are found, use the one that matches the ward name most closely
+      shapefile_path <- shapefile_path[which.max(sapply(shapefile_path, function(x) sum(grepl(ward_parts, tolower(x)))))]
+    }
+    
+    cat("Shapefile path:", shapefile_path, "\n")
+    
+    # Read the shapefile
+    shapefile <- st_read(shapefile_path)
+    
+    # Find the CSV file path
+    csv_files <- list.files(csv_dir, pattern = ".csv$", full.names = TRUE)
+    matching_csv <- csv_files[Reduce(`&`, lapply(ward_parts, function(x) grepl(x, tolower(csv_files))))]
+    
+    # Check if a single matching CSV is found
+    if (length(matching_csv) != 1) {
+      stop(paste("Found", length(matching_csv), "matching CSV files for ward:", ward_name))
+    }
+    
+    csv_path <- matching_csv
+    cat("CSV file path:", csv_path, "\n")
+    
+    # Read the CSV file
+    data_points <- read.csv(csv_path, stringsAsFactors = FALSE)
+    
+    # Print available columns for debugging
+    print(paste("Available columns:", paste(names(data_points), collapse = ", ")))
+    
+    # Automatically detect columns containing "latitude" and "longitude"
+    lat_col <- grep("latitude", names(data_points), value = TRUE, ignore.case = TRUE)
+    lon_col <- grep("longitude", names(data_points), value = TRUE, ignore.case = TRUE)
+    
+    # Check if the latitude and longitude columns are detected
+    if (length(lat_col) == 0 || length(lon_col) == 0) {
+      stop("The CSV file must contain 'latitude' and 'longitude' columns in their names.")
+    }
+    
+    print(paste("Using latitude column:", lat_col))
+    print(paste("Using longitude column:", lon_col))
+    
+    # Convert data points to spatial object
+    print(head(data_points))
+    data_points_sf <- st_as_sf(data_points, coords = c(lon_col, lat_col), crs = 4326)
+    
+    # Filter by settlement type
+    formal_points <- data_points_sf[data_points_sf$Impression == "Formal", ]
+    informal_points <- data_points_sf[data_points_sf$Impression == "Informal", ]
+    slum_points <- data_points_sf[data_points_sf$Impression == "Slum", ]
+    nonresidential_points <- data_points_sf[data_points_sf$Impression == "Nonresidential", ]
+    
+    # Create a Leaflet map
+    map <- leaflet() %>%
+      addTiles() %>%
+      fitBounds(lng1 = st_bbox(shapefile)[[1]],
+                lat1 = st_bbox(shapefile)[[2]],
+                lng2 = st_bbox(shapefile)[[3]],
+                lat2 = st_bbox(shapefile)[[4]])
+    
+    # Add shapefile to the map
+    map <- map %>%
+      addPolygons(data = shapefile,
+                  color = "black",
+                  weight = 1,
+                  smoothFactor = 0.5,
+                  opacity = 1.0,
+                  fillOpacity = 0.0,
+                  highlightOptions = highlightOptions(
+                    weight = 2,
+                    color = "#666666",
+                    fillOpacity = 0.0,
+                    bringToFront = TRUE),
+                  label = shapefile$WardName,
+                  popup = shapefile$WardName)
+    
+    # Function to add points to the map
+    add_points <- function(map, points, color) {
+      if (nrow(points) > 0) {
+        map <- map %>%
+          addCircleMarkers(data = points,
+                           radius = 3,
+                           color = color,
+                           stroke = FALSE,
+                           fillOpacity = 0.7,
+                           popup = ~Impression)
+      }
+      return(map)
+    }
+    
+    # Add points to the map
+    map <- add_points(map, formal_points, "cyan")
+    map <- add_points(map, informal_points, "pink")
+    map <- add_points(map, slum_points, "maroon")
+    map <- add_points(map, nonresidential_points, "green")
+    
+    # Add legend to the map
+    map <- map %>%
+      addLegend(
+        position = "bottomright",
+        colors = c("cyan", "pink", "maroon", "green"),
+        labels = c("Formal", "Informal", "Slum", "Nonresidential"),
+        title = "Settlement Type",
+        opacity = 0.7
+      )
+    
+    return(map)
+  }
+  
+  # Get top wards for the dropdown 
+  top_wards <- reactive({
+    req(rv$ward_rankings)
+    rv$ward_rankings %>%
+      arrange(overall_rank) %>% 
+      slice_head(n = 15) %>% 
+      pull(WardName)
+  })
+  
+  # Ward selection dropdown for Manual Labelling tab
+  output$ward_select <- renderUI({
+    req(top_wards())
+    selectInput("selected_ward", "Select Ward:", choices = top_wards())
+  })
+  
+  observeEvent(input$plot_ward_map, {
+    req(input$selected_ward)
+    selected_ward <- input$selected_ward
+    
+    # Render the Leaflet map 
+    output$ward_map <- renderLeaflet({
+      tryCatch({
+        process_and_view_shapefile_and_csv(selected_ward, shapefile_dir, csv_dir)
+      }, error = function(e) {
+        showNotification(paste("Error:", e$message), type = "error")
+        cat("Error details:", conditionMessage(e), "\n")
+        return(NULL)
+      })
     })
   })
   
