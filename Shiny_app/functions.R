@@ -30,8 +30,6 @@ library(leaflet)
 library(reticulate)
 library(rgee)
 
-use_python("C:/Users/bbofo/OneDrive/Desktop/MRMT/Shiny_app/shinyapp-env/python.exe", required = TRUE)
-reticulate::py_run_file("C:/Users/bbofo/OneDrive/Desktop/MRMT/Shiny_app/app.py")
 
 
 # Function to generate a list of column name patterns
@@ -69,11 +67,14 @@ filter_columns <- function(data) {
 get_columns_after_wardname <- function(data, specific_columns = NULL) {
   ward_name_index <- which(names(data) == "WardName")
   if (length(ward_name_index) == 0) {
-    warning("WardName column not found. Returning all columns.")
-    return(names(data))
+    warning("WardName column not found. Returning all numeric columns.")
+    return(names(data)[sapply(data, is.numeric)])
   }
   
   columns_after_wardname <- names(data)[(ward_name_index + 1):ncol(data)]
+  
+  # Filter for numeric columns
+  columns_after_wardname <- columns_after_wardname[sapply(data[columns_after_wardname], is.numeric)]
   
   if (!is.null(specific_columns)) {
     columns_after_wardname <- intersect(columns_after_wardname, specific_columns)

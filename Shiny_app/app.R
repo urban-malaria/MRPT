@@ -350,14 +350,14 @@ ui <- fluidPage(
     style='text-align: center; font-style: italic; font-size: 1.1em;',
     tags$strong('If you use this tool in your work, please cite:'),
     br(),
-    'Mhlanga, L.,* Boateng, B.O.,* Jamiu, Y., Bamgboye, E.A., Adeniji, H., Ademu, C., Okoronkwo, C., Galatas, B., & Ozodiegwu, I. (2024).',
+    'Mhlanga, L.,* Boateng, B.O.,* Jamiu, Y., Bamgboye, E.A., Adeniji, H., Ademu, C., Okoronkwo, C., Enang, G. & Ozodiegwu, I. (2024).',
     br(),
     'Malaria Risk Mapping Tool. Urban Malaria Project, Loyola University Chicago.',
     br(),
     'Available at: ',
-    tags$a(href="https://bbofori90.shinyapps.io/Shiny_app/", 
+    tags$a(href="https://urbanmalaria.shinyapps.io/mrmt/", 
            target="_blank", 
-           "https://bbofori90.shinyapps.io/Shiny_app/")
+           "https://urbanmalaria.shinyapps.io/mrmt/")
   ),
   br()
 )
