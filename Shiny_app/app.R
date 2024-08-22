@@ -101,6 +101,21 @@ ui <- fluidPage(
                         tags$li("Use this tree to understand how your variable selections impact the final risk assessment."),
                         tags$li("The 'recommended' path in the tree leads to the risk map suggested by the box and whisker plot analysis.")
                       ),
+                      h4("7. Manual Labelling Tab"),
+                      tags$ul(
+                        tags$li("This tab allows you to visualize detailed maps of individual wards based on the rankings from previous analyses."),
+                        tags$li("The dropdown menu presents the top 15 wards as identified in the Decision Tree tab."),
+                        tags$li("To use this feature:"),
+                        tags$ol(
+                          tags$li("Select a ward from the dropdown menu."),
+                          tags$li("Click the 'Plot Map' button to generate the map."),
+                          tags$li("The resulting map will show:"),
+                          tags$ul(
+                            tags$li("The ward boundaries"),
+                            tags$li("Color-coded points representing different settlement types (formal, informal, slum, and non-residential areas)")
+                          )
+                        ),
+                      ),
                       h4("Feedback"),
                       p("As you explore each feature, please note any issues, inconsistencies, or suggestions for improvement. Your feedback is crucial for refining this tool. Report any bugs or share your thoughts with the development team."),
                       h4("Note on Data Privacy"),

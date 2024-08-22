@@ -30,7 +30,7 @@ library(leaflet)
 library(reticulate)
 library(rgee)
 
-use_python("C:/Users/bbofo/miniconda3/envs/shinyapp-env/python.exe", required = TRUE)
+use_python("C:/Users/bbofo/OneDrive/Desktop/MRMT/Shiny_app/shinyapp-env/python.exe", required = TRUE)
 reticulate::py_run_file("C:/Users/bbofo/OneDrive/Desktop/MRMT/Shiny_app/app.py")
 
 
