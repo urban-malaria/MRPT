@@ -1185,39 +1185,57 @@ server <- function(input, output, session) {
     # Print available columns for debugging
     print(paste("Available columns:", paste(names(data_points), collapse = ", ")))
     
-    # Automatically detect columns containing "latitude" and "longitude"
-    lat_col <- grep("latitude", names(data_points), value = TRUE, ignore.case = TRUE)
-    lon_col <- grep("longitude", names(data_points), value = TRUE, ignore.case = TRUE)
-    
-    # Check if the latitude and longitude columns are detected
-    if (length(lat_col) == 0 || length(lon_col) == 0) {
-      stop("The CSV file must contain 'latitude' and 'longitude' columns in their names.")
+    # Function to detect coordinate system
+    detect_coordinate_system <- function(data) {
+      lat_col <- grep("latitude", names(data), value = TRUE, ignore.case = TRUE)
+      lon_col <- grep("longitude", names(data), value = TRUE, ignore.case = TRUE)
+      
+      if (length(lat_col) == 0 || length(lon_col) == 0) {
+        stop("The CSV file must contain 'latitude' and 'longitude' columns in their names.")
+      }
+      
+      # Check if coordinates are likely to be in decimal degrees
+      if (max(abs(data[[lat_col]])) <= 90 && max(abs(data[[lon_col]])) <= 180) {
+        return(list(type = "WGS84", lat = lat_col, lon = lon_col))
+      } else {
+        return(list(type = "projected", x = lon_col, y = lat_col))
+      }
     }
     
-    print(paste("Using latitude column:", lat_col))
-    print(paste("Using longitude column:", lon_col))
+    # Detect coordinate system
+    coord_system <- detect_coordinate_system(data_points)
     
-    # Convert data points to spatial object
-    print(head(data_points))
-    data_points_sf <- st_as_sf(data_points, coords = c(lon_col, lat_col), crs = 4326)
+    print(paste("Detected coordinate system:", coord_system$type))
+    
+    # Create an sf object from the data points
+    if (coord_system$type == "WGS84") {
+      data_points_sf <- st_as_sf(data_points, coords = c(coord_system$lon, coord_system$lat), crs = 4326)
+    } else {
+      # Assuming the projected coordinate system is the same as the shapefile
+      data_points_sf <- st_as_sf(data_points, coords = c(coord_system$x, coord_system$y), crs = st_crs(shapefile))
+    }
+    
+    # Transform shapefile and data points to WGS84
+    shapefile_wgs84 <- st_transform(shapefile, crs = 4326)
+    df_wgs84 <- st_transform(data_points_sf, crs = 4326)
     
     # Filter by settlement type
-    formal_points <- data_points_sf[data_points_sf$Impression == "Formal", ]
-    informal_points <- data_points_sf[data_points_sf$Impression == "Informal", ]
-    slum_points <- data_points_sf[data_points_sf$Impression == "Slum", ]
-    nonresidential_points <- data_points_sf[data_points_sf$Impression == "Nonresidential", ]
+    formal_points <- df_wgs84[df_wgs84$Impression == "Formal", ]
+    informal_points <- df_wgs84[df_wgs84$Impression == "Informal", ]
+    slum_points <- df_wgs84[df_wgs84$Impression == "Slum", ]
+    nonresidential_points <- df_wgs84[df_wgs84$Impression == "Non residential", ]
     
     # Create a Leaflet map
     map <- leaflet() %>%
       addTiles() %>%
-      fitBounds(lng1 = st_bbox(shapefile)[[1]],
-                lat1 = st_bbox(shapefile)[[2]],
-                lng2 = st_bbox(shapefile)[[3]],
-                lat2 = st_bbox(shapefile)[[4]])
+      fitBounds(lng1 = st_bbox(shapefile_wgs84)[[1]],
+                lat1 = st_bbox(shapefile_wgs84)[[2]],
+                lng2 = st_bbox(shapefile_wgs84)[[3]],
+                lat2 = st_bbox(shapefile_wgs84)[[4]])
     
     # Add shapefile to the map
     map <- map %>%
-      addPolygons(data = shapefile,
+      addPolygons(data = shapefile_wgs84,
                   color = "black",
                   weight = 1,
                   smoothFactor = 0.5,
@@ -1228,14 +1246,19 @@ server <- function(input, output, session) {
                     color = "#666666",
                     fillOpacity = 0.0,
                     bringToFront = TRUE),
-                  label = shapefile$WardName,
-                  popup = shapefile$WardName)
+                  label = shapefile_wgs84$WardName,
+                  popup = shapefile_wgs84$WardName)
     
     # Function to add points to the map
     add_points <- function(map, points, color) {
       if (nrow(points) > 0) {
+        print(paste("Adding points for:", color))
+        print(head(points))
+        print(st_coordinates(points))
         map <- map %>%
           addCircleMarkers(data = points,
+                           lng = ~st_coordinates(geometry)[,1],
+                           lat = ~st_coordinates(geometry)[,2],
                            radius = 3,
                            color = color,
                            stroke = FALSE,
@@ -1264,12 +1287,12 @@ server <- function(input, output, session) {
     return(map)
   }
   
-  # Get top wards for the dropdown 
+  # Get top wards for the dropdown
   top_wards <- reactive({
     req(rv$ward_rankings)
     rv$ward_rankings %>%
-      arrange(overall_rank) %>% 
-      slice_head(n = 5) %>% 
+      arrange(overall_rank) %>%
+      slice_head(n = 5) %>%
       pull(WardName)
   })
   
@@ -1283,7 +1306,7 @@ server <- function(input, output, session) {
     req(input$selected_ward)
     selected_ward <- input$selected_ward
     
-    # Render the Leaflet map 
+    # Render the Leaflet map
     output$ward_map <- renderLeaflet({
       tryCatch({
         process_and_view_shapefile_and_csv(selected_ward, shapefile_dir, csv_dir)
@@ -1294,6 +1317,7 @@ server <- function(input, output, session) {
       })
     })
   })
+  
   
 }
 
