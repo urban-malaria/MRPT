@@ -1,5 +1,5 @@
 source("functions.R")
-
+#shiny::runApp("Shiny_app")
 ui <- fluidPage(
   theme = shinytheme("sandstone"),
   useShinyjs(),  
@@ -1259,9 +1259,10 @@ server <- function(input, output, session) {
           addCircleMarkers(data = points,
                            lng = ~st_coordinates(geometry)[,1],
                            lat = ~st_coordinates(geometry)[,2],
-                           radius = 3,
+                           radius = 5,
                            color = color,
-                           stroke = FALSE,
+                           stroke = TRUE,
+                           weight = 2,
                            fillOpacity = 0.7,
                            popup = ~Impression)
       }
@@ -1269,16 +1270,16 @@ server <- function(input, output, session) {
     }
     
     # Add points to the map
-    map <- add_points(map, formal_points, "cyan")
-    map <- add_points(map, informal_points, "pink")
-    map <- add_points(map, slum_points, "maroon")
-    map <- add_points(map, nonresidential_points, "green")
+    map <- add_points(map, formal_points, "#0074D9")
+    map <- add_points(map, informal_points, "#FF4136")
+    map <- add_points(map, slum_points, "#FFDC00")
+    map <- add_points(map, nonresidential_points, "#2ECC40")
     
     # Add legend to the map
     map <- map %>%
       addLegend(
         position = "bottomright",
-        colors = c("cyan", "pink", "maroon", "green"),
+        colors = c("#0074D9", "#FF4136", "#FFDC00", "#2ECC40"),
         labels = c("Formal", "Informal", "Slum", "Nonresidential"),
         title = "Settlement Type",
         opacity = 0.7
