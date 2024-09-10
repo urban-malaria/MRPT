@@ -259,7 +259,6 @@ check_wardname_mismatches <- function(csv_data, shp_data) {
 
 
 # Normalization function
-# Modify normalize_data 
 normalize_data <- function(cleaned_data, variable_relationships) { 
   tryCatch({
     print("Input data structure (cleaned data):")
@@ -284,10 +283,10 @@ normalize_data <- function(cleaned_data, variable_relationships) {
                     ~{
                       col_name <- cur_column()
                       if (variable_relationships[col_name] == "inverse") {
-                        inverted <- 1 / (. + 1) 
-                        (inverted - min(inverted, na.rm = TRUE)) / 
-                          (max(inverted, na.rm = TRUE) - min(inverted, na.rm = TRUE))
-                      } else { 
+                        inverted <- 1 / (. + 1e-10)  # Add small constant to avoid division by zero
+                        ((inverted - min(inverted, na.rm = TRUE)) / 
+                               (max(inverted, na.rm = TRUE) - min(inverted, na.rm = TRUE)))
+                      } else {  
                         (. - min(., na.rm = TRUE)) / 
                           (max(., na.rm = TRUE) - min(., na.rm = TRUE)) 
                       }

@@ -3,7 +3,7 @@ source("functions.R")
 ui <- fluidPage(
   theme = shinytheme("sandstone"),
   useShinyjs(),  
-  titlePanel("Malaria Risk Mapping Tool"),
+  titlePanel("Malaria Re-prioritization Tool"),
   
   tags$head(
     tags$style(HTML("
@@ -56,8 +56,8 @@ ui <- fluidPage(
              tags$br(),
              fluidRow(
                column(6,
-                      h3("Instructions for Using the Malaria Risk Mapping Tool (Testing Phase)"),
-                      p("Welcome to the testing phase of our Malaria Risk Mapping Tool. Please follow these steps to explore the application's features:"),
+                      h3("Instructions for Using the Malaria Re-prioritization Tool"),
+                      p("Welcome to the testing phase of our Malaria Re-prioritization Tool. Please follow these steps to explore the application's features:"),
                       h4("1. Preparing Your Data"),
                       tags$ul(
                         tags$li(a("Download the test dataset from this Google Drive link:", 
@@ -126,7 +126,9 @@ ui <- fluidPage(
                         " or ",
                         tags$a(href="mailto:bboateng1@luc.edu", "bboateng1@luc.edu")
                       ),
-                      p("Thank you for your participation in testing the Malaria Risk Mapping Tool!")
+                      p("Thank you for your participation in testing the Malaria Re-prioritization Tool!"),
+                      h4("Funding"),
+                      p("This work and the authors are supported by the Bill and Melinda Gates Foundation (Investment ID: INV-036449). The funders had no role in the design or analysis of this study.")
                ),
                column(6, 
                       tags$br(), tags$br(), tags$br(), tags$br(), 
@@ -327,17 +329,14 @@ ui <- fluidPage(
     ),
   ),
   
-  tags$br(),  
-  tags$br(),  
-  tags$br(),  
-  tags$br(),
+
   tags$br(),  
   tags$br(),
   
   hr(),
   
   div(
-    style='text-align: center',
+    style='text-align: center; margin-top: 20px;',  # Add margin-top for slight spacing
     'Created by the', 
     shiny::HTML('<a href=\'https://www.urban-malaria.com/\' 
                 target=\'_blank\'> Urban Malaria Project Team </a>'),
@@ -347,17 +346,17 @@ ui <- fluidPage(
   br(),
   
   div(
-    style='text-align: center; font-style: italic; font-size: 1.1em;',
+    style='text-align: center; font-style: italic; font-size: 1.1em; margin-bottom: 20px;',  # Add margin-bottom for slight spacing
     tags$strong('If you use this tool in your work, please cite:'),
     br(),
-    'Mhlanga, L.,* Boateng, B.O.,* Jamiu, Y., Bamgboye, E.A., Adeniji, H., Ademu, C., Okoronkwo, C., Enang, G. & Ozodiegwu, I. (2024).',
+    'Mhlanga, L.,* Boateng, B.O.,* Jamiu, Y., Bamgboye, E.A., Adeniji, H., Ademu, C., Okoronkwo, C., Enang, G. & Ozodiegwu, I.D. (2024).',
     br(),
-    'Malaria Risk Mapping Tool. Urban Malaria Project, Loyola University Chicago.',
+    'Malaria Re-prioritization Tool. Urban Malaria Project, Loyola University Chicago.',
     br(),
     'Available at: ',
-    tags$a(href="https://urbanmalaria.shinyapps.io/mrmt/", 
+    tags$a(href="https://urbanmalaria.shinyapps.io/mrt/", 
            target="_blank", 
-           "https://urbanmalaria.shinyapps.io/mrmt/")
+           "https://urbanmalaria.shinyapps.io/mrt/")
   ),
   br()
 )
