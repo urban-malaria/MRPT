@@ -57,78 +57,54 @@ ui <- fluidPage(
              fluidRow(
                column(6,
                       h3("Instructions for Using the Malaria Re-prioritization Tool"),
-                      p("Welcome to the testing phase of our Malaria Re-prioritization Tool. Please follow these steps to explore the application's features:"),
+                      p("Follow these steps to use the tool effectively:"),
                       h4("1. Preparing Your Data"),
                       tags$ul(
-                        tags$li(a("Download the test dataset from this Google Drive link:", 
-                                  href="https://drive.google.com/drive/u/0/folders/1iB103WqBbeIEhhMZ1axHTRaC3zZVnE-S", 
-                                  target="_blank")),
-                        tags$li("Ensure you have both the CSV file with variable data and the corresponding shapefile for your region of interest."),
+                        tags$li("Ensure you have a CSV file with variable data and the corresponding shapefile for your region of interest."),
                         tags$li("The CSV file should include columns for WardName and various risk factors (e.g., settlement type, enhanced vegetation index, rainfall, etc.)."),
                         tags$li("Compress the shapefile components into a zip file.")
                       ),
                       h4("2. Input Variables (Data and Shapefiles) Tab"),
                       tags$ul( 
                         tags$li("Upload your CSV file and zipped shapefile using the respective upload buttons."),
-                        tags$li("If there are mismatches between ward names in your CSV and shapefile, you'll be prompted to resolve them."),
                         tags$li("Select a variable to visualize from the dropdown menu and click 'Plot Maps' to see its distribution."),
-                        tags$li("If your data has missing values, use the 'Click to fill in missing values' button to handle them.")
+                        tags$li("Use the 'Click to fill in missing values' button if your data has missing values.")
                       ),
                       h4("3. Normalization Tab"),
                       tags$ul( 
-                        tags$li("Click 'Specify Variable Relationships' to define how each variable relates to malaria risk (direct or inverse)."),
-                        tags$li("Select a normalized variable to visualize from the dropdown menu."),
-                        tags$li("Click 'Plot Normalized Map' to see the distribution of the normalized variable.")
+                        tags$li("Define how each variable relates to malaria risk (direct or inverse)."),
+                        tags$li("Visualize normalized variables to understand their distribution.")
                       ),
                       h4("4. Composite Score Distribution Tab"),
                       tags$ul(
-                        tags$li("Select at least two variables to include in your composite risk score."),
-                        tags$li("Click 'Calculate' to generate composite score maps for different combinations of your selected variables."),
-                        tags$li("Examine the resulting maps to see how different variable combinations affect the risk distribution.")
+                        tags$li("Select variables to include in your composite risk score."),
+                        tags$li("Generate and examine composite score maps for different variable combinations.")
                       ),
                       h4("5. Box and Whisker Plot Tab"),
                       tags$ul( 
-                        tags$li("This tab shows the distribution of vulnerability scores across wards."),
-                        tags$li("Toggle between the box plot view and map view using the 'Show Map View' checkbox."),
-                        tags$li("In the box plot view, examine the distribution of ranks for each ward."),
-                        tags$li("In the map view, see the geographic distribution of overall vulnerability ranks.")
+                        tags$li("Analyze the distribution of vulnerability scores across wards."),
+                        tags$li("Toggle between box plot and map views to understand risk distribution.")
                       ),
                       h4("6. Decision Tree Tab"),
                       tags$ul(
-                        tags$li("This tab provides a visual representation of the decision-making process in creating the malaria risk maps."),
-                        tags$li("The tree is automatically generated based on the variables you selected in the Composite Score Distribution tab."),
-                        tags$li("It shows all available variables, which were included or excluded from your analysis, and the steps taken to create the final risk maps."),
-                        tags$li("Use this tree to understand how your variable selections impact the final risk assessment."),
-                        tags$li("The 'recommended' path in the tree leads to the risk map suggested by the box and whisker plot analysis.")
+                        tags$li("Explore a visual representation of the decision-making process in creating the malaria risk maps."),
+                        tags$li("Understand how variable selections impact the final risk assessment.")
                       ),
                       h4("7. Manual Labelling Tab"),
                       tags$ul(
-                        tags$li("This tab allows you to visualize detailed maps of individual wards based on the rankings from previous analyses."),
-                        tags$li("The dropdown menu presents the top 15 wards as identified in the Decision Tree tab."),
-                        tags$li("To use this feature:"),
-                        tags$ol(
-                          tags$li("Select a ward from the dropdown menu."),
-                          tags$li("Click the 'Plot Map' button to generate the map."),
-                          tags$li("The resulting map will show:"),
-                          tags$ul(
-                            tags$li("The ward boundaries"),
-                            tags$li("Color-coded points representing different settlement types (formal, informal, slum, and non-residential areas)")
-                          )
-                        ),
+                        tags$li("Visualize detailed maps of individual wards based on rankings from previous analyses."),
+                        tags$li("Examine settlement types and other factors within specific wards.")
                       ),
-                      h4("Feedback"),
-                      p("As you explore each feature, please note any issues, inconsistencies, or suggestions for improvement. Your feedback is crucial for refining this tool. Report any bugs or share your thoughts with the development team."),
-                      h4("Note on Data Privacy"),
-                      p("Do not upload any real, sensitive, or personal data to this application during testing."),
+                      h4("Data Privacy"),
+                      p("Please ensure that you have the necessary permissions to use and upload your data. Do not upload sensitive or personal data without proper authorization."),
                       p(
                         "For issues or technical support with the application, email ",
                         tags$a(href="mailto:lmhlanga@luc.edu", "lmhlanga@luc.edu"),
                         " or ",
                         tags$a(href="mailto:bboateng1@luc.edu", "bboateng1@luc.edu")
                       ),
-                      p("Thank you for your participation in testing the Malaria Re-prioritization Tool!"),
                       h4("Funding"),
-                      p("This work and the authors are supported by the Bill and Melinda Gates Foundation (Investment ID: INV-036449). The funders had no role in the design or analysis of this study.")
+                      p("This work and the authors are supported by the Bill and Melinda Gates Foundation (Investment ID: INV-036449).")
                ),
                column(6, 
                       tags$br(), tags$br(), tags$br(), tags$br(), 
@@ -354,9 +330,9 @@ ui <- fluidPage(
     'Malaria Re-prioritization Tool. Urban Malaria Project, Loyola University Chicago.',
     br(),
     'Available at: ',
-    tags$a(href="https://urbanmalaria.shinyapps.io/mrt/", 
+    tags$a(href="https://urbanmalaria.shinyapps.io/mrpt/", 
            target="_blank", 
-           "https://urbanmalaria.shinyapps.io/mrt/")
+           "https://urbanmalaria.shinyapps.io/mrpt/")
   ),
   br()
 )
