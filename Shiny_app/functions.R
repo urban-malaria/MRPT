@@ -42,6 +42,11 @@ generate_pattern_list <- function(df) {
 
 # Function to rename columns based on generated patterns
 rename_columns <- function(df) {
+  # First rename Ward to WardName if it exists
+  if ("Ward" %in% names(df)) {
+    df <- df %>% rename(WardName = Ward)
+  }
+  
   pattern_list <- generate_pattern_list(df)
   for (pattern in names(pattern_list)) {
     df <- df %>% rename_with(~ gsub("\\.", " ", pattern), all_of(intersect(names(df), pattern_list[[pattern]])))
@@ -49,28 +54,32 @@ rename_columns <- function(df) {
   df
 }
 
-
-# Function to filter the columns
+# Modified filter_columns function to be more flexible with column names
 filter_columns <- function(data) {
-  ward_name_index <- which(names(data) == "WardName")
+  # Check for either Ward or WardName
+  ward_col <- intersect(c("Ward", "WardName"), names(data))
   
-  if (length(ward_name_index) == 0) {
-    warning("WardName column not found. Using all columns.")
+  if (length(ward_col) == 0) {
+    warning("Neither Ward nor WardName column found. Using all columns.")
     return(data)
   }
   
-  selected_columns <- c("WardName", names(data)[(ward_name_index + 1):ncol(data)])
+  ward_name_index <- which(names(data) == ward_col[1])
+  selected_columns <- c(ward_col[1], names(data)[(ward_name_index + 1):ncol(data)])
   return(data[, selected_columns])
 }
 
-
+# Modified get_columns_after_wardname function
 get_columns_after_wardname <- function(data, specific_columns = NULL) {
-  ward_name_index <- which(names(data) == "WardName")
-  if (length(ward_name_index) == 0) {
-    warning("WardName column not found. Returning all numeric columns.")
+  # Check for either Ward or WardName
+  ward_col <- intersect(c("Ward", "WardName"), names(data))
+  
+  if (length(ward_col) == 0) {
+    warning("Neither Ward nor WardName column found. Returning all numeric columns.")
     return(names(data)[sapply(data, is.numeric)])
   }
   
+  ward_name_index <- which(names(data) == ward_col[1])
   columns_after_wardname <- names(data)[(ward_name_index + 1):ncol(data)]
   
   # Filter for numeric columns
@@ -285,7 +294,7 @@ normalize_data <- function(cleaned_data, variable_relationships) {
                       if (variable_relationships[col_name] == "inverse") {
                         inverted <- 1 / (. + 1e-10)  # Add small constant to avoid division by zero
                         ((inverted - min(inverted, na.rm = TRUE)) / 
-                               (max(inverted, na.rm = TRUE) - min(inverted, na.rm = TRUE)))
+                            (max(inverted, na.rm = TRUE) - min(inverted, na.rm = TRUE)))
                       } else {  
                         (. - min(., na.rm = TRUE)) / 
                           (max(., na.rm = TRUE) - min(., na.rm = TRUE)) 
