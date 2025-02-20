@@ -3,7 +3,7 @@ source("functions.R")
 ui <- fluidPage(
   theme = shinytheme("sandstone"),
   useShinyjs(),  
-  titlePanel("Malaria Re-prioritization Tool"),
+  titlePanel("Malaria Reprioritization Tool"),
   
   tags$head(
     tags$style(HTML("
@@ -56,7 +56,7 @@ ui <- fluidPage(
              tags$br(),
              fluidRow(
                column(6,
-                      h3("Instructions for Using the Malaria Re-prioritization Tool"),
+                      h3("Instructions for Using the Malaria Reprioritization Tool"),
                       p("Follow these steps to use the tool effectively:"),
                       h4("1. Preparing Your Data"),
                       tags$ul(
@@ -223,11 +223,11 @@ ui <- fluidPage(
                column(8,
                       conditionalPanel(
                         condition = "input.show_map == false",
-                        plotlyOutput("boxwhiskerPlots", height = "600px")
+                        plotlyOutput("boxwhiskerPlots", height = "500px")
                       ),
                       conditionalPanel(
                         condition = "input.show_map == true",
-                        girafeOutput("vulnerabilityMap", height = "600px")
+                        girafeOutput("vulnerabilityMap", height = "500px")
                       )
                ),
                column(4,
@@ -250,7 +250,7 @@ ui <- fluidPage(
                       conditionalPanel(
                         condition = "input.show_map == true",
                         wellPanel(
-                          style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 600px; overflow-y: auto;",
+                          style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 500px; overflow-y: auto;",
                           h4("Understanding the Vulnerability Map"),
                           p("This map displays the overall vulnerability rank for each ward, providing a geographic perspective on malaria risk."),
                           p("Key features:"),
@@ -273,21 +273,46 @@ ui <- fluidPage(
              )
     ),
     
+    # Add these to your UI
     tabPanel("Decision Tree",
              fluidRow(
                column(12,
-                      h3("Malaria Risk Assessment Decision Tree"),
-                      p("This decision tree visualizes the process of creating the malaria risk map based on the variables you selected in the Composite Score Distribution tab."),
-                      p("How to interpret the tree:"),
-                      tags$ul(
-                        tags$li("The top node shows all variables available in the dataset."),
-                        tags$li("The second level shows which variables were included or excluded from your analysis."),
-                        tags$li("The lower levels show the steps taken to create the final risk maps."),
-                        tags$li("The 'recommended' path leads to the risk map suggested by the box and whisker plot analysis.")
-                      ),
-                      p("Use this tree to understand how your variable selections impact the final risk assessment."),
-                      br(),
-                      grVizOutput("decisionTree", width = "100%", height = "600px")
+                      div(
+                        style = "padding: 20px; background-color: #FFFFFF; border-radius: 8px; margin-bottom: 20px;",
+                        
+                        # Download buttons
+                        div(
+                          style = "margin-bottom: 20px;",
+                          tags$head(
+                            tags$script("
+                              $(document).on('shiny:error', function(event) {
+                                if(event.name === 'downloadPNG' || event.name === 'downloadPDF') {
+                                  alert('Error during download. Please try again.');
+                                }
+                              });
+                            ")
+                          ),
+                          downloadButton("downloadPNG", "Download PNG", 
+                                         style = "margin-right: 10px; background-color: #5D4E6D; color: white;"),
+                          downloadButton("downloadPDF", "Download PDF",
+                                         style = "background-color: #5D4E6D; color: white;")
+                        ),
+                        
+                        # Main visualization container
+                        div(
+                          style = "background-color: white; padding: 20px; border-radius: 8px;",
+                          grVizOutput("decisionTree", width = "100%", height = "600px")
+                        ),
+                        
+                        # Help text
+                        div(
+                          style = "margin-top: 20px; padding: 15px; background-color: #F8F9FA; border-radius: 8px;",
+                          p("Click the download buttons above to save the decision tree in your preferred format.",
+                            style = "color: #666; font-style: italic;"),
+                          p("Note: The download may take a few seconds to complete.",
+                            style = "color: #666; font-style: italic;")
+                        )
+                      )
                )
              )
     ),
@@ -308,6 +333,10 @@ ui <- fluidPage(
   
   tags$br(),  
   tags$br(),
+  tags$br(),
+  tags$br(),
+  tags$br(),
+  tags$br(),
   
   hr(),
   
@@ -315,7 +344,7 @@ ui <- fluidPage(
     style='text-align: center; margin-top: 20px;',  # Add margin-top for slight spacing
     'Created by the', 
     shiny::HTML('<a href=\'https://www.urban-malaria.com/\' 
-                target=\'_blank\'> Urban Malaria Project Team </a>'),
+                target=\'_blank\'> Urban Malaria Lab </a>'),
     '@ Loyola University Chicago, Parkinson School of Public Health, Department of Health Informatics and Data Science'
   ),
   
@@ -327,7 +356,7 @@ ui <- fluidPage(
     br(),
     'Mhlanga, L.,* Boateng, B.O.,* Jamiu, Y., Bamgboye, E.A., Adeniji, H., Ademu, C., Okoronkwo, C., Enang, G. & Ozodiegwu, I.D. (2024).',
     br(),
-    'Malaria Re-prioritization Tool. Urban Malaria Project, Loyola University Chicago.',
+    'Malaria Reprioritization Tool. Urban Malaria Lab, Loyola University Chicago.',
     br(),
     'Available at: ',
     tags$a(href="https://urbanmalaria.shinyapps.io/mrpt/", 
@@ -343,15 +372,15 @@ server <- function(input, output, session) {
   # Show initial modal
   showModal(modalDialog(
     title = "Information",
-    HTML("Welcome to the de-prioritization web application, a powerful tool for 
+    HTML("Welcome to the reprioritization web application, a powerful tool for 
     visualizing the distribution of variables associated with malaria risk 
     at a granular level. It uniquely focuses on a finer scale, analyzing data 
     down to the ward level rather than the broader Local Government Area (LGA).
     <br><br>
     This detailed approach, combined with geocoding technology, allows for 
-    enhanced de-prioritization, enabling stakeholders to make decisions at the 
+    enhanced reprioritization, enabling stakeholders to make decisions at the 
     smallest scale of settlement type. This specificity ensures that 
-    \"de-prioritization of resources like bed nets happens effectively, targeting 
+    \"reprioritization of resources like bed nets happens effectively, targeting 
     areas with the highest need and optimizing malaria control efforts.\"")
   ))
   
@@ -974,7 +1003,104 @@ server <- function(input, output, session) {
     })
   })
   
+  
+  
   # Decision Tree
+  
+  
+  
+  # Replace the existing download handlers with these improved versions
+  output$downloadPNG <- downloadHandler(
+    filename = function() {
+      paste0("decision_tree_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".png")
+    },
+    content = function(file) {
+      tryCatch({
+        # Generate the diagram
+        graph <- decision_tree_function(
+          all_variables = get_columns_after_wardname(rv$cleaned_data),
+          selected_variables = input$composite_vars,
+          excluded_variables = setdiff(get_columns_after_wardname(rv$cleaned_data), 
+                                       input$composite_vars),
+          progress = rv$decision_tree_progress(),
+          top_5_wards = if (!is.null(rv$ward_rankings)) {
+            rv$ward_rankings %>%
+              arrange(overall_rank) %>%
+              slice_head(n = 5) %>%
+              pull(WardName)
+          } else {
+            character(0)
+          }
+        )
+        
+        # Convert to SVG first
+        svg_content <- DiagrammeRsvg::export_svg(graph)
+        
+        # Write to a temporary SVG file
+        temp_svg <- tempfile(fileext = ".svg")
+        writeLines(svg_content, temp_svg)
+        
+        # Convert SVG to PNG using rsvg
+        rsvg::rsvg_png(temp_svg, file, width = 1200)
+        
+      }, error = function(e) {
+        # Log the error
+        message("Error in PNG export: ", e$message)
+        stop("Failed to create PNG file. Error: ", e$message)
+      }, finally = {
+        # Cleanup
+        if (exists("temp_svg") && file.exists(temp_svg)) {
+          unlink(temp_svg)
+        }
+      })
+    }
+  )
+  
+  output$downloadPDF <- downloadHandler(
+    filename = function() {
+      paste0("decision_tree_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".pdf")
+    },
+    content = function(file) {
+      tryCatch({
+        # Generate the diagram
+        graph <- decision_tree_function(
+          all_variables = get_columns_after_wardname(rv$cleaned_data),
+          selected_variables = input$composite_vars,
+          excluded_variables = setdiff(get_columns_after_wardname(rv$cleaned_data), 
+                                       input$composite_vars),
+          progress = rv$decision_tree_progress(),
+          top_5_wards = if (!is.null(rv$ward_rankings)) {
+            rv$ward_rankings %>%
+              arrange(overall_rank) %>%
+              slice_head(n = 5) %>%
+              pull(WardName)
+          } else {
+            character(0)
+          }
+        )
+        
+        # Convert to SVG first
+        svg_content <- DiagrammeRsvg::export_svg(graph)
+        
+        # Write to a temporary SVG file
+        temp_svg <- tempfile(fileext = ".svg")
+        writeLines(svg_content, temp_svg)
+        
+        # Convert SVG to PDF using rsvg
+        rsvg::rsvg_pdf(temp_svg, file)
+        
+      }, error = function(e) {
+        # Log the error
+        message("Error in PDF export: ", e$message)
+        stop("Failed to create PDF file. Error: ", e$message)
+      }, finally = {
+        # Cleanup
+        if (exists("temp_svg") && file.exists(temp_svg)) {
+          unlink(temp_svg)
+        }
+      })
+    }
+  )
   
   observe({
     rv$decision_tree_progress(modifyList(rv$decision_tree_progress(), list(
@@ -990,60 +1116,118 @@ server <- function(input, output, session) {
     paste(strwrap(text, width = width), collapse = "\n")
   }
   
+
   decision_tree_function <- function(all_variables, selected_variables, excluded_variables, progress, top_5_wards = character(0)) {
-    # Format top 5 wards with numbered bullets, each on a new line
+    # Format variables lists with bullets
+    format_var_list <- function(vars) {
+      if (length(vars) == 0) return("None")
+      paste(sapply(vars, function(x) paste0("• ", x)), collapse = "\\n")
+    }
+    
+    # Format top 5 wards
     formatted_top_5 <- if (length(top_5_wards) > 0) {
-      paste(sapply(seq_along(top_5_wards), function(i) paste0(i, ". ", top_5_wards[i])), collapse = "\\n")
+      paste("1.", top_5_wards[1], "\\n2.", top_5_wards[2], "\\n3.", 
+            top_5_wards[3], "\\n4.", top_5_wards[4], "\\n5.", top_5_wards[5])
     } else {
       "No wards available"
     }
     
-    node_data <- data.frame(
-      Name = c("Node1", "Node2", "Node3", "Node4", "Node5", "Node6", "Node7", "Node8"),
-      Label = c(
-        wrap_text(paste("The dataset had the following variables:", paste(all_variables, collapse = ", "))),
-        wrap_text("Check the map plotted to determine if it depicts the variable under consideration"),
-        wrap_text(paste("Variables included in the composite score:", paste(selected_variables, collapse = ", "))),
-        wrap_text(paste("Variables excluded from the composite score:", paste(excluded_variables, collapse = ", "))),
-        wrap_text("Normalization and composite score calculation"),
-        wrap_text("Malaria risk maps generated from various combinations of all included variables"),
-        wrap_text("Malaria risk map recommended by the box and whisker plot"),
-        paste0("Top 5 wards for de-prioritization:\\n", formatted_top_5)  
-      ),
-      Shape = c("box", "diamond", "ellipse", "ellipse", "box", "ellipse", "ellipse", "box"),
-      Color = "lightgrey",
-      stringsAsFactors = FALSE
+    # Define precise professional color scheme
+    colors <- list(
+      navy = "#1B2631",       # Darker navy for headers
+      orange = "#E67E22",     # Bright orange for diamond
+      teal = "#16A596",       # Bright teal for included
+      gray = "#7F8C8D",       # Medium gray for excluded
+      green = "#27AE60",      # Bright green for process
+      blue = "#2980B9",       # Bright blue for maps
+      purple = "#8E44AD",     # Bright purple for final nodes
+      arrow = "#34495E"       # Dark arrow color
     )
     
-    # Update colors based on progress
-    if (progress$data_loaded) node_data$Color[1] = "lightblue"
-    if (progress$variables_selected) {
-      node_data$Color[2:4] = "lightblue"
-    }
-    if (progress$normalization_done) node_data$Color[5] = "lightblue"
-    if (progress$composite_scores_calculated) {
-      node_data$Color[6:8] = "lightblue"
-    }
+    graph_string <- sprintf('
+  digraph G {
+    graph [rankdir=LR,
+           nodesep=0.6,
+           ranksep=0.8,
+           splines=ortho,
+           pad=0.5,
+           compound=true]
     
-    nodes <- paste0(
-      node_data$Name, " [label = '", node_data$Label, "', shape = ", node_data$Shape, ", style = filled, fillcolor = ", node_data$Color, "]",
-      collapse = "\n "
+    node [shape=rect,
+          style="filled,rounded",
+          fontname="Arial",
+          fontsize=11,
+          margin="0.2,0.2",
+          penwidth=1.2]
+    
+    edge [color="%s",
+          penwidth=1.2,
+          arrowsize=0.9,
+          arrowhead=vee]
+    // Initial nodes
+    start [label="Malaria Risk Assessment\\nVariable Selection"
+           fillcolor="%s"
+           fontcolor="white"]
+    vars [label="Variables:\\n%s"
+          fillcolor="%s"
+          fontcolor="white"]
+    // Evaluation diamond
+    eval [label="Variable\\nEvaluation"
+          shape=diamond
+          fillcolor="%s"
+          fontcolor="white"
+          width=1.5
+          height=1.5]
+    // Variable groups
+    included [label="Included Variables:\\n%s"
+             fillcolor="%s"
+             fontcolor="white"]
+    excluded [label="Excluded Variables:\\n%s"
+             fillcolor="%s"
+             fontcolor="white"]
+    // Processing and results
+    process [label="Data Normalization &\\nComposite Score Calculation"
+            fillcolor="%s"
+            fontcolor="white"]
+    maps [label="Generated Risk Maps\\nfor All Combinations"
+          fillcolor="%s"
+          fontcolor="white"]
+    recommended [label="Recommended Risk Map\\nby the Box and Whisker Plot"
+                fillcolor="%s"
+                fontcolor="white"]
+    priority [label="Top 5 Wards\\nfor Re-Prioritization:\\n%s"
+             fillcolor="%s"
+             fontcolor="white"]
+    // Edge definitions with improved spacing
+    start -> vars [weight=2]
+    vars -> eval [weight=2]
+    eval -> included [label=" Include"]
+    eval -> excluded [label=" Exclude"]
+    included -> process [weight=2]
+    process -> maps [weight=2]
+    maps -> recommended [weight=2]
+    recommended -> priority [weight=2]
+    // Rank definitions for better alignment
+    {rank=same; start; vars}
+    {rank=same; included; excluded}
+    {rank=same; process; maps}
+    {rank=same; recommended; priority}
+    // Add invisible edges for better spacing
+    included -> excluded [style=invis]
+    maps -> recommended [style=invis]
+  }',
+                            colors$arrow,
+                            colors$navy, format_var_list(all_variables), colors$navy,
+                            colors$orange,
+                            format_var_list(selected_variables), colors$teal,
+                            format_var_list(excluded_variables), colors$gray,
+                            colors$green, colors$blue,
+                            colors$purple, formatted_top_5, colors$purple
     )
-    
-    edges <- "Node1 -> Node2\n Node2 -> Node3 [label = 'yes']\n Node2 -> Node4 [label = 'no']\n Node3 -> Node5\n Node5 -> Node6 [label = 'all variables']\n Node5 -> Node7 [label = 'recommended']\n Node7 -> Node8"
-    
-    graph_string <- glue("
-  digraph flowchart {{
-    rankdir=LR
-    node [fontname = Helvetica, fontsize = 12]
-    {nodes}
-    {{ rank = same; Node3; Node4; }}
-    {edges}
-  }}
-")
     
     grViz(graph_string)
   }
+  
   
   
   # Dynamic UI for variable selection
