@@ -352,6 +352,7 @@ plot_normalized_map <- function(shp_data, processed_csv, selected_vars) {
 # Function to calculate composite scores for different models
 
 composite_score_models <- function(normalized_data, selected_vars, shp_data) {
+  
   print("Entering composite_score_models function")
   print("Normalized data structure:")
   print(str(normalized_data))
@@ -386,8 +387,8 @@ composite_score_models <- function(normalized_data, selected_vars, shp_data) {
   
   # Calculate composite scores
   final_data <- normalized_data %>% 
-    select(WardName) %>%
-    left_join(shp_data %>% select(WardName, Urban), by = "WardName")
+    select(WardName, WardCode) %>%
+    left_join(shp_data %>% select(WardName, WardCode, Urban), by = c("WardCode", "WardName"))
   
   for (i in seq_along(model_combinations)) {
     model_name <- paste0("model_", i)

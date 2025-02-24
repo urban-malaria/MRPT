@@ -144,7 +144,7 @@ ui <- fluidPage(
                )
              )
     ), 
-    
+   
     tabPanel("Normalization", 
              sidebarLayout(
                sidebarPanel(
