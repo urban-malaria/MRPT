@@ -1,15 +1,8 @@
----
-editor_options: 
-  markdown: 
-    wrap: sentence
----
-
 # **Malaria Reprioritization Tool (MRPT) Repository (MRPT)**
 
 ## **Overview**
 
-The **Malaria Reprioritization Tool (MRPT)** is a **decision-support application** designed to assist malaria programs in optimizing intervention planning.
-This repository contains the source code, analysis scripts, and documentation necessary to deploy, analyze, and maintain the MRPT tool.
+The **Malaria Reprioritization Tool (MRPT)** is a **decision-support application** designed to assist malaria programs in optimizing intervention planning. This repository contains the source code, analysis scripts, and documentation necessary to deploy, analyze, and maintain the MRPT tool.
 
 ## **Repository Structure**
 
@@ -30,19 +23,15 @@ MRPT_Repo/
 
 ### **1. `Shiny_app/`**
 
-This folder contains the full **source code** for the MRPT **Shiny application**.
-It includes: - UI and server scripts for rendering the MRPT tool.
-- Dependencies for loading data and visualizing results.
-- Configuration files for deployment.
+This folder contains the full **source code** for the MRPT **Shiny application**. It includes: - UI and server scripts for rendering the MRPT tool. - Dependencies for loading data and visualizing results. - Configuration files for deployment.
 
 ### **2. `analysis_scripts/`**
 
-This folder contains all files related to data analysis and user manual generation.
-It includes:
+This folder contains all files related to data analysis and user manual generation. It includes:
 
 #### **`data/`**
 
--   Stores **all survey datasets** used for the MRPT tool.
+-   Stores **all survey datasets** necessary for running the scripts.
 -   Data files in `.csv`, `.rds`, or other structured formats.
 
 #### **`docs/`**
@@ -58,7 +47,7 @@ It includes:
 #### **`scripts/`**
 
 -   Contains **all R analysis scripts** that handle the **survey data processing**.
--   These scripts generate outputs such as summary statistics, risk stratifications, and visualizations.
+-   These scripts generate outputs such as sentiments analysis, user profile plots, and visualizations.
 
 #### **`user_manual_files/`**
 
@@ -72,17 +61,17 @@ To run the **Shiny application locally**, follow these steps:
 1.  Clone the repository:
 
     ``` bash
-    git clone https://github.com/[your-repo]/MRPT.git
+    git clone https://github.com/urban_malaria/MRPT.git
     cd MRPT/Shiny_app
     ```
 
-2.  Install necessary R packages (if not already installed):
+2.  Install necessary R packages (if not already installed) for example:
 
     ``` r
     install.packages(c("shiny", "tidyverse", "leaflet", "ggplot2", "sf"))
     ```
 
-3.  Launch the application:
+3.  Launch the application or visit the [link](https://urbanmalaria.shinyapps.io/mrpt/):
 
     ``` r
     shiny::runApp()
@@ -95,15 +84,15 @@ To run the **Shiny application locally**, follow these steps:
 
 ## **Contributing**
 
-Contributions are welcome!
-If you'd like to contribute: 1.
-Fork this repository.
-2.
-Create a feature branch (`git checkout -b feature-branch-name`).
-3.
-Make and commit changes.
-4.
-Submit a pull request.
+Contributions are welcome! If you'd like to contribute:
+
+1.  Fork this repository.
+
+2.  Create a feature branch (`git checkout -b feature-branch-name`).
+
+3.  Make and commit changes.
+
+4.  Submit a pull request.
 
 For any questions or issues, feel free to open an issue or reach out to the development team.
 
