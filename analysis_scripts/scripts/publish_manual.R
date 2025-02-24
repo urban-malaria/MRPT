@@ -13,9 +13,9 @@ library(rmarkdown)
 library(quarto)
 
 # Define paths
-manual_file <- "analysis_scripts/docs/user_manual.qmd"
-html_output <- "analysis_scripts/docs/user_manual.html"
-pdf_output <- "analysis_scripts/docs/user_manual.pdf"
+manual_file <- "docs/user_manual.qmd"
+html_output <- "docs/user_manual.html"
+pdf_output <- "docs/user_manual.pdf"
 
 # Ensure Quarto is installed
 if (Sys.which("quarto") == "") {
@@ -40,7 +40,7 @@ html_content <- gsub("</body>", paste0(pdf_link, "</body>"), html_content)
 writeLines(html_content, html_output)
 
 # Push changes to GitHub
-system("git add /analysis_scripts/docs/user_manual.html docs/user_manual.pdf")
+system("git add /docs/user_manual.html docs/user_manual.pdf")
 system("git commit -m 'Updated user manual' ")
 system("git push origin main")
 
@@ -48,6 +48,6 @@ system("git push origin main")
 browseURL(html_output)
 
 # Print success message
-cat("\n✅ User Manual Published Successfully!")
-cat("\n🔗 HTML Version: https://github.com/urban-malaria/MRMT/blob/main/analysis_scripts/docs/user_manual.html")
-cat("\n📄 PDF Download: https://github.com/urban-malaria/MRMT/blob/main/analysis_scripts/docs/user_manual.pdf\n")
+# cat("\n✅ User Manual Published Successfully!")
+# cat("\n🔗 HTML Version: https://github.com/urban-malaria/MRMT/blob/main/docs/user_manual.html")
+# cat("\n📄 PDF Download: https://github.com/urban-malaria/MRMT/blob/main/docs/user_manual.pdf\n")

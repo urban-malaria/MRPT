@@ -3,7 +3,7 @@
     "path": "C:/Users/laure/Documents/urban_malaria/MRMT/analysis_scripts/scripts/publish_manual.R",
     "project_path": "analysis_scripts/scripts/publish_manual.R",
     "type": "r_source",
-    "hash": "0",
+    "hash": "3855876671",
     "contents": "",
     "dirty": false,
     "created": 1740425894660.0,
@@ -12,15 +12,15 @@
     "properties": {
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "24,26",
-        "scrollLine": "16"
+        "cursorPosition": "17,16",
+        "scrollLine": "7"
     },
     "folds": "",
-    "lastKnownWriteTime": 1740427433,
+    "lastKnownWriteTime": 1740431604,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1740427433868,
+    "last_content_update": 1740431604714,
     "read_only": false,
     "read_only_alternatives": []
 }
