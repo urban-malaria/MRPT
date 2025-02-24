@@ -33,7 +33,8 @@ system2("quarto", args = c("render", manual_file, "--to", "pdf"))
 
 # Modify HTML to include PDF download link
 html_content <- readLines(html_output)
-pdf_link <- "<p><a href=\"user_manual.pdf\" target=\"_blank\">📄 Download the User Manual (PDF)</a></p>"
+# pdf_link <- "<p><a href=\"user_manual.pdf\" target=\"_blank\">📄 Download the User Manual (PDF)</a></p>"
+pdf_link <- "<p><a href=\"https://urban-malaria.github.io/MRMT/docs/user_manual.pdf\" target=\"_blank\">📄 Download the User Manual (PDF)</a></p>"
 
 # Insert PDF link before closing body tag
 html_content <- gsub("</body>", paste0(pdf_link, "</body>"), html_content)
@@ -46,6 +47,7 @@ system("git push origin main")
 
 # Open HTML in browser
 browseURL(html_output)
+
 
 # Print success message
 # cat("\n✅ User Manual Published Successfully!")
