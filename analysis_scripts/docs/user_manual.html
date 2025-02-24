@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.6.40">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Urban Malaria Lab at Loyola University Chicago">
+
+<title>User Manual - Malaria Re-Prioritization Tool</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+
+
+<script src="user_manual_files/libs/clipboard/clipboard.min.js"></script>
+<script src="user_manual_files/libs/quarto-html/quarto.js"></script>
+<script src="user_manual_files/libs/quarto-html/popper.min.js"></script>
+<script src="user_manual_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="user_manual_files/libs/quarto-html/anchor.min.js"></script>
+<link href="user_manual_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="user_manual_files/libs/quarto-html/quarto-syntax-highlighting-549806ee2085284f45b00abea8c6df48.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="user_manual_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="user_manual_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="user_manual_files/libs/bootstrap/bootstrap-f9800913130dd769cfcc4c5d223db752.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body>
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul class="collapse">
+  <li><a href="#abstract" id="toc-abstract" class="nav-link active" data-scroll-target="#abstract">Abstract</a></li>
+  <li><a href="#introduction-to-malaria-re-prioritization-tool-mrpt" id="toc-introduction-to-malaria-re-prioritization-tool-mrpt" class="nav-link" data-scroll-target="#introduction-to-malaria-re-prioritization-tool-mrpt">Introduction to Malaria Re-Prioritization Tool (MRPT)</a></li>
+  <li><a href="#home-page" id="toc-home-page" class="nav-link" data-scroll-target="#home-page">Home Page</a></li>
+  <li><a href="#input-variables" id="toc-input-variables" class="nav-link" data-scroll-target="#input-variables">Input variables</a></li>
+  <li><a href="#specifying-relationships-between-malaria-burden-and-various-risk-factors" id="toc-specifying-relationships-between-malaria-burden-and-various-risk-factors" class="nav-link" data-scroll-target="#specifying-relationships-between-malaria-burden-and-various-risk-factors">Specifying relationships between malaria burden and various risk factors</a></li>
+  <li><a href="#ranking-of-wards" id="toc-ranking-of-wards" class="nav-link" data-scroll-target="#ranking-of-wards">Ranking of Wards</a></li>
+  <li><a href="#decision-tree" id="toc-decision-tree" class="nav-link" data-scroll-target="#decision-tree">Decision tree</a></li>
+  <li><a href="#manual-labelling-tab" id="toc-manual-labelling-tab" class="nav-link" data-scroll-target="#manual-labelling-tab"><strong>Manual Labelling Tab</strong></a></li>
+  <li><a href="#final-note-to-users" id="toc-final-note-to-users" class="nav-link" data-scroll-target="#final-note-to-users"><strong>Final Note to users</strong></a></li>
+  <li><a href="#documentation-and-sharing" id="toc-documentation-and-sharing" class="nav-link" data-scroll-target="#documentation-and-sharing"><strong>Documentation and Sharing</strong></a></li>
+  </ul>
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="user_manual.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li></ul></div></nav>
+</div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">User Manual - Malaria Re-Prioritization Tool</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Urban Malaria Lab at Loyola University Chicago </p>
+          </div>
+  </div>
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="abstract" class="level2">
+<h2 class="anchored" data-anchor-id="abstract">Abstract</h2>
+<p>This document provides a detailed overview of how National Malaria Programs can leverage the Malaria Reprioritization tool to inform the proper targeting of interventions, with a focus on Insecticide-Treated Nets (ITNs). While complex mathematical and statistical models are typically used to guide these decisions, such approaches often require the expertise of external consultants and lengthy turnaround times that do not align with the rapid timelines of campaign implementation and fund disbursement. Faced with time constraints, National Malaria Programs can adopt this user-friendly software tool for urgent decision-making, although it is not intended to replace more advanced mathematical and statistical techniques.</p>
+<p>Our approach is delivered via an R Shiny Application (ShinyApp), which is accessible both online and offline to mitigate internet connectivity issues. The application helps with data visualizations, data cleaning and composite score calculations for malaria risk assessment. This document outlines the steps necessary to use the application effectively. Developed in collaboration with Nigeria’s National Malaria Elimination Programme, the application is designed to be flexible, generic, scalable, and user-friendly - catering to both novice and advanced users.</p>
+</section>
+<section id="introduction-to-malaria-re-prioritization-tool-mrpt" class="level2">
+<h2 class="anchored" data-anchor-id="introduction-to-malaria-re-prioritization-tool-mrpt">Introduction to <a href="https://urbanmalaria.shinyapps.io/mrpt/">Malaria Re-Prioritization Tool (MRPT)</a></h2>
+<p>Malaria continues to pose a significant public health challenge in sub Saharan Africa. In urban areas malaria burden is generally low and typically focal. The focal transmission in neighborhoods with inadequate housing and sanitation systems which heightens the malaria risk. Unfortunately designing intervention approaches for cities is challenging due to insufficient data to identify high burden areas. With the decrease in funding and constrained resources, efficient resource allocation and proper targeted interventions are more critical than ever. The Malaria Re-Prioritization Tool (MRPT) is an R-Shiny application co-developed with end-users to address these challenges head-on.</p>
+<p>The MRPT offers a standardized, scalable platform that empowers users to conduct malaria risk assessments and optimize intervention strategies. Users begin by uploading a data file containing variables associated with malaria transmission alongside a shapefile of the area of interest. To ensure the accuracy of the tool’s outputs, users should validate the data’s credibility using platforms such as <a href="https://earthengine.google.com/">Google Earth Engine</a> or <a href="https://earth.google.com/web/@0,-2.135,0a,22251752.77375655d,35y,0h,0t,0r/data=CgRCAggBQgIIAEoNCP___________wEQAA">Google Earth Pro</a>. Once validated, these variables are then used to identify high-risk wards, the tool’s ability to allow for uploading data and shapefiles demonstrates the tool’s generilizability, scalability, and alignment with national malaria strategies in different contexts.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="images/Figure_5.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Summarized output of the MRPT based of a Warri, a metropolitan area in the Delta state.</strong> This an illustration of the visualization end users can expect to get after using this application, including the selected covariates (<strong>A</strong>), two maps that seemed most plausible based on the quality assurance done to the initial covariates (<strong>B</strong>), risk map that is based on the median values of the ranks of all the models (C), and decision tree that outlines the sequence of steps implemented <strong>(D</strong>).</figcaption>
+</figure>
+</div>
+<p>By facilitating precise targeting of interventions, the MRPT helps maximize the impact of limited financial resources and supports more informed and standardized decision-making. User involvement throughout the development process has ensured the tool’s usability, reliability, and methodological rigor. This continuous stakeholder engagement has not only refined the MRPT but also reinforced its role as a vital instrument in reducing malaria in urban Nigeria through optimized resource distribution and strategic intervention prioritization.</p>
+<section id="sec-purpose-of-this-guide" class="level3">
+<h3 class="anchored" data-anchor-id="sec-purpose-of-this-guide"><strong>Purpose of This Guide</strong></h3>
+<p>This guide provides a <strong>step-by-step walkthrough</strong> for using the MRMT, from <strong>data preparation</strong> to <strong>final analysis and interpretation</strong>. By following this manual, users will gain a comprehensive understanding of how to:</p>
+<ul>
+<li><p><strong>Upload, clean, and process data</strong> and <strong>shapefiles</strong> required for malaria risk assessment.</p></li>
+<li><p><strong>Customize settings</strong> to adjust key malaria risk factors based on available information.</p></li>
+<li><p><strong>Generate malaria risk maps</strong> at the <strong>ward level</strong>, displaying priority areas for intervention.</p></li>
+<li><p><strong>Interpret the outputs</strong> to inform evidence-based malaria control strategies.</p></li>
+</ul>
+<p>These steps ensure users can effectively navigate the tool from <strong>initial data preparation</strong> to <strong>final analysis and interpretation</strong>. By following this guide, users will gain the necessary knowledge to leverage the MRPT for <strong>evidence-based decision-making</strong>, helping to optimize malaria control strategies at the <strong>ward level</strong>. The tutorial data can be downloaded using the link here (<a href="https://drive.google.com/drive/folders/1Y0N1bT1NbSq--NNg7q2DNP5biC0PyzhM?ths=true">shapefile and variables</a>) to follow the tutorial.</p>
+</section>
+<section id="who-should-use-this-tool" class="level3">
+<h3 class="anchored" data-anchor-id="who-should-use-this-tool"><strong>Who Should Use This Tool?</strong></h3>
+<p>The MRMT is intended for:</p>
+<ul>
+<li><p><strong>National Malaria Elimination Programs (NMEP)</strong></p></li>
+<li><p><strong>Public health decision-makers and policy planners</strong></p></li>
+<li><p><strong>Epidemiologists and malaria researchers</strong></p></li>
+<li><p><strong>Non Governmental Organizations (NGOs) and health organizations</strong> involved in malaria control</p></li>
+<li><p><strong>Field teams</strong> conducting malaria surveillance and intervention distribution.</p></li>
+</ul>
+<p>The tool can be accessed <a href="https://urbanmalaria.shinyapps.io/mrpt/">online</a> and offline (to download the desktop app).</p>
+<section id="installation-of-the-desktop-version" class="level4">
+<h4 class="anchored" data-anchor-id="installation-of-the-desktop-version"><strong>Installation of the desktop version</strong></h4>
+<p>We have created a desktop version of the MRPT that can run without internet connection. This is recommended for users without a strong internet connection. They can download the application access it through flash drives for installation. To install the application follow the steps below.</p>
+</section>
+<section id="installation-steps" class="level4">
+<h4 class="anchored" data-anchor-id="installation-steps">Installation Steps:</h4>
+<ul>
+<li><p>Download and run MRPT_Setup.exe as administrator.</p></li>
+<li><p>Follow all the installation prompts. for some users the firewall or antivirus may block the installition process so you will have to bypass this by temporarily disabling them.</p></li>
+<li><p>Launch the app from your desktop or start menu and this will start an R session in the terminal.</p></li>
+</ul>
+<p>The app contains all necessary components including - ability to start an R session and required packages. Note you must have R installed on your machine as the applications and then open up the local web environment/dashboard/localhost application.</p>
+<p>Currently the appliation works only on windows operating system, you need sdministrator privileges to installation and requires about 2GB free disk of space. If you encounter any issues or have questions, please email.</p>
+</section>
+</section>
+</section>
+<section id="home-page" class="level2">
+<h2 class="anchored" data-anchor-id="home-page">Home Page</h2>
+<p>When one reaches the landing page the first thing that appearsis a pop up “information” message box that disappears after a minute.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="images/information.png" class="img-fluid figure-img"></p>
+<figcaption>Information pop- up box that comes up at the start of each session.</figcaption>
+</figure>
+</div>
+<p>Once the pop-up information Tab disappears the landing page can clearly be seen with the instructions to the user (see below).</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="images/landingpage.png" class="img-fluid figure-img"></p>
+<figcaption>Homepage of the MRPT with information about each tab, instructions to get dummy data and information on lab and developers. It also shows a schematic of the collaborative process used in the app development.</figcaption>
+</figure>
+</div>
+</section>
+<section id="input-variables" class="level2">
+<h2 class="anchored" data-anchor-id="input-variables">Input variables</h2>
+<section id="upload-data" class="level3">
+<h3 class="anchored" data-anchor-id="upload-data">Upload data</h3>
+<p>The <strong>input variable</strong> tab (see Figure 1) enables you to upload both your shapefile and dataset. The zipped shapefile folder must contain a 1.) geometry file (<em>.shp</em>) - stores the spatial features (points, lines, and polygons), 2.) shape index file (<em>.shx</em>) - provides an index linking geometry and links the geometry to the attributes, and 3.) attribute table (<em>.dbf</em>) - stores tabular data (for example names IDs, other attrubutes for each shape). The dataset should be a .csv file and contain all the variables you want to explore. (<em>Please refer to <a href="#sec-purpose-of-this-guide">purpose of this guide</a></em> and <em>to zip files please follow this <a href="https://support.microsoft.com/en-us/windows/zip-and-unzip-files-8d28fa72-f2f9-712f-67df-f80cf89fd4e5">link</a></em>). Ensure you know where your data files are saved, navigate to the appropriate folder, and upload the files.</p>
+<p>The tool accepts .CSV files containing ward names and various risk factors, such as settlement type, vegetation index, and rainfall data. After uploading, the system checks for missing values and ward name matches between your files.</p>
+</section>
+<section id="handling-unmatched-ward-names" class="level3">
+<h3 class="anchored" data-anchor-id="handling-unmatched-ward-names">Handling unmatched ward names</h3>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="images/Screenshot%202025-02-20%20143121.png" class="img-fluid figure-img"></p>
+<figcaption>Pop-up box with menu for names that need correction and suggested ward names for the correction.</figcaption>
+</figure>
+</div>
+<p>Once the ward names have been corrected, you can select the variable that you interested in visualizing. Some variables have NAs and this is addressed using several pathways see next section.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="images/Select_variables-02.png" class="img-fluid figure-img"></p>
+<figcaption>Selected variable (Enhanced Vegetation Index) to view in this instance.</figcaption>
+</figure>
+</div>
+</section>
+<section id="handling-missing-values" class="level3">
+<h3 class="anchored" data-anchor-id="handling-missing-values">Handling missing values</h3>
+<p>When missing values are detected (<em>see - <a href="#missing_values">figure 3</a></em>), the tool offers three methods for handling t</p>
+<ul>
+<li><p>spatial neighbor mean method uses values from adjacent wards, particularly useful for spatially correlated variables</p></li>
+<li><p>regional mean provides an average from the entire study area</p></li>
+<li><p>regional mode uses the most common value, suitable for categorical variables, this is also recommended when the data is sparse and neighboring polygons have no data</p></li>
+</ul>
+<p>Scroll down the “INPUT VARIABLES” and click on “CLICK TO FILL MISSING VALUES” and a drop down menu will appear that allows you to specify one of the three smoothing approaches</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="images/smoothing.png" class="img-fluid figure-img"></p>
+<figcaption>Dropdown menu with the choice of smoothing approaches.</figcaption>
+</figure>
+</div>
+<p>After have selected the smoothing method fo choice click apply button and two maps will appear showcasing the map prior to smoothing and the map after smoothing (missing values) as shown in figure 4). You</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="images/smoothed_map.png" class="img-fluid figure-img"></p>
+<figcaption>Missing data vs smoothed data map</figcaption>
+</figure>
+</div>
+<p>The left map displays the original data with missing values, while the right map shows the cleaned dataset. This visual comparison helps you verify that the cleaning process produced reasonable results. The color gradient indicates the variable’s magnitude across different wards, with tooltips providing detailed information for each area.</p>
+</section>
+</section>
+<section id="specifying-relationships-between-malaria-burden-and-various-risk-factors" class="level2">
+<h2 class="anchored" data-anchor-id="specifying-relationships-between-malaria-burden-and-various-risk-factors">Specifying relationships between malaria burden and various risk factors</h2>
+<section id="variable-relationships" class="level3">
+<h3 class="anchored" data-anchor-id="variable-relationships"><strong>Variable Relationships</strong></h3>
+<p>Malaria burden is shaped by a complex interplay of <strong>environmental, socio-economic, biological, and healthcare-related factors</strong>. Understanding how these variables influence malaria transmission is critical for designing effective intervention strategies. In this section we allow the users to specify the relationship each variable has with the burden of malaria direct or inverse. Notice that our approach assumes that relationships are linear. We acknowledge that relationships may be non-linear. Hence, we suggest that users should be cautious in their choices as this has implications for the areas suggested for exclusion during net campaigns.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="images/relationships.png" class="img-fluid figure-img"></p>
+<figcaption>Allows the user to specify the relation between malaria burden and each variables in the dataset.</figcaption>
+</figure>
+</div>
+<section id="environmental-factors" class="level4">
+<h4 class="anchored" data-anchor-id="environmental-factors"><strong>1. Environmental Factors</strong></h4>
+<ul>
+<li><p><strong>Stagnant Water</strong>: In urban areas, <strong>poor drainage systems</strong> facilitate stagnant water accumulation, increasing mosquito density.</p></li>
+<li><p><strong>Land Use &amp; Deforestation</strong>: Deforestation alters <strong>mosquito habitats</strong>, sometimes increasing exposure by bringing human populations closer to vector-prone areas. <strong>Agricultural expansion</strong> can create new breeding sites, while urbanization may reduce transmission if effective drainage and housing improvements accompany growth.</p></li>
+</ul>
+</section>
+<section id="socio--economic-factors" class="level4">
+<h4 class="anchored" data-anchor-id="socio--economic-factors"><strong>2. Socio -Economic Factors</strong></h4>
+<ul>
+<li><p><strong>Wealth &amp; Housing Conditions</strong>: Poverty is a significant driver of malaria burden. Households with <strong>poor-quality housing</strong> (e.g., no window screens, thatched roofs) are more susceptible due to increased indoor mosquito exposure. Conversely, <strong>wealthier households</strong> often have <strong>better housing, bed net usage, and access to healthcare</strong>, reducing infection risk.</p></li>
+<li><p><strong>Occupation &amp; Mobility</strong>: People working outdoors at night (e.g., farmers, miners, and forest workers) have <strong>higher exposure</strong> to malaria vectors. <strong>Migration and travel</strong> between malaria-endemic and non-endemic regions contribute to transmission by introducing new cases to previously low-burden areas.</p></li>
+<li><p><strong>Education &amp; Awareness</strong>: Communities with <strong>low malaria literacy</strong> may have <strong>poor adherence to preventive measures</strong>, such as ITN use or early treatment-seeking behavior. <strong>Health education campaigns</strong> play a crucial role in shaping community practices.</p></li>
+</ul>
+</section>
+</section>
+<section id="normalization-tab" class="level3">
+<h3 class="anchored" data-anchor-id="normalization-tab"><strong>Normalization Tab</strong></h3>
+<p>Once the relationship between each variable and the malaria burden has been selected, the values are rescaled using the <a href="https://www.oreilly.com/library/view/hands-on-machine-learning/9781788393485/fd5b8a44-e9d3-4c19-bebb-c2fa5a5ebfee.xhtml">min-max method</a>. This ensures that all variables are comparable, preventing any single variable from dominating the composite score and allowing the relative contribution of each variable to be clearly identified.</p>
+<p><img src="images/nomilization.png" class="img-fluid"></p>
+<p><img src="images/normilization_1.png" class="img-fluid"></p>
+<p>We recommend an in-depth quality assurance review of the available data and local knowledge, the next step is to select variables that accurately reflect the situation on the ground. Users should consider the following questions:</p>
+<ul>
+<li><p><strong>Data Validation:</strong><br>
+The users are advised to ask themselves several questions which include - how does your dataset compare with imagery from <a href="https://earthengine.google.com/">Google Earth Engine</a> or <a href="https://earth.google.com/web/@0,-2.135,0a,22251752.77375655d,35y,0h,0t,0r/data=CgRCAggBQgIIAEoNCP___________wEQAA">Google Earth Pro</a>? Does the housing quality or settlement type data align with your local understanding of the area? Does the local knowlede corroborate the distance to water bodies data i.e.&nbsp;are areas with the lowest distance to water bodies measure actually near large bodies of water?</p></li>
+<li><p><strong>Data Completeness:</strong><br>
+What is the extent of missing values (NAs) in your data? Is it reasonable to apply any of the spatial smoothing technique? Can you trust the final output if over 40% of the wards have missing values?</p></li>
+</ul>
+<p>Once you have addressed these questions, select the quality-assured variables that will contribute to the composite score. The tool will calculate several composite score permutations, ranging from combinations of two variables up to the total number of selected variables. For example, if you choose three variables, you should expect to see four composite maps. <strong>Note:</strong> At least two variables must be selected to generate a composite score.</p>
+<p><img src="images/composite_scores.png" class="img-fluid"></p>
+</section>
+</section>
+<section id="ranking-of-wards" class="level2">
+<h2 class="anchored" data-anchor-id="ranking-of-wards">Ranking of Wards</h2>
+<p>A summary of all composite score maps is presented as a box and whisker plot, offering a statistical overview of vulnerability scores (or ranks) across wards. In this visualization, each horizontal bar represents a ward: the box shows the middle 50% of scores, and the whiskers extend to the full range. This format helps identify wards that consistently exhibit high vulnerability across various variable combinations. Additionally, users have the option to view the data as a map that displays the median score for each ward, derived from the different composite scores.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="images/box_whisker.png" class="img-fluid figure-img"></p>
+<figcaption>Option one - Box and whisker plot showcasing the distribution of the ranks for each ward based of all the composite scores generated.</figcaption>
+</figure>
+</div>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="images/vulnerability_map%20(2).png" class="img-fluid figure-img"></p>
+<figcaption>Option two - the vulnerability map based on the median ranks of each ward.</figcaption>
+</figure>
+</div>
+<p>The user can toggle between the two options by clicking the “View Map” button. The ward vulnerability map translates statistical rankings into a geographic display, using a color gradient that ranges from yellow (indicating the lowest vulnerability) to dark purple (indicating the highest vulnerability). This visual representation helps to identify spatial patterns in malaria risk, making it particularly useful for understanding geographic clustering of risk and for planning targeted interventions.</p>
+</section>
+<section id="decision-tree" class="level2">
+<h2 class="anchored" data-anchor-id="decision-tree">Decision tree</h2>
+<p><img src="images/decision_tree-01.png" class="img-fluid"></p>
+<p>The decision tree visualizes your analysis process, from initial variable selection through to final recommendations. It shows which variables were included or excluded, how they were processed, and how they contributed to the final risk assessment. You can download this visualization in either PNG or PDF format for documentation and presentation purposes.</p>
+</section>
+<section id="manual-labelling-tab" class="level2">
+<h2 class="anchored" data-anchor-id="manual-labelling-tab"><strong>Manual Labelling Tab</strong></h2>
+<p>The manual labelling feature provides street-level detail for individual wards. This view shows settlement types (formal, informal, slum, and nonresidential areas) and local infrastructure. This detailed view is particularly valuable for planning specific interventions and understanding local context.</p>
+<p><img src="images/esisi_classification.png" class="img-fluid"></p>
+<p>Notice that the manual labelling is only useful to the user if they have taken a moment to use <a href="https://earthengine.google.com/">Google Earth Engine</a> or <a href="https://earth.google.com/web/@0,-2.135,0a,22251752.77375655d,35y,0h,0t,0r/data=CgRCAggBQgIIAEoNCP___________wEQAA">Google Earth Pro</a> to understand the ward identified for prioritization. This entails downloading the gridded shapefiles for each of the wards in the top 5, load them on google <a href="https://earth.google.com/web/@0,-2.135,0a,22251752.77375655d,35y,0h,0t,0r/data=CgRCAggBQgIIAEoNCP___________wEQAA">Google Earth Pro</a> and then for each tile use a predefined settlement type classification checklist to label the settlements into slums, informal and informal settlements and a good substitute when field visits are constrained by funding and time.</p>
+</section>
+<section id="final-note-to-users" class="level2">
+<h2 class="anchored" data-anchor-id="final-note-to-users"><strong>Final Note to users</strong></h2>
+<p>The tool’s outputs support evidence-based decision making for malaria control efforts. When interpreting results, consider both the statistical rankings and spatial patterns. Pay particular attention to areas that consistently show high risk across different variable combinations and models.</p>
+<p>For resource allocation, focus on wards that show high vulnerability in both the statistical analysis and spatial mapping. Consider the settlement types and accessibility when planning interventions. Regular updates to the analysis can help track the effectiveness of interventions over time.</p>
+</section>
+<section id="documentation-and-sharing" class="level2">
+<h2 class="anchored" data-anchor-id="documentation-and-sharing"><strong>Documentation and Sharing</strong></h2>
+<p>Keep detailed records of your variable selections and decision rationale. The tool supports this by allowing you to download maps, statistical summaries, and the decision tree visualization. When sharing results, include both the overview maps and detailed ward-level information to provide a complete picture of the risk assessment.</p>
+<p>Remember to validate results against local knowledge and existing malaria data. Regular updates to the analysis can help track changes over time and assess the impact of interventions.</p>
+<p>For additional support or questions, contact: <a href="mailto:lmhlanga@luc.edu">lmhlanga@luc.edu</a> or <a href="mailto:bboateng1@luc.edu">bboateng1@luc.edu</a> (co -developers) and <a href="mailto:iozodiegwu@luc.edu"><strong>iozodiegwu@luc.edu</strong></a><strong>(Principal Investigator</strong>).</p>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const onCopySuccess = function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  }
+  const getTextToCopy = function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+    text: getTextToCopy
+  });
+  clipboard.on('success', onCopySuccess);
+  if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+    const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+      text: getTextToCopy,
+      container: window.document.getElementById('quarto-embedded-source-code-modal')
+    });
+    clipboardModal.on('success', onCopySuccess);
+  }
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
