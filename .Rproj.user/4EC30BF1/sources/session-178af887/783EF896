@@ -1,9 +1,9 @@
 {
     "id": "783EF896",
-    "path": "C:/Users/laure/Documents/urban_malaria/MRMT/docs/user_manual.qmd",
-    "project_path": "docs/user_manual.qmd",
+    "path": "C:/Users/laure/Documents/urban_malaria/MRMT/docs/index.qmd",
+    "project_path": "docs/index.qmd",
     "type": "quarto_markdown",
-    "hash": "966707804",
+    "hash": "3875955177",
     "contents": "",
     "dirty": false,
     "created": 1740437541793.0,
@@ -18,14 +18,14 @@
         "rmdVisualCollapsedChunks": "",
         "cursorPosition": "187,0",
         "scrollLine": "196",
-        "rmdVisualModeLocation": "16415:13434"
+        "rmdVisualModeLocation": "16444:13332"
     },
     "folds": "",
-    "lastKnownWriteTime": 1740439220,
+    "lastKnownWriteTime": 1740441078,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1740439220332,
+    "last_content_update": 1740441078866,
     "read_only": false,
     "read_only_alternatives": []
 }

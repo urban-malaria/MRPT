@@ -28,11 +28,9 @@ if (!file.exists(manual_file)) {
 }
 
 # Render HTML and PDF user manuals
-# system2("quarto", args = c("render", manual_file, "--to", "html"))
-# system2("quarto", args = c("render", manual_file, "--to", "pdf"))
+system2("quarto", args = c("render", manual_file, "--to", "html"))
+system2("quarto", args = c("render", manual_file, "--to", "pdf"))
 
-system("quarto render docs/user_manual.qmd --to html")
-system("quarto render docs/user_manual.qmd --to pdf")
 
 # Modify HTML to include PDF download link
 html_content <- readLines(html_output)
@@ -44,7 +42,8 @@ html_content <- gsub("</body>", paste0(pdf_link, "</body>"), html_content)
 writeLines(html_content, html_output)
 
 # Push changes to GitHub
-system("git add /docs/user_manual.html docs/user_manual.pdf -f")
+system("git mv /docs/user_manual.html docs/index.html -f")
+system("git add /docs/index.html docs/user_manual.pdf -f")
 system("git commit -m 'Updated user manual' ")
 system("git push origin main")
 
