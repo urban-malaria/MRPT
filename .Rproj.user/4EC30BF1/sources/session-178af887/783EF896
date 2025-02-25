@@ -3,9 +3,9 @@
     "path": "C:/Users/laure/Documents/urban_malaria/MRMT/docs/index.qmd",
     "project_path": "docs/index.qmd",
     "type": "quarto_markdown",
-    "hash": "3875955177",
+    "hash": "0",
     "contents": "",
-    "dirty": false,
+    "dirty": true,
     "created": 1740437541793.0,
     "source_on_save": false,
     "relative_order": 9,
@@ -18,14 +18,14 @@
         "rmdVisualCollapsedChunks": "",
         "cursorPosition": "187,0",
         "scrollLine": "196",
-        "rmdVisualModeLocation": "16444:13332"
+        "rmdVisualModeLocation": "16444:13468.6669921875"
     },
     "folds": "",
     "lastKnownWriteTime": 1740441078,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1740441078866,
+    "last_content_update": 1740441588776,
     "read_only": false,
     "read_only_alternatives": []
 }
