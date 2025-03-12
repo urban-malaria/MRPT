@@ -144,7 +144,7 @@ ui <- fluidPage(
                )
              )
     ), 
-   
+    
     tabPanel("Normalization", 
              sidebarLayout(
                sidebarPanel(
@@ -1195,7 +1195,7 @@ server <- function(input, output, session) {
     recommended [label="Recommended Risk Map\\nby the Box and Whisker Plot"
                 fillcolor="%s"
                 fontcolor="white"]
-    priority [label="Top 5 Wards\\nfor Re-Prioritization:\\n%s"
+    priority [label="Top 5 Wards\\nfor Reprioritization:\\n%s"
              fillcolor="%s"
              fontcolor="white"]
     // Edge definitions with improved spacing

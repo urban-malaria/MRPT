@@ -30,7 +30,7 @@ library(DT)
 library(ggtext)
 library(googledrive)
 library(leaflet)
-library(reticulate)
+#library(reticulate)
 library(rgee)
 
 
@@ -355,7 +355,6 @@ plot_normalized_map <- function(shp_data, processed_csv, selected_vars) {
 # Function to calculate composite scores for different models
 
 composite_score_models <- function(normalized_data, selected_vars, shp_data) {
-  
   print("Entering composite_score_models function")
   print("Normalized data structure:")
   print(str(normalized_data))
@@ -390,8 +389,8 @@ composite_score_models <- function(normalized_data, selected_vars, shp_data) {
   
   # Calculate composite scores
   final_data <- normalized_data %>% 
-    select(WardName, WardCode) %>%
-    left_join(shp_data %>% select(WardName, WardCode, Urban), by = c("WardCode", "WardName"))
+    select(WardName) %>%
+    left_join(shp_data %>% select(WardName, Urban), by = "WardName")
   
   for (i in seq_along(model_combinations)) {
     model_name <- paste0("model_", i)
@@ -501,7 +500,7 @@ plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_p
       
       # Check if the model is flagged
       if (any(processed_csv$flag_not_ideal[processed_csv$variable == model_formulas$model[i]])) {
-        base_label <- paste0(base_label, "<br><span style='color:red;'>(Model Not Ideal)</span>")
+        base_label <- paste0(base_label, "<br><span style='color:red;'>(Not Ideal)</span>")
       }
       
       base_label
@@ -539,7 +538,7 @@ plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_p
       labs(subtitle=paste("Page", page, "of", pages), 
            title = 'Composite Score Distribution by Model', 
            fill = "Malaria Risk Score",
-           caption = "Blue outline indicates non-urban wards ranked in top 5 for de-prioritization (model may not be ideal)") +
+           caption = "Blue outline indicates non-urban wards ranked in top 5 for reprioritization (not ideal)") +
       theme_void() +
       theme(
         strip.text = element_markdown(size = 7, face = "bold", lineheight = 1.0),
