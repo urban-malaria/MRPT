@@ -1,10 +1,28 @@
+# Load required libraries
+library(shiny)
+library(shinythemes)
+library(shinyjs)
+library(dplyr)
+library(leaflet)
+library(sf)
+library(ggiraph)
+library(ggplot2)
+library(plotly)
+library(DT)
+library(htmltools)
+library(DiagrammeR)
+
+# Source functions.R file
 source("functions.R")
-#shiny::runApp("Shiny_app")
-ui <- fluidPage(
-  theme = shinytheme("sandstone"),
-  useShinyjs(),  
-  titlePanel("Malaria Reprioritization Tool"),
-  
+
+#==============================================================================
+# UI Components - Helper Functions
+#==============================================================================
+
+#' Create custom CSS styles for the app
+#' 
+#' @return HTML object with CSS styles
+create_custom_css <- function() {
   tags$head(
     tags$style(HTML("
       .modal-content {
@@ -41,335 +59,993 @@ ui <- fluidPage(
       }
       
       .shiny-progress-container {
-      top: 0px;
-    }
-    .progress-bar {
-      background-color: #337ab7;
-    }
+        top: 0px;
+      }
+      .progress-bar {
+        background-color: #337ab7;
+      }
+      
+      /* Manual Labeling/Micro-Planning styles */
+      .classification-box {
+        padding: 15px;
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        margin-bottom: 15px;
+      }
+      .classification-instructions {
+        padding: 15px;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        margin-bottom: 15px;
+      }
+      .classification-summary {
+        background-color: #e9ecef;
+        border-radius: 8px;
+        padding: 15px;
+        margin-top: 15px;
+      }
+      .classification-badge {
+        display: inline-block;
+        padding: 5px 10px;
+        border-radius: 15px;
+        color: white;
+        font-weight: bold;
+        margin: 2px;
+      }
+      .badge-formal {
+        background-color: #0074D9;
+      }
+      .badge-informal {
+        background-color: #FF4136;
+      }
+      .badge-avoid {
+        background-color: #2ECC40;
+      }
+      .badge-unclassified {
+        background-color: #AAAAAA;
+        color: #333;
+      }
+      .urban-threshold-box {
+        background-color: #f0f4f8;
+        border-left: 4px solid #4a6fa5;
+        padding: 15px;
+        margin-bottom: 15px;
+        border-radius: 4px;
+      }
+      .reprioritized-box {
+        background-color: #fff0f0;
+        border-left: 4px solid #dc3545;
+        padding: 15px;
+        margin-bottom: 15px;
+        border-radius: 4px;
+      }
+      
+      /* Net Distribution styles */
+      .net-distribution-container {
+        font-family: 'Source Sans Pro', sans-serif;
+        color: #333;
+        padding: 0 15px;
+      }
+      .dashboard-card {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        padding: 20px;
+        margin-bottom: 20px;
+        transition: all 0.3s ease;
+      }
+      .dashboard-card:hover {
+        box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+      }
+      .section-header {
+        border-left: 4px solid #5D4E6D;
+        padding-left: 10px;
+        margin-bottom: 20px;
+        color: #5D4E6D;
+      }
+      .action-button {
+        background-color: #5D4E6D;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 15px;
+        transition: background-color 0.3s ease;
+      }
+      .action-button:hover {
+        background-color: #4A3D57;
+      }
+      .coverage-container {
+        margin: 30px 0;
+      }
+      .coverage-bar {
+        height: 30px;
+        border-radius: 15px;
+        background: #f0f0f0;
+        overflow: hidden;
+        box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
+      }
+      .coverage-fill {
+        height: 100%;
+        background: linear-gradient(to right, #4CAF50, #8BC34A);
+        border-radius: 15px;
+        transition: width 1s ease-in-out;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+      }
+      .stat-panel {
+        text-align: center;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        color: white;
+      }
+      .stat-panel.population {
+        background: linear-gradient(135deg, #3949AB, #1E88E5);
+      }
+      .stat-panel.households {
+        background: linear-gradient(135deg, #00897B, #26A69A);
+      }
+      .stat-panel.nets {
+        background: linear-gradient(135deg, #E53935, #EF5350);
+      }
+      .stat-panel.coverage {
+        background: linear-gradient(135deg, #43A047, #66BB6A);
+      }
+      .stat-value {
+        font-size: 24px;
+        font-weight: bold;
+      }
+      .stat-label {
+        text-transform: uppercase;
+        font-size: 12px;
+        opacity: 0.9;
+      }
+      .strategy-card {
+        background: #f9f9f9;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        transition: all 0.3s ease;
+      }
+      .strategy-card.selected {
+        background: #e8f5e9;
+        border-color: #4CAF50;
+        box-shadow: 0 0 8px rgba(76, 175, 80, 0.3);
+      }
+      .strategy-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      }
+      .distribution-phases {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-top: 20px;
+      }
+      .phase {
+        padding: 10px;
+        margin-bottom: 10px;
+        border-radius: 5px;
+      }
+      .phase-1 {
+        background-color: #e8f5e9;
+        border-left: 4px solid #4caf50;
+      }
+      .phase-2 {
+        background-color: #fff3e0;
+        border-left: 4px solid #ff9800;
+      }
     "))
-  ),
-  
-  br(),
-  
-  tabsetPanel(
-    tabPanel("Instructions",
-             tags$br(),
-             fluidRow(
-               column(6,
-                      h3("Instructions for Using the Malaria Reprioritization Tool"),
-                      p("Follow these steps to use the tool effectively:"),
-                      h4("1. Preparing Your Data"),
-                      tags$ul(
-                        tags$li("Ensure you have a CSV file with variable data and the corresponding shapefile for your region of interest."),
-                        tags$li("The CSV file should include columns for WardName and various risk factors (e.g., settlement type, enhanced vegetation index, rainfall, etc.)."),
-                        tags$li("Compress the shapefile components into a zip file.")
-                      ),
-                      h4("2. Input Variables (Data and Shapefiles) Tab"),
-                      tags$ul( 
-                        tags$li("Upload your CSV file and zipped shapefile using the respective upload buttons."),
-                        tags$li("Select a variable to visualize from the dropdown menu and click 'Plot Maps' to see its distribution."),
-                        tags$li("Use the 'Click to fill in missing values' button if your data has missing values.")
-                      ),
-                      h4("3. Normalization Tab"),
-                      tags$ul( 
-                        tags$li("Define how each variable relates to malaria risk (direct or inverse)."),
-                        tags$li("Visualize normalized variables to understand their distribution.")
-                      ),
-                      h4("4. Composite Score Distribution Tab"),
-                      tags$ul(
-                        tags$li("Select variables to include in your composite risk score."),
-                        tags$li("Generate and examine composite score maps for different variable combinations.")
-                      ),
-                      h4("5. Box and Whisker Plot Tab"),
-                      tags$ul( 
-                        tags$li("Analyze the distribution of vulnerability scores across wards."),
-                        tags$li("Toggle between box plot and map views to understand risk distribution.")
-                      ),
-                      h4("6. Decision Tree Tab"),
-                      tags$ul(
-                        tags$li("Explore a visual representation of the decision-making process in creating the malaria risk maps."),
-                        tags$li("Understand how variable selections impact the final risk assessment.")
-                      ),
-                      h4("7. Manual Labelling Tab"),
-                      tags$ul(
-                        tags$li("Visualize detailed maps of individual wards based on rankings from previous analyses."),
-                        tags$li("Examine settlement types and other factors within specific wards.")
-                      ),
-                      h4("Data Privacy"),
-                      p("Please ensure that you have the necessary permissions to use and upload your data. Do not upload sensitive or personal data without proper authorization."),
-                      p(
-                        "For issues or technical support with the application, email ",
-                        tags$a(href="mailto:lmhlanga@luc.edu", "lmhlanga@luc.edu"),
-                        " or ",
-                        tags$a(href="mailto:bboateng1@luc.edu", "bboateng1@luc.edu")
-                      ),
-                      h4("Funding"),
-                      p("This work and the authors are supported by the Bill and Melinda Gates Foundation (Investment ID: INV-036449).")
-               ),
-               column(6, 
-                      tags$br(), tags$br(), tags$br(), tags$br(), 
-                      tags$img(src = "digital_abstract.png", height = "600px", width = "auto"),
-                      style = 'text-align: center',
-                      tags$h6("The figure above shows a digital abstract first presented in Ozodiegwu et-al (in-press), 
-                              and it shows how the application was used to develop the malaria risk map in Ilorin")
-               )
+  )
+}
+
+#' Create footer content
+#' 
+#' @return HTML content for the footer
+create_footer_content <- function() {
+  tagList(
+    tags$br(), tags$br(), tags$br(), tags$br(), tags$br(), tags$br(),
+    hr(),
+    div(
+      style='text-align: center; margin-top: 20px;',
+      'Created by the', 
+      shiny::HTML('<a href=\'https://www.urban-malaria.com/\' 
+                 target=\'_blank\'> Urban Malaria Lab </a>'),
+      '@ Loyola University Chicago, Parkinson School of Public Health, Department of Health Informatics and Data Science'
+    ),
+    br(),
+    div(
+      style='text-align: center; font-style: italic; font-size: 1.1em; margin-bottom: 20px;',
+      tags$strong('If you use this tool in your work, please cite:'),
+      br(),
+      'Mhlanga, L.,* Boateng, B.O.,* Jamiu, Y., Bamgboye, E.A., Adeniji, H., Ademu, C., Okoronkwo, C., Enang, G. & Ozodiegwu, I.D. (2024).',
+      br(),
+      'Malaria Reprioritization Tool. Urban Malaria Lab, Loyola University Chicago.',
+      br(),
+      'Available at: ',
+      tags$a(href="https://urbanmalaria.shinyapps.io/mrpt/", 
+             target="_blank", 
+             "https://urbanmalaria.shinyapps.io/mrpt/")
+    ),
+    br()
+  )
+}
+
+#==============================================================================
+# UI Tab Components
+#==============================================================================
+
+#' Create Instructions tab content
+#' 
+#' @return tabPanel content for Instructions tab
+instructions_tab <- function() {
+  tabPanel("Instructions",
+           tags$br(),
+           fluidRow(
+             column(6,
+                    h3("Instructions for Using the Malaria Reprioritization Tool"),
+                    p("Follow these steps to use the tool effectively:"),
+                    h4("1. Preparing Your Data"),
+                    tags$ul(
+                      tags$li("Ensure you have a CSV file with variable data and the corresponding shapefile for your region of interest."),
+                      tags$li("The CSV file should include columns for WardName and various risk factors (e.g., settlement type, enhanced vegetation index, rainfall, etc.)."),
+                      tags$li("Compress the shapefile components into a zip file.")
+                    ),
+                    h4("2. Input Variables (Data and Shapefiles) Tab"),
+                    tags$ul( 
+                      tags$li("Upload your CSV file and zipped shapefile using the respective upload buttons."),
+                      tags$li("Select a variable to visualize from the dropdown menu and click 'Plot Maps' to see its distribution."),
+                      tags$li("Use the 'Click to fill in missing values' button if your data has missing values.")
+                    ),
+                    h4("3. Normalization Tab"),
+                    tags$ul( 
+                      tags$li("Define how each variable relates to malaria risk (direct or inverse)."),
+                      tags$li("Visualize normalized variables to understand their distribution.")
+                    ),
+                    h4("4. Composite Score Distribution Tab"),
+                    tags$ul(
+                      tags$li("Select variables to include in your composite risk score."),
+                      tags$li("Generate and examine composite score maps for different variable combinations.")
+                    ),
+                    h4("5. Box and Whisker Plot Tab"),
+                    tags$ul( 
+                      tags$li("Analyze the distribution of vulnerability scores across wards."),
+                      tags$li("Toggle between box plot and map views to understand risk distribution.")
+                    ),
+                    h4("6. Decision Tree Tab"),
+                    tags$ul(
+                      tags$li("Explore a visual representation of the decision-making process in creating the malaria risk maps."),
+                      tags$li("Understand how variable selections impact the final risk assessment.")
+                    ),
+                    h4("7. Manual Labelling Tab"),
+                    tags$ul(
+                      tags$li("Visualize detailed maps of individual wards based on rankings from previous analyses."),
+                      tags$li("Examine settlement types and other factors within specific wards.")
+                    ),
+                    h4("Data Privacy"),
+                    p("Please ensure that you have the necessary permissions to use and upload your data. Do not upload sensitive or personal data without proper authorization."),
+                    p(
+                      "For issues or technical support with the application, email ",
+                      tags$a(href="mailto:lmhlanga@luc.edu", "lmhlanga@luc.edu"),
+                      " or ",
+                      tags$a(href="mailto:bboateng1@luc.edu", "bboateng1@luc.edu")
+                    ),
+                    h4("Funding"),
+                    p("This work and the authors are supported by the Bill and Melinda Gates Foundation (Investment ID: INV-036449).")
              ),
-    ),  
-    
-    tabPanel("Input variables (data and shapefiles)", 
-             fluidRow(
-               column(3,
-                      h3("Upload the shapefile and analysis data:"),
-                      fileInput("file_csv", "Choose CSV File", 
-                                accept = c(".csv", ".xlsx", ".xls")),
-                      fileInput("file_shp", "Choose a Zipped Shapefile", 
-                                accept = c('application/zip', 'application/x-zip-compressed', 
-                                           'multipart/x-zip', 'application/x-compress', 
-                                           'application/x-compressed', 'application/gzip')),
-                      uiOutput("reopen_mismatch_modal"),
-                      hr(),
-                      h4("Select Variable to Visualize"),
-                      uiOutput("variable_select"),
-                      actionButton("plot_data", "Plot Maps"),
-                      hr(),
-                      actionButton("data_cleaning", "Click to fill in missing values")
-               ),
-               column(9,
-                      fluidRow(
-                        uiOutput("plotLayout")
-                      ),
-                      htmlOutput("visualizationExplanation"),
-                      tags$p(style = "font-style: italic; margin-top: 10px;", 
-                             "Hover over the maps to see detailed information for each ward.")
-               )
+             column(6, 
+                    tags$br(), tags$br(), tags$br(), tags$br(), 
+                    tags$img(src = "digital_abstract.png", height = "600px", width = "auto"),
+                    style = 'text-align: center',
+                    tags$h6("The figure above shows a digital abstract first presented in Ozodiegwu et-al (in-press), 
+                and it shows how the application was used to develop the malaria risk map in Ilorin")
              )
-    ), 
-    
-    tabPanel("Normalization", 
-             sidebarLayout(
-               sidebarPanel(
-                 actionButton("specify_relationships", "SPECIFY VARIABLE RELATIONSHIPS"),
-                 tags$br(), 
-                 tags$br(),
-                 uiOutput("normalized_variable_select"),
-                 tags$br(),
-                 actionButton("plot_normalized", "PLOT NORMALIZED MAP")
-               ),
-               mainPanel(
-                 conditionalPanel(
-                   condition = "input.plot_normalized > 0", 
-                   girafeOutput("normalizationplot")
-                 )
-               )
+           )
+  )
+}
+
+#' Create Input Variables tab content
+#' 
+#' @return tabPanel content for Input Variables tab
+input_variables_tab <- function() {
+  tabPanel("Input variables (data and shapefiles)", 
+           fluidRow(
+             column(3,
+                    h3("Upload the shapefile and analysis data:"),
+                    fileInput("file_csv", "Choose CSV File", 
+                              accept = c(".csv", ".xlsx", ".xls")),
+                    fileInput("file_shp", "Choose a Zipped Shapefile", 
+                              accept = c('application/zip', 'application/x-zip-compressed', 
+                                         'multipart/x-zip', 'application/x-compress', 
+                                         'application/x-compressed', 'application/gzip')),
+                    uiOutput("reopen_mismatch_modal"),
+                    hr(),
+                    h4("Select Variable to Visualize"),
+                    uiOutput("variable_select"),
+                    actionButton("plot_data", "Plot Maps"),
+                    hr(),
+                    actionButton("data_cleaning", "Click to fill in missing values")
              ),
-             conditionalPanel(
-               condition = "input.plot_normalized > 0",
+             column(9,
+                    fluidRow(
+                      uiOutput("plotLayout")
+                    ),
+                    htmlOutput("visualizationExplanation"),
+                    tags$p(style = "font-style: italic; margin-top: 10px;", 
+                           "Hover over the maps to see detailed information for each ward.")
+             )
+           )
+  )
+}
+
+#' Create Normalization tab content
+#' 
+#' @return tabPanel content for Normalization tab
+normalization_tab <- function() {
+  tabPanel("Normalization", 
+           sidebarLayout(
+             sidebarPanel(
+               actionButton("specify_relationships", "SPECIFY VARIABLE RELATIONSHIPS"),
+               tags$br(), 
                tags$br(),
-               tags$p(style = "font-style: italic; margin-top: 10px;",
-                      "Hover over the map to see detailed information for each ward."),
-               tags$div(
-                 style = "margin-top: 20px; padding: 10px; background-color: #f0f0f0; border-radius: 5px;",
-                 tags$h4("Understanding the Normalized Plot", style = "text-align: center;"),
-                 tags$p("The plot shows the distribution of the variables selected for
-                            evaluation across the region of interest after they have been
-                            normalized using the min-max method. The values are now all on
-                            the same scale ranging from 0 to 1. This range of values are put
-                            into 5 classes (see legend). The plot highlights which of the
-                            variables if used in the algorithm will have more influence in the
-                            composite score.", style = "text-align: justify;")
+               uiOutput("normalized_variable_select"),
+               tags$br(),
+               actionButton("plot_normalized", "PLOT NORMALIZED MAP")
+             ),
+             mainPanel(
+               conditionalPanel(
+                 condition = "input.plot_normalized > 0", 
+                 girafeOutput("normalizationplot")
                )
              )
-    ),
-    
-    tabPanel("Composite Score distribution", 
-             tags$br(),tags$br(),
-             sidebarLayout(
-               sidebarPanel(
-                 tags$h4("Select a variable in the dataset to visualise:"),
-                 tags$p("Select at least two variables:", style = "color: black;"),
-                 uiOutput("composite_variable_select"),
-                 div(id = "progress-bar-container", style = "margin-top: 10px;"),
-                 actionButton("plot_button", "Calculate")
-               ),
-               mainPanel(
-                 uiOutput("mapPlot"),
-                 conditionalPanel(
-                   condition = "input.plot_button > 0",
-                   tags$br(),
-                   tags$div(
-                     style = "text-align: justify; font-size: 12px; color: #666;",
-                     "The maps above show the distribution of malaria risk scores across different wards, calculated using various combinations of variables. Each map represents a different model, with the variables used listed in the title. The color scale ranges from yellow (very low risk) to dark red (very high risk). This visualization helps identify areas of high concern and compare how different combinations of factors affect the risk assessment."
-                   ),
-                   tags$br(),
-                   tableOutput("flagged_models_table"),
-                   tags$p(style = "font-style: italic; margin-top: 10px; font-size: 12px;",
-                          "Hover over the maps to see detailed information for each ward.")
+           ),
+           conditionalPanel(
+             condition = "input.plot_normalized > 0",
+             tags$br(),
+             tags$p(style = "font-style: italic; margin-top: 10px;",
+                    "Hover over the map to see detailed information for each ward."),
+             tags$div(
+               style = "margin-top: 20px; padding: 10px; background-color: #f0f0f0; border-radius: 5px;",
+               tags$h4("Understanding the Normalized Plot", style = "text-align: center;"),
+               tags$p("The plot shows the distribution of the variables selected for
+                   evaluation across the region of interest after they have been
+                   normalized using the min-max method. The values are now all on
+                   the same scale ranging from 0 to 1. This range of values are put
+                   into 5 classes (see legend). The plot highlights which of the
+                   variables if used in the algorithm will have more influence in the
+                   composite score.", style = "text-align: justify;")
+             )
+           )
+  )
+}
+
+#' Create Composite Score Distribution tab content
+#' 
+#' @return tabPanel content for Composite Score Distribution tab
+composite_score_tab <- function() {
+  tabPanel("Composite Score distribution", 
+           tags$br(), tags$br(),
+           sidebarLayout(
+             sidebarPanel(
+               tags$h4("Select a variable in the dataset to visualise:"),
+               tags$p("Select at least two variables:", style = "color: black;"),
+               uiOutput("composite_variable_select"),
+               div(id = "progress-bar-container", style = "margin-top: 10px;"),
+               actionButton("plot_button", "Calculate")
+             ),
+             mainPanel(
+               uiOutput("mapPlot"),
+               conditionalPanel(
+                 condition = "input.plot_button > 0",
+                 tags$br(),
+                 tags$div(
+                   style = "text-align: justify; font-size: 12px; color: #666;",
+                   "The maps above show the distribution of malaria risk scores across different wards, calculated using various combinations of variables. Each map represents a different model, with the variables used listed in the title. The color scale ranges from yellow (very low risk) to dark red (very high risk). This visualization helps identify areas of high concern and compare how different combinations of factors affect the risk assessment."
+                 ),
+                 tags$br(),
+                 tableOutput("flagged_models_table"),
+                 tags$p(style = "font-style: italic; margin-top: 10px; font-size: 12px;",
+                        "Hover over the maps to see detailed information for each ward.")
+               )
+             )
+           )
+  )
+}
+
+#' Create Box and Whisker Plot tab content
+#' 
+#' @return tabPanel content for Box and Whisker Plot tab
+box_whisker_tab <- function() {
+  tabPanel("Box and Whisker Plot", 
+           fluidRow(
+             column(12,
+                    h3("Ward Vulnerability Distribution"),
+                    p("This visualization shows the distribution of vulnerability scores across wards, helping to identify areas of high and low risk."),
+                    div(style = "margin-bottom: 20px;",
+                        checkboxInput("show_map", "Show Map View", value = FALSE)
+                    ),
+                    
+                    # Fixed urban threshold info - only shown when map is displayed
+                    conditionalPanel(
+                      condition = "input.show_map == true",
+                      wellPanel(
+                        style = "background-color: #f7f7f7; border-radius: 8px; padding: 15px; margin-bottom: 20px;",
+                        div(style = "display: flex; align-items: center; justify-content: space-between;",
+                            div(
+                              h4(style = "margin-top: 0;", "Urban Extent Filter"),
+                              p(style = "color: #666; margin-bottom: 5px;", 
+                                "Set the urban extent threshold for determining ward prioritization.")
+                            ),
+                            div(
+                              numericInput("urban_threshold", "Urban Threshold (%)", 
+                                           value = 30, min = 0, max = 100, step = 5)
+                            ),
+                            div(
+                              checkboxInput("show_threshold_map", "Apply Urban Threshold", value = FALSE)
+                            )
+                        )
+                      )
+                    )
+             )
+           ),
+           fluidRow(
+             column(8,
+                    conditionalPanel(
+                      condition = "input.show_map == false",
+                      plotlyOutput("boxwhiskerPlots", height = "500px")
+                    ),
+                    conditionalPanel(
+                      condition = "input.show_map == true && input.show_threshold_map == false",
+                      girafeOutput("vulnerabilityMap", height = "500px")
+                    ),
+                    conditionalPanel(
+                      condition = "input.show_map == true && input.show_threshold_map == true",
+                      girafeOutput("filteredVulnerabilityMap", height = "500px")
+                    )
+             ),
+             column(4,
+                    conditionalPanel(
+                      condition = "input.show_map == false",
+                      wellPanel(
+                        style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 600px; overflow-y: auto;",
+                        h4("Understanding the Box and Whisker Plot"),
+                        p("This plot visualizes the distribution of median vulnerability scores across wards, ranked from most vulnerable (top) to least vulnerable (bottom)."),
+                        p("Each horizontal bar represents a ward:"),
+                        tags$ul(
+                          tags$li("The box shows the interquartile range (IQR) of vulnerability scores."),
+                          tags$li("The vertical line inside the box represents the median score."),
+                          tags$li("The whiskers extend to show the full range of scores, excluding outliers."),
+                          tags$li("Any points beyond the whiskers are considered outliers.")
+                        ),
+                        p("This visualization helps identify which areas may need more attention or resources in malaria prevention efforts.")
+                      )
+                    ),
+                    conditionalPanel(
+                      condition = "input.show_map == true && input.show_threshold_map == false",
+                      wellPanel(
+                        style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 500px; overflow-y: auto;",
+                        h4("Understanding the Vulnerability Map"),
+                        p("This map displays the overall vulnerability rank for each ward, providing a geographic perspective on malaria risk."),
+                        p("Key features:"),
+                        tags$ul(
+                          tags$li("Color intensity represents the vulnerability rank, with darker colors indicating higher vulnerability (higher rank) and lighter colors indicating lower vulnerability (lower rank)."),
+                          tags$li("The color scale ranges from light yellow (least vulnerable, lowest rank, 1) to dark purple (most vulnerable, highest rank)."),
+                          tags$li("Hover over each ward to see its name and exact rank."),
+                          tags$li("The map allows for easy identification of high-risk areas and spatial patterns in vulnerability.")
+                        ),
+                        p("Use this map to identify priority areas for intervention. Wards with higher ranks (darker colors) may require more immediate attention and resources in malaria prevention efforts.")
+                      )
+                    ),
+                    conditionalPanel(
+                      condition = "input.show_map == true && input.show_threshold_map == true",
+                      wellPanel(
+                        style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 500px; overflow-y: auto;",
+                        h4("Urban Extent Filtered Map"),
+                        p(HTML("This map shows wards filtered by an urban extent threshold of <strong>30%</strong>.")),
+                        p("Key features:"),
+                        tags$ul(
+                          tags$li("Colored wards meet the urban threshold and are prioritized for net distribution."),
+                          tags$li("Gray wards are below the urban threshold and are candidates for de-prioritization."),
+                          tags$li("Color intensity of prioritized wards still represents vulnerability rank, with darker colors indicating higher vulnerability."),
+                          tags$li("Hover over wards to see detailed information, including urban percentage and rank.")
+                        ),
+                        hr(),
+                        h5("Prioritization Statistics"),
+                        tableOutput("deprioritization_stats")
+                      )
+                    )
+             )
+           )
+  )
+}
+
+#' Create Decision Tree tab content
+#' 
+#' @return tabPanel content for Decision Tree tab
+decision_tree_tab <- function() {
+  tabPanel("Decision Tree",
+           fluidRow(
+             column(12,
+                    div(
+                      style = "padding: 20px; background-color: #FFFFFF; border-radius: 8px; margin-bottom: 20px;",
+                      
+                      # Download buttons
+                      div(
+                        style = "margin-bottom: 20px;",
+                        tags$head(
+                          tags$script("
+                $(document).on('shiny:error', function(event) {
+                  if(event.name === 'downloadPNG' || event.name === 'downloadPDF') {
+                    alert('Error during download. Please try again.');
+                  }
+                });
+              ")
+                        ),
+                        downloadButton("downloadPNG", "Download PNG", 
+                                       style = "margin-right: 10px; background-color: #5D4E6D; color: white;"),
+                        downloadButton("downloadPDF", "Download PDF",
+                                       style = "background-color: #5D4E6D; color: white;")
+                      ),
+                      
+                      # Main visualization container
+                      div(
+                        style = "background-color: white; padding: 20px; border-radius: 8px;",
+                        grVizOutput("decisionTree", width = "100%", height = "600px")
+                      ),
+                      
+                      # Help text
+                      div(
+                        style = "margin-top: 20px; padding: 15px; background-color: #F8F9FA; border-radius: 8px;",
+                        p("Click the download buttons above to save the decision tree in your preferred format.",
+                          style = "color: #666; font-style: italic;"),
+                        p("Note: The download may take a few seconds to complete.",
+                          style = "color: #666; font-style: italic;")
+                      )
+                    )
+             )
+           )
+  )
+}
+
+#' Create Manual Labeling tab content
+#' 
+#' @return tabPanel content for Manual Labeling tab
+manual_labeling_tab <- function() {
+  tabPanel("Manual Labeling/Micro-Planning",
+           div(class = "container-fluid",
+               fluidRow(
+                 # Left sidebar
+                 column(4,
+                        div(class = "urban-threshold-box",
+                            h4("Urban Extent Threshold", style = "margin-top: 0;"),
+                            p("Using 30% urban extent threshold for bed net distribution planning:"),
+                            
+                            # Fixed threshold information
+                            div(style = "background-color: #e9f0f6; padding: 15px; border-radius: 5px; margin-top: 10px;",
+                                h5("Statistics", style = "margin-top: 0; color: #3949AB;"),
+                                uiOutput("manual_deprioritization_stats")
+                            )
+                        ),
+                        
+                        # Ward selection container - simplified to only show wards above threshold
+                        div(class = "classification-box",
+                            h3("Ward Selection", style = "margin-top: 0;"),
+                            p("Select a ward for manual inspection and labeling:"),
+                            
+                            # Dynamic ward selection that only shows wards meeting the threshold
+                            uiOutput("filtered_ward_select"),
+                            
+                            # Urban extent info for selected ward
+                            conditionalPanel(
+                              condition = "input.selected_ward",
+                              div(style = "margin: 15px 0; padding: 10px; background-color: #e8f4f8; border-radius: 5px;",
+                                  uiOutput("selected_ward_urban_info")
+                              )
+                            ),
+                            
+                            hr(),
+                            
+                            # Grid settings
+                            h4("Grid Settings"),
+                            checkboxInput("enable_grid", "Enable Grid Analysis", value = TRUE),
+                            
+                            conditionalPanel(
+                              condition = "input.enable_grid == true",
+                              div(
+                                selectInput("grid_cell_size", "Grid Cell Size:", 
+                                            choices = c("500m × 500m" = 500), 
+                                            selected = 500),
+                                actionButton("plot_ward_map", "GENERATE GRID & PLOT MAP", 
+                                             icon = icon("map-marked-alt"),
+                                             style = "width: 100%; margin-bottom: 15px;")
+                              )
+                            ),
+                            
+                            # Classification count badges
+                            conditionalPanel(
+                              condition = "input.plot_ward_map > 0",
+                              div(class = "classification-summary",
+                                  h4("Classification Summary"),
+                                  uiOutput("classification_badges"),
+                                  p(style = "margin-top: 10px; font-style: italic; color: #666; font-size: 12px;", 
+                                    "Click on grid cells in the map to classify them.")
+                              )
+                            )
+                        ),
+                        
+                        # Control buttons - UPDATED with Download Map button
+                        div(class = "classification-box",
+                            div(style = "display: flex; margin-bottom: 10px;",
+                                actionButton("clear_annotations", "CLEAR ALL ANNOTATIONS", 
+                                             icon = icon("eraser"),
+                                             style = "flex: 1;")
+                            ),
+                            div(style = "display: flex;",
+                                downloadButton("download_grid", "DOWNLOAD GRID SHAPEFILE",
+                                               style = "flex: 1; margin-right: 5px;"),
+                                downloadButton("download_annotations", "DOWNLOAD ANNOTATIONS",
+                                               style = "flex: 1; margin-left: 5px;")
+                            ),
+                            # NEW: Add Download Map button
+                            br(),
+                            downloadButton("download_map", "DOWNLOAD CLASSIFIED MAP",
+                                           icon = icon("image"),
+                                           style = "width: 100%; margin-top: 10px; background-color: #5D4E6D; color: white;")
+                        ),
+                        
+                        # Instructions box with updated explanation
+                        div(class = "classification-instructions",
+                            h4("Classification Purpose", style = "margin-top: 0;"),
+                            p("This tool allows you to identify habitable areas within re-prioritized wards (areas that meet the selected urban threshold) that may still need bed nets."),
+                            p("By classifying grid cells, you help ensure that populated areas receive appropriate coverage despite the ward's overall urban status."),
+                            h4("Classification Criteria"),
+                            tags$ul(
+                              tags$li(tags$strong("Formal:"), " Planned layout, good road access, regular building patterns, typically with infrastructure"),
+                              tags$li(tags$strong("Informal:"), " Unplanned layout, limited road access, irregular building patterns"),
+                              tags$li(tags$strong("No Buildings/Avoid Area:"), " Areas without structures or areas to exclude from bed net distribution")
+                            ),
+                            p("Click on any grid cell in the map to classify it using the integrated checklist.")
+                        )
+                 ),
+                 
+                 # Right panel with map
+                 column(8,
+                        div(id = "status_box", class = "reprioritized-box",
+                            h4("Re-prioritized Area Analysis", style = "margin-top: 0;"),
+                            p(id = "status_text", "This tool allows you to examine re-prioritized wards (that meets the 30% urban threshold) in detail. Manual classification helps identify specific areas that may need bed nets despite the overall ward status.")
+                        ),
+                        div(style = "position: relative;",
+                            div(style = "position: absolute; top: 10px; right: 10px; z-index: 1000;",
+                                actionButton("grid_help", "", icon = icon("question-circle"), 
+                                             style = "padding: 6px 10px; background-color: white; border-radius: 50%;")
+                            ),
+                            div(id = "grid_help_content", style = "display: none; position: absolute; top: 50px; right: 10px; z-index: 1000; background-color: white; border-radius: 8px; padding: 15px; width: 300px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);",
+                                h4("How to Use the Grid", style = "margin-top: 0;"),
+                                tags$ol(
+                                  tags$li("Select a ward from the dropdown (only wards above 30% urban threshold are shown)"),
+                                  tags$li("Click 'GENERATE GRID & PLOT MAP'"),
+                                  tags$li("Click on any grid cell to open classification popup"),
+                                  tags$li("Choose a classification (Formal, Informal, or No Buildings/Avoid)"),
+                                  tags$li("Classified cells will appear colored on the map"),
+                                  tags$li("Click 'DOWNLOAD CLASSIFIED MAP' to export your work")
+                                ),
+                                actionButton("close_help", "Close", style = "width: 100%;")
+                            ),
+                            leafletOutput("ward_map", height = 700)
+                        )
                  )
                )
-             )
-    ),
-    
-    tabPanel("Box and Whisker Plot", 
-             fluidRow(
-               column(12,
-                      h3("Ward Vulnerability Distribution"),
-                      p("This visualization shows the distribution of vulnerability scores across wards, helping to identify areas of high and low risk."),
-                      br(),
-                      checkboxInput("show_map", "Show Map View", value = FALSE),
-                      br()
-               )
-             ),
-             fluidRow(
-               column(8,
-                      conditionalPanel(
-                        condition = "input.show_map == false",
-                        plotlyOutput("boxwhiskerPlots", height = "500px")
-                      ),
-                      conditionalPanel(
-                        condition = "input.show_map == true",
-                        girafeOutput("vulnerabilityMap", height = "500px")
-                      )
-               ),
-               column(4,
-                      conditionalPanel(
-                        condition = "input.show_map == false",
-                        wellPanel(
-                          style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 600px; overflow-y: auto;",
-                          h4("Understanding the Box and Whisker Plot"),
-                          p("This plot visualizes the distribution of median vulnerability scores across wards, ranked from most vulnerable (top) to least vulnerable (bottom)."),
-                          p("Each horizontal bar represents a ward:"),
-                          tags$ul(
-                            tags$li("The box shows the interquartile range (IQR) of vulnerability scores."),
-                            tags$li("The vertical line inside the box represents the median score."),
-                            tags$li("The whiskers extend to show the full range of scores, excluding outliers."),
-                            tags$li("Any points beyond the whiskers are considered outliers.")
-                          ),
-                          p("This visualization helps identify which areas may need more attention or resources in malaria prevention efforts.")
-                        )
-                      ),
-                      conditionalPanel(
-                        condition = "input.show_map == true",
-                        wellPanel(
-                          style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 500px; overflow-y: auto;",
-                          h4("Understanding the Vulnerability Map"),
-                          p("This map displays the overall vulnerability rank for each ward, providing a geographic perspective on malaria risk."),
-                          p("Key features:"),
-                          tags$ul(
-                            tags$li("Color intensity represents the vulnerability rank, with darker colors indicating higher vulnerability (higher rank) and lighter colors indicating lower vulnerability (lower rank)."),
-                            tags$li("The color scale ranges from light yellow (least vulnerable, lowest rank, 1) to dark purple (most vulnerable, highest rank)."),
-                            tags$li("Hover over each ward to see its name and exact rank."),
-                            tags$li("The map allows for easy identification of high-risk areas and spatial patterns in vulnerability.")
-                          ),
-                          p("Interpretation:"),
-                          tags$ul(
-                            tags$li("Dark purple areas represent wards with the highest ranks indicating the highest vulnerability and risk of malaria."),
-                            tags$li("Light yellow areas represent wards with the lowest ranks (1, 2, 3, etc.), indicating the lowest vulnerability and risk of malaria."),
-                            tags$li("The gradients between these colors represent varying levels of vulnerability.")
-                          ),
-                          p("Use this map to identify priority areas for intervention. Wards with higher ranks (darker colors) may require more immediate attention and resources in malaria prevention efforts.")
-                        )
-                      )
-               )
-             )
-    ),
-    
-    # Add these to your UI
-    tabPanel("Decision Tree",
-             fluidRow(
-               column(12,
-                      div(
-                        style = "padding: 20px; background-color: #FFFFFF; border-radius: 8px; margin-bottom: 20px;",
-                        
-                        # Download buttons
-                        div(
-                          style = "margin-bottom: 20px;",
-                          tags$head(
-                            tags$script("
-                              $(document).on('shiny:error', function(event) {
-                                if(event.name === 'downloadPNG' || event.name === 'downloadPDF') {
-                                  alert('Error during download. Please try again.');
-                                }
-                              });
-                            ")
-                          ),
-                          downloadButton("downloadPNG", "Download PNG", 
-                                         style = "margin-right: 10px; background-color: #5D4E6D; color: white;"),
-                          downloadButton("downloadPDF", "Download PDF",
-                                         style = "background-color: #5D4E6D; color: white;")
+           )
+  )
+}
+
+#' Create Net Distribution tab content
+#' 
+#' @return tabPanel content for Net Distribution tab
+net_distribution_tab <- function() {
+  tabPanel("Net Distribution", 
+           div(class = "net-distribution-container",
+               fluidRow(
+                 column(12,
+                        div(class = "dashboard-card",
+                            h2(icon("mosquito-net"), "Net Distribution Planning", 
+                               style = "color: #5D4E6D; margin-top: 0;"),
+                            p("Plan optimal distribution of bed nets based on the 30% urban extent threshold and ward vulnerability rankings.", 
+                              style = "font-size: 16px; color: #666;")
                         ),
-                        
-                        # Main visualization container
-                        div(
-                          style = "background-color: white; padding: 20px; border-radius: 8px;",
-                          grVizOutput("decisionTree", width = "100%", height = "600px")
-                        ),
-                        
-                        # Help text
-                        div(
-                          style = "margin-top: 20px; padding: 15px; background-color: #F8F9FA; border-radius: 8px;",
-                          p("Click the download buttons above to save the decision tree in your preferred format.",
-                            style = "color: #666; font-style: italic;"),
-                          p("Note: The download may take a few seconds to complete.",
-                            style = "color: #666; font-style: italic;")
-                        )
-                      )
-               )
-             )
-    ),
-    
-    tabPanel("Manual Labelling",
-             sidebarLayout(
-               sidebarPanel(
-                 uiOutput("ward_select"),
-                 actionButton("plot_ward_map", "Plot Map")
+                        uiOutput("population_data_source")
+                 )
                ),
-               mainPanel(
-                 leafletOutput("ward_map", height = 600)
+               
+               fluidRow(
+                 # Left column - Settings inputs
+                 column(4,
+                        div(class = "dashboard-card",
+                            h3(class = "section-header", "Distribution Settings"),
+                            
+                            # Simple inputs
+                            h4("Resource Allocation", style = "color: #E53935;"),
+                            numericInput("total_nets", "Total Bed Nets Available", 
+                                         value = 10000, min = 1,
+                                         width = "100%"),
+                            
+                            numericInput("avg_household_size", "Average Household Size", 
+                                         value = 5, min = 1, max = 10, step = 0.1,
+                                         width = "100%"),
+                            
+                            helpText("Standard distribution is 1 net per 1.8 people, with a minimum of 1 net per household"),
+                            
+                            # Distribution strategy selection
+                            h4("Distribution Strategy", style = "color: #5D4E6D;"),
+                            
+                            # Using a two-phase approach explanation
+                            div(class = "distribution-phases",
+                                h5("Two-Phase Distribution Approach"),
+                                div(class = "phase phase-1",
+                                    h6("Phase 1: Prioritized Areas", style = "margin-top: 0;"),
+                                    p("Nets are first distributed to the most vulnerable wards below the 30% urban threshold, prioritized by vulnerability rank.")
+                                ),
+                                div(class = "phase phase-2",
+                                    h6("Phase 2: Re-prioritized Areas", style = "margin-top: 0;"),
+                                    p("If nets remain after Phase 1, they are distributed to wards above 30% threshold, with manually classified areas receiving special consideration.")
+                                )
+                            ),
+                            
+                            hr(style = "margin: 20px 0; border-color: #eee;"),
+                            
+                            # Action buttons
+                            actionButton("calculate_distribution", "Calculate Distribution", 
+                                         class = "btn-primary action-button", 
+                                         style = "width: 100%; margin-bottom: 15px; font-size: 16px;"),
+                            downloadButton("download_distribution", "Download Distribution Plan", 
+                                           style = "width: 100%; background-color: #00897B;")
+                        )
+                 ),
+                 
+                 # Right column - Results
+                 column(8,
+                        div(class = "dashboard-card",
+                            # Tabs for different results views
+                            tabsetPanel(
+                              tabPanel("Dashboard",
+                                       br(),
+                                       
+                                       # Statistics cards in a grid
+                                       fluidRow(
+                                         column(3, 
+                                                div(class = "stat-panel population",
+                                                    uiOutput("stat_population")
+                                                )
+                                         ),
+                                         column(3, 
+                                                div(class = "stat-panel households",
+                                                    uiOutput("stat_households")
+                                                )
+                                         ),
+                                         column(3, 
+                                                div(class = "stat-panel nets",
+                                                    uiOutput("stat_nets")
+                                                )
+                                         ),
+                                         column(3, 
+                                                div(class = "stat-panel coverage",
+                                                    uiOutput("stat_coverage")
+                                                )
+                                         )
+                                       ),
+                                       
+                                       # Coverage visualization
+                                       div(class = "coverage-container",
+                                           h4("Population Coverage"),
+                                           uiOutput("population_coverage_bar")
+                                       ),
+                                       
+                                       # Distribution summary info
+                                       uiOutput("distribution_summary"),
+                                       
+                                       # Map visualization
+                                       div(class = "map-container",
+                                           h4("Net Distribution Map", style = "margin-top: 0; margin-bottom: 10px;"),
+                                           p("This map shows where nets will be distributed, prioritizing wards below 30% urban threshold. Gray areas are re-prioritized and will receive nets if available.", 
+                                             style = "font-style: italic; color: #666; margin-bottom: 10px;"),
+                                           leafletOutput("distribution_map", height = 400)
+                                       )
+                              ),
+                              
+                              tabPanel("Ward Coverage",
+                                       br(),
+                                       p("This view shows the distribution of nets across wards based on vulnerability ranking.", 
+                                         style = "margin-bottom: 20px;"),
+                                       
+                                       div(style = "margin-bottom: 20px; padding: 10px; background-color: #f8f9fa; border-radius: 5px;",
+                                           p("Prioritized wards (below 30% urban extent threshold) receive nets first. Re-prioritized wards (above threshold) receive nets if resources remain.", 
+                                             style = "margin: 0;")
+                                       ),
+                                       
+                                       DTOutput("ward_coverage_table")
+                              ),
+                              
+                              tabPanel("Manual Grid Classifications",
+                                       br(),
+                                       p("This view shows grid cell classifications that affect net distribution.", 
+                                         style = "margin-bottom: 20px;"),
+                                       
+                                       div(
+                                         style = "margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 5px;",
+                                         h5("About Grid Micro-Planning", style = "margin-top: 0; color: #5D4E6D;"),
+                                         p("The grid system divides the ward into equal-sized square cells for detailed planning:"),
+                                         tags$ul(
+                                           tags$li("Each cell represents a configurable area on the ground (adjustable via the Grid Cell Size dropdown)"),
+                                           tags$li("Classify cells based on settlement patterns to identify areas requiring bed nets"),
+                                           tags$li("Downloaded data includes coordinates for field operations and implementation"),
+                                           tags$li("This micro-planning approach allows for targeted intervention within re-prioritized wards")
+                                         ),
+                                         p("Note: Cell size can be adjusted based on operational requirements and local geography.")
+                                       ),
+                                       
+                                       DTOutput("manual_override_table")
+                              )
+                            )
+                        )
+                 )
                )
-             )
-    ),
-  ),
+           )
+  )
+}
+
+#==============================================================================
+# Main UI Definition
+#==============================================================================
+
+#' Define UI for the Malaria Reprioritization Tool
+#' 
+#' @return UI definition
+ui <- fluidPage(
+  theme = shinythemes::shinytheme("sandstone"),
+  useShinyjs(),  
+  titlePanel("Malaria Reprioritization Tool"),
   
-  
-  tags$br(),  
-  tags$br(),
-  tags$br(),
-  tags$br(),
-  tags$br(),
-  tags$br(),
-  
-  hr(),
-  
-  div(
-    style='text-align: center; margin-top: 20px;',  # Add margin-top for slight spacing
-    'Created by the', 
-    shiny::HTML('<a href=\'https://www.urban-malaria.com/\' 
-                target=\'_blank\'> Urban Malaria Lab </a>'),
-    '@ Loyola University Chicago, Parkinson School of Public Health, Department of Health Informatics and Data Science'
-  ),
+  # Add custom CSS
+  create_custom_css(),
   
   br(),
   
-  div(
-    style='text-align: center; font-style: italic; font-size: 1.1em; margin-bottom: 20px;',  # Add margin-bottom for slight spacing
-    tags$strong('If you use this tool in your work, please cite:'),
-    br(),
-    'Mhlanga, L.,* Boateng, B.O.,* Jamiu, Y., Bamgboye, E.A., Adeniji, H., Ademu, C., Okoronkwo, C., Enang, G. & Ozodiegwu, I.D. (2024).',
-    br(),
-    'Malaria Reprioritization Tool. Urban Malaria Lab, Loyola University Chicago.',
-    br(),
-    'Available at: ',
-    tags$a(href="https://urbanmalaria.shinyapps.io/mrpt/", 
-           target="_blank", 
-           "https://urbanmalaria.shinyapps.io/mrpt/")
+  # Main tabs
+  tabsetPanel(
+    instructions_tab(),
+    input_variables_tab(),
+    normalization_tab(),
+    composite_score_tab(),
+    box_whisker_tab(),
+    decision_tree_tab(),
+    manual_labeling_tab(),
+    net_distribution_tab()
   ),
-  br()
+  
+  # Footer 
+  create_footer_content()
 )
 
+#==============================================================================
+# Reactive Values Definition
+#==============================================================================
+
+#' Initialize reactive values for the app
+#' 
+#' @param session Shiny session
+#' @return List of reactive values
+initialize_reactives <- function(session) {
+  rv <- reactiveValues(
+    # Data storage
+    raw_data = NULL,
+    cleaned_data = NULL,
+    normalized_data = reactiveVal(NULL),
+    shp_data = NULL,
+    mismatched_wards = NULL,
+    
+    # Processing settings and results
+    na_handling_methods = list(),
+    variable_relationships = list(),
+    composite_scores = NULL,
+    data = NULL,
+    output_data = NULL,
+    
+    # Cleaning status
+    cleaning_performed = reactiveVal(FALSE),
+    
+    # Grid and classification data
+    gridded_wards = reactiveVal(NULL),
+    grid_annotations = reactiveVal(data.frame(
+      GridID = integer(), 
+      WardName = character(), 
+      Classification = character(),
+      Timestamp = character(),
+      Method = character(),
+      stringsAsFactors = FALSE
+    )),
+    
+    # Distribution results
+    net_distribution_results = reactiveVal(NULL),
+    grid_overrides = reactiveVal(NULL),
+    ward_population = reactiveVal(NULL),
+    
+    # Miscellaneous
+    flagged_models = reactiveVal(NULL),
+    corrected_wardnames = reactiveVal(data.frame(
+      original = character(), 
+      corrected = character(), 
+      stringsAsFactors = FALSE
+    )),
+    
+    # Track progress for decision tree
+    decision_tree_progress = reactiveVal(list(
+      data_loaded = FALSE,
+      variables_selected = FALSE,
+      normalization_done = FALSE,
+      composite_scores_calculated = FALSE
+    ))
+  )
+  
+  # Add a function to check if cleaning is needed
+  rv$needs_cleaning <- reactive({
+    req(rv$raw_data, rv$shp_data) # Ensure both files are loaded
+    length(rv$na_columns) > 0 || (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0)
+  })
+  
+  # Create a reactive for deprioritized wards
+  rv$deprioritized_wards_list <- reactive({
+    req(rv$ward_rankings, rv$shp_data, input$urban_threshold)
+    
+    # Get the threshold value
+    threshold <- as.numeric(input$urban_threshold)
+    
+    # Only generate when threshold is selected
+    if (threshold <= 0) return(NULL)
+    
+    # Apply urban extent threshold filtering
+    filtered_data <- filter_by_urban_extent(rv$shp_data, threshold)
+    
+    # Join with vulnerability rankings
+    map_data <- left_join(filtered_data, rv$ward_rankings, by = "WardName")
+    
+    # Get list of de-prioritized wards
+    deprioritized_wards <- map_data %>%
+      filter(!MeetsThreshold) %>%
+      arrange(overall_rank) %>%
+      select(WardName, UrbanPercent, overall_rank)
+    
+    return(deprioritized_wards)
+  })
+  
+  # Add a reactive to track de-prioritized wards based on urban extent threshold
+  rv$deprioritized_wards <- reactiveVal(NULL)
+  
+  return(rv)
+}
+
+
+
+#==============================================================================
+# Server Function
+#==============================================================================
 
 server <- function(input, output, session) {
   
-  # Show initial modal
+  #============================================================================
+  # Initialize reactive values
+  #============================================================================
+  rv <- initialize_reactives(session)
+  
+  #============================================================================
+  # Initial App Setup
+  #============================================================================
+  
+  # Show initial welcome modal
   showModal(modalDialog(
     title = "Information",
     HTML("Welcome to the reprioritization web application, a powerful tool for 
@@ -384,45 +1060,25 @@ server <- function(input, output, session) {
     areas with the highest need and optimizing malaria control efforts.\"")
   ))
   
-  # Use JavaScript to close the modal after 60 seconds
+  # Auto-close modal after 5 minutes
   shinyjs::runjs("setTimeout(function() { $('.modal').modal('hide'); }, 300000);")
   
-  # Reactive values for storing various data states
-  rv <- reactiveValues(
-    raw_data = NULL,
-    cleaned_data = NULL,
-    normalized_data = reactiveVal(NULL),
-    shp_data = NULL,
-    mismatched_wards = NULL,
-    na_handling_methods = list(),
-    variable_relationships = list(),
-    composite_scores = NULL,
-    data = NULL,
-    output_data = NULL
-  )
+  #============================================================================
+  # Data Upload and Processing
+  #============================================================================
   
-  rv$decision_tree_progress <- reactiveVal(list(
-    data_loaded = FALSE,
-    variables_selected = FALSE,
-    normalization_done = FALSE,
-    composite_scores_calculated = FALSE
-  ))
-  
-  # new reactive value to track whether cleaning was performed
-  rv$cleaning_performed <- reactiveVal(FALSE)
-  
-  rv$flagged_models <- reactiveVal(NULL)
-  
-  # CSV file upload
+  #' Process CSV file upload
   observeEvent(input$file_csv, {
     req(input$file_csv)
     
+    # Read file based on extension
     csv_data <- if (tolower(tools::file_ext(input$file_csv$name)) %in% c("xlsx", "xls")) {
       readxl::read_excel(input$file_csv$datapath)
     } else {
       read.csv(input$file_csv$datapath)
     }
     
+    # Process the data
     rv$raw_data <- rename_columns(as.data.frame(csv_data))
     missing_data <- check_missing_values(rv$raw_data)
     rv$na_columns <- missing_data$columns
@@ -437,6 +1093,7 @@ server <- function(input, output, session) {
     # Populate variable relationships for columns after WardName
     rv$variable_relationships <- setNames(rep("direct", length(columns_after_wardname)), columns_after_wardname)
     
+    # Check for missing values
     if (rv$needs_cleaning()) {
       if (length(rv$na_columns) > 0) {
         showNotification(paste("Warning: Missing values (NAs) found in columns:", paste(rv$na_columns, collapse = ", ")), type = "warning")
@@ -449,8 +1106,7 @@ server <- function(input, output, session) {
     }
   })
   
-  
-  # Shapefile upload
+  #' Process shapefile upload
   observeEvent(input$file_shp, {
     req(input$file_shp)
     
@@ -463,9 +1119,10 @@ server <- function(input, output, session) {
         shp_data <- st_read(shapefile_files[1], quiet = TRUE)
         rv$shp_data <- shp_data %>% 
           mutate(Urban = as.character(Urban))  # Ensure Urban is character type
-        print(paste("Number of rows in shp_data:", nrow(rv$shp_data)))
+        
         showNotification("Shapefile loaded successfully.", type = "message")
         
+        # Check for ward name mismatches if CSV data is already loaded
         if (!is.null(rv$raw_data)) {
           rv$mismatched_wards <- check_wardname_mismatches(rv$raw_data, rv$shp_data)
           if (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0) {
@@ -480,45 +1137,10 @@ server <- function(input, output, session) {
     }
   })
   
-  
-  # add this reactive value
-  rv$corrected_wardnames <- reactiveVal(data.frame(original = character(), corrected = character(), stringsAsFactors = FALSE))
-  
-  # Modify the observeEvent for apply_corrections
-  observeEvent(input$apply_corrections, {
-    req(rv$mismatched_wards, rv$raw_data)
-    
-    corrected_names <- data.frame(
-      original = rv$raw_data$WardName,
-      corrected = rv$raw_data$WardName,
-      stringsAsFactors = FALSE
-    )
-    
-    for (i in 1:nrow(rv$mismatched_wards)) {
-      old_name <- rv$mismatched_wards$CSV_WardName[i]
-      new_name <- input[[paste0("mismatch_", i)]]
-      
-      if (new_name != "None") {
-        corrected_names$corrected[corrected_names$original == old_name] <- new_name
-      }
-    }
-    
-    rv$corrected_wardnames(corrected_names)
-    rv$raw_data$WardName <- corrected_names$corrected
-    
-    # Check for remaining mismatches
-    remaining_mismatches <- check_wardname_mismatches(rv$raw_data, rv$shp_data)
-    
-    if (is.null(remaining_mismatches)) {
-      removeModal()
-      showNotification("All ward name mismatches have been corrected.", type = "message")
-    } else {
-      rv$mismatched_wards <- remaining_mismatches
-      showModal(wardNameMismatchModal(remaining_mismatches))
-    }
-  })
-  
-  # Modify the wardNameMismatchModal function
+  #' Generate UI for ward name mismatch modal
+  #' 
+  #' @param mismatches Data frame of mismatched ward names
+  #' @return Modal dialog UI
   wardNameMismatchModal <- function(mismatches) {
     req(mismatches)
     corrected_names <- rv$corrected_wardnames()
@@ -565,7 +1187,41 @@ server <- function(input, output, session) {
     )
   }
   
+  #' Apply ward name corrections
+  observeEvent(input$apply_corrections, {
+    req(rv$mismatched_wards, rv$raw_data)
+    
+    corrected_names <- data.frame(
+      original = rv$raw_data$WardName,
+      corrected = rv$raw_data$WardName,
+      stringsAsFactors = FALSE
+    )
+    
+    for (i in 1:nrow(rv$mismatched_wards)) {
+      old_name <- rv$mismatched_wards$CSV_WardName[i]
+      new_name <- input[[paste0("mismatch_", i)]]
+      
+      if (new_name != "None") {
+        corrected_names$corrected[corrected_names$original == old_name] <- new_name
+      }
+    }
+    
+    rv$corrected_wardnames(corrected_names)
+    rv$raw_data$WardName <- corrected_names$corrected
+    
+    # Check for remaining mismatches
+    remaining_mismatches <- check_wardname_mismatches(rv$raw_data, rv$shp_data)
+    
+    if (is.null(remaining_mismatches)) {
+      removeModal()
+      showNotification("All ward name mismatches have been corrected.", type = "message")
+    } else {
+      rv$mismatched_wards <- remaining_mismatches
+      showModal(wardNameMismatchModal(remaining_mismatches))
+    }
+  })
   
+  #' UI for reopening ward name mismatch modal
   output$reopen_mismatch_modal <- renderUI({
     req(rv$mismatched_wards)
     if (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0) {
@@ -574,13 +1230,13 @@ server <- function(input, output, session) {
     }
   })
   
+  #' Reopen ward name mismatch modal
   observeEvent(input$reopen_mismatch, {
     req(rv$mismatched_wards)
     showModal(wardNameMismatchModal(rv$mismatched_wards))
   })
   
-  
-  
+  #' Generate UI for variable selection dropdown
   output$variable_select <- renderUI({
     req(rv$raw_data)
     columns_after_wardname <- get_columns_after_wardname(rv$raw_data)
@@ -589,15 +1245,11 @@ server <- function(input, output, session) {
                 selected = columns_after_wardname[1])
   })
   
-  # Reactive expression for needs_cleaning
-  rv$needs_cleaning <- reactive({
-    req(rv$raw_data, rv$shp_data) # Ensure both files are loaded
-    length(rv$na_columns) > 0 || (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0)
-  })
-  
-  
-  
+  #============================================================================
   # Data Cleaning
+  #============================================================================
+  
+  #' Show data cleaning modal
   observeEvent(input$data_cleaning, {
     req(rv$raw_data, rv$shp_data)
     
@@ -630,17 +1282,12 @@ server <- function(input, output, session) {
     ))
   })
   
-  
-  
+  #' Update NA handling method
   observeEvent(input$na_handling, {
     rv$na_handling_method <- input$na_handling
-    print("Updated NA handling method:")
-    print(rv$na_handling_method)
   })
   
-  
-  
-  # Apply cleaning
+  #' Apply data cleaning
   observeEvent(input$apply_na_handling, {
     req(rv$raw_data, rv$na_columns)
     
@@ -660,165 +1307,20 @@ server <- function(input, output, session) {
     removeModal()
     showNotification("NA handling methods applied and stored.", type = "message")
     
-    # Trigger plot update by updating the reactive value that the plot depends on 
-    rv$cleaned_data <- rv$cleaned_data # This line triggers the update
+    # Trigger plot update
+    rv$cleaned_data <- rv$cleaned_data # This triggers reactivity
     
-    # Update variable selection (optional, to refresh choices if needed)
+    # Update variable selection if needed
     updateSelectInput(session, "visualize_var", selected = input$visualize_var)
   })
   
+  #============================================================================
+  # Data Visualization
+  #============================================================================
   
-  output$data_cleaning_button <- renderUI({
-    if (rv$needs_cleaning()) {
-      actionButton("data_cleaning", "Click to fill in missing values")
-    }
-  })
-  
-  
-  
-  # Modify the normalization process
-  observeEvent(input$specify_relationships, {
-    req(rv$raw_data)
-    
-    data_to_use <- if(rv$cleaning_performed()) rv$cleaned_data else rv$raw_data
-    
-    showModal(modalDialog(
-      title = "Specify Variable Relationships with Malaria Risk",
-      tags$div(
-        tags$h4("Understanding Variable Relationships"),
-        tags$p("Specifying variable relationships helps determine how each factor contributes to malaria risk:"),
-        tags$ul(
-          tags$li(strong("Direct relationship:"), "As the variable increases, malaria risk increases."),
-          tags$li(strong("Inverse relationship:"), "As the variable increases, malaria risk decreases.")
-        ),
-        tags$p("This information is crucial for accurately calculating the composite risk score."),
-        
-        uiOutput("variable_relationships")
-      ),
-      
-      footer = tagList(
-        modalButton("Cancel"),
-        actionButton("apply_relationships", "Apply Relationships")
-      )
-    ))
-  })
-  
-  output$variable_relationships <- renderUI({
-    req(rv$cleaned_data)
-    columns_after_wardname <- get_columns_after_wardname(rv$cleaned_data)
-    
-    lapply(columns_after_wardname, function(var) {
-      fluidRow(
-        column(6, var),
-        column(6, 
-               radioButtons(paste0("relationship_", var), NULL,
-                            choices = c("Direct" = "direct", "Inverse" = "inverse"),
-                            selected = rv$variable_relationships[[var]] %||% "direct",
-                            inline = TRUE)
-        )
-      )
-    })
-  })
-  
-  output$normalized_variable_select <- renderUI({
-    req(rv$normalized_data)
-    norm_vars <- grep("^normalization_", names(rv$normalized_data()), value = TRUE)
-    selectInput("visualize_normalized_var", "Select Variable to Visualize", 
-                choices = norm_vars,
-                selected = norm_vars[1])
-  })
-  
-  
-  output$vulnerabilityMap <- renderGirafe({
-    req(rv$data, rv$ward_rankings, rv$shp_data)
-    
-    map_data <- left_join(rv$shp_data, rv$ward_rankings, by = "WardName")
-    
-    plot <- ggplot() +
-      geom_sf_interactive(data = map_data, aes(fill = overall_rank, 
-                                               tooltip = paste(WardName, "\nRank:", overall_rank))) +
-      scale_fill_viridis_c(option = "plasma", direction = -1, 
-                           name = "Vulnerability Rank",
-                           guide = guide_colorbar(
-                             title.position = "top",
-                             title.hjust = 0.5,
-                             label.theme = element_text(size = 12), # Increase legend labels size
-                             barwidth = 15, # Increase legend width 
-                             barheight = 1 # Increase legend height
-                           )) +
-      theme_void() +
-      labs(title = "Ward Vulnerability Map") +
-      theme(legend.position = "bottom",
-            legend.box = "vertical",
-            legend.margin = margin(t = 10, b = 10),
-            plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) 
-    
-    # Improved Annotations for Clarity:
-    plot <- plot +
-      annotate("text", x = -Inf, y = -Inf, label = "Low Vulnerability (Rank 1)", # Clearer label
-               hjust = 0, vjust = -1, size = 4, color = "darkred", fontface = "bold") +
-      annotate("text", x = Inf, y = -Inf, label = "High Vulnerability (Highest Rank)", # Clearer label
-               hjust = 1, vjust = -1, size = 4, color = "darkblue", fontface = "bold")
-    
-    girafe(ggobj = plot, width_svg = 10, height_svg = 8) 
-  })
-  
-  
-  # Update the normalize_data function call
-  observeEvent(input$apply_relationships, {
-    req(rv$raw_data)
-    
-    data_to_use <- if(rv$cleaning_performed()) rv$cleaned_data else rv$raw_data
-    
-    columns_after_wardname <- get_columns_after_wardname(data_to_use)
-    
-    # Store variable relationships
-    for (var in columns_after_wardname) {
-      relationship <- input[[paste0("relationship_", var)]]
-      rv$variable_relationships[[var]] <- relationship
-    }
-    
-    # Normalize the data
-    rv$normalized_data <- reactive({
-      normalize_data(data_to_use[, c("WardName", columns_after_wardname)], rv$variable_relationships) 
-    })
-    
-    removeModal()
-    showNotification("Variable relationships applied and data normalized successfully.", type = "message")
-    
-    
-    output$normalized_variable_select <- renderUI({
-      norm_vars <- grep("^normalization_", names(rv$normalized_data()), value = TRUE)
-      selectInput("visualize_normalized_var", "Select Normalized Variables to Visualize", 
-                  choices = norm_vars,
-                  selected = norm_vars[1])
-    })
-    
-    # Update the normalization plot
-    output$normalizationplot <- renderGirafe({
-      req(rv$normalized_data(), input$visualize_normalized_var)
-      plot_normalized_map(shp_data = rv$shp_data, 
-                          processed_csv = rv$normalized_data(), 
-                          selected_vars = input$visualize_normalized_var)
-    })
-  })
-  
-  
-  observeEvent(input$plot_normalized, {
-    req(rv$normalized_data, input$visualize_normalized_var, rv$shp_data)
-    
-    output$normalizationplot <- renderGirafe({
-      plot_normalized_map(shp_data = rv$shp_data, 
-                          processed_csv = rv$normalized_data(), 
-                          selected_vars = input$visualize_normalized_var)
-    })
-  })
-  
-  
-  # Raw data variable selection
-  observeEvent(c(input$plot_data, rv$cleaned_data), { # Observe both button and data change
+  #' Plot data maps
+  observeEvent(c(input$plot_data, rv$cleaned_data), {
     req(rv$raw_data, rv$shp_data, input$visualize_var)
-    
     
     if (!rv$cleaning_performed()) {
       # Before cleaning: One centered plot
@@ -872,9 +1374,119 @@ server <- function(input, output, session) {
     })
   })
   
+  #============================================================================
+  # Normalization
+  #============================================================================
   
+  #' Show variable relationships modal
+  observeEvent(input$specify_relationships, {
+    req(rv$raw_data)
+    
+    data_to_use <- if(rv$cleaning_performed()) rv$cleaned_data else rv$raw_data
+    
+    showModal(modalDialog(
+      title = "Specify Variable Relationships with Malaria Risk",
+      tags$div(
+        tags$h4("Understanding Variable Relationships"),
+        tags$p("Specifying variable relationships helps determine how each factor contributes to malaria risk:"),
+        tags$ul(
+          tags$li(strong("Direct relationship:"), "As the variable increases, malaria risk increases."),
+          tags$li(strong("Inverse relationship:"), "As the variable increases, malaria risk decreases.")
+        ),
+        tags$p("This information is crucial for accurately calculating the composite risk score."),
+        
+        uiOutput("variable_relationships")
+      ),
+      
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("apply_relationships", "Apply Relationships")
+      )
+    ))
+  })
   
-  # Composite Score
+  #' Generate UI for variable relationships
+  output$variable_relationships <- renderUI({
+    req(rv$cleaned_data)
+    columns_after_wardname <- get_columns_after_wardname(rv$cleaned_data)
+    
+    lapply(columns_after_wardname, function(var) {
+      fluidRow(
+        column(6, var),
+        column(6, 
+               radioButtons(paste0("relationship_", var), NULL,
+                            choices = c("Direct" = "direct", "Inverse" = "inverse"),
+                            selected = rv$variable_relationships[[var]] %||% "direct",
+                            inline = TRUE)
+        )
+      )
+    })
+  })
+  
+  #' Generate UI for normalized variable selection
+  output$normalized_variable_select <- renderUI({
+    req(rv$normalized_data)
+    norm_vars <- grep("^normalization_", names(rv$normalized_data()), value = TRUE)
+    selectInput("visualize_normalized_var", "Select Variable to Visualize", 
+                choices = norm_vars,
+                selected = norm_vars[1])
+  })
+  
+  #' Apply variable relationships and normalize data
+  observeEvent(input$apply_relationships, {
+    req(rv$raw_data)
+    
+    data_to_use <- if(rv$cleaning_performed()) rv$cleaned_data else rv$raw_data
+    
+    columns_after_wardname <- get_columns_after_wardname(data_to_use)
+    
+    # Store variable relationships
+    for (var in columns_after_wardname) {
+      relationship <- input[[paste0("relationship_", var)]]
+      rv$variable_relationships[[var]] <- relationship
+    }
+    
+    # Normalize the data
+    rv$normalized_data <- reactive({
+      normalize_data(data_to_use[, c("WardName", columns_after_wardname)], rv$variable_relationships) 
+    })
+    
+    removeModal()
+    showNotification("Variable relationships applied and data normalized successfully.", type = "message")
+    
+    # Update the UI
+    output$normalized_variable_select <- renderUI({
+      norm_vars <- grep("^normalization_", names(rv$normalized_data()), value = TRUE)
+      selectInput("visualize_normalized_var", "Select Normalized Variables to Visualize", 
+                  choices = norm_vars,
+                  selected = norm_vars[1])
+    })
+    
+    # Update the normalization plot
+    output$normalizationplot <- renderGirafe({
+      req(rv$normalized_data(), input$visualize_normalized_var)
+      plot_normalized_map(shp_data = rv$shp_data, 
+                          processed_csv = rv$normalized_data(), 
+                          selected_vars = input$visualize_normalized_var)
+    })
+  })
+  
+  #' Plot normalized map
+  observeEvent(input$plot_normalized, {
+    req(rv$normalized_data, input$visualize_normalized_var, rv$shp_data)
+    
+    output$normalizationplot <- renderGirafe({
+      plot_normalized_map(shp_data = rv$shp_data, 
+                          processed_csv = rv$normalized_data(), 
+                          selected_vars = input$visualize_normalized_var)
+    })
+  })
+  
+  #============================================================================
+  # Composite Score Calculation
+  #============================================================================
+  
+  #' Generate UI for composite variable selection
   output$composite_variable_select <- renderUI({
     req(rv$cleaned_data)
     columns_after_wardname <- get_columns_after_wardname(rv$cleaned_data)
@@ -883,6 +1495,7 @@ server <- function(input, output, session) {
                 selected = NULL, multiple = TRUE)
   })
   
+  #' Calculate composite scores
   observeEvent(input$plot_button, {
     req(rv$cleaned_data, input$composite_vars)
     
@@ -969,7 +1582,6 @@ server <- function(input, output, session) {
           }
         })
         
-        
         # Update normalizationplot
         output$normalizationplot <- renderGirafe({
           req(rv$normalized_data(), input$visualize_normalized_var)
@@ -1003,13 +1615,230 @@ server <- function(input, output, session) {
     })
   })
   
+  #' Display table of flagged models
+  output$flagged_models_table <- renderTable({
+    req(rv$flagged_models)
+    flagged <- rv$flagged_models()
+    
+    if (is.null(flagged) || nrow(flagged) == 0) {
+      return(data.frame("Message" = "No problematic models identified."))
+    }
+    
+    # Format for display
+    flagged %>%
+      mutate(
+        Model = gsub("model_", "Model ", variable),
+        `Flagged Wards` = flagged_wards
+      ) %>%
+      select(Model, `Flagged Wards`) %>%
+      mutate(
+        `Potential Issue` = "Non-urban wards in top 5 (likely not suitable for resource allocation)"
+      )
+  }, striped = TRUE, bordered = TRUE, hover = TRUE, align = 'l')
   
+  #============================================================================
+  # Box and Whisker Plot / Vulnerability Map
+  #============================================================================
   
+  #' Generate vulnerability map
+  output$vulnerabilityMap <- renderGirafe({
+    req(rv$data, rv$ward_rankings, rv$shp_data)
+    
+    map_data <- left_join(rv$shp_data, rv$ward_rankings, by = "WardName")
+    
+    plot <- ggplot() +
+      geom_sf_interactive(data = map_data, aes(fill = overall_rank, 
+                                               tooltip = paste(WardName, "\nRank:", overall_rank))) +
+      scale_fill_viridis_c(option = "plasma", direction = -1, 
+                           name = "Vulnerability Rank",
+                           guide = guide_colorbar(
+                             title.position = "top",
+                             title.hjust = 0.5,
+                             label.theme = element_text(size = 12),
+                             barwidth = 15,
+                             barheight = 1
+                           )) +
+      theme_void() +
+      labs(title = "Ward Vulnerability Map") +
+      theme(legend.position = "bottom",
+            legend.box = "vertical",
+            legend.margin = margin(t = 10, b = 10),
+            plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+      annotate("text", x = -Inf, y = -Inf, label = "Low Vulnerability (Rank 1)",
+               hjust = 0, vjust = -1, size = 4, color = "darkred", fontface = "bold") +
+      annotate("text", x = Inf, y = -Inf, label = "High Vulnerability (Highest Rank)",
+               hjust = 1, vjust = -1, size = 4, color = "darkblue", fontface = "bold")
+    
+    girafe(ggobj = plot, width_svg = 10, height_svg = 8)
+  })
+  
+  #' Generate filtered vulnerability map
+  output$filteredVulnerabilityMap <- renderGirafe({
+    req(rv$data, rv$ward_rankings, rv$shp_data, input$urban_threshold)
+    
+    # Get threshold from numeric input - use this value consistently
+    threshold <- as.numeric(input$urban_threshold)
+    
+    # Apply urban extent threshold filtering
+    filtered_data <- filter_by_urban_extent(rv$shp_data, threshold)
+    
+    # Join with vulnerability rankings
+    map_data <- left_join(filtered_data, rv$ward_rankings, by = "WardName")
+    
+    # Create plot with non-urban areas grayed out
+    plot <- ggplot() +
+      # First layer: All wards with gray for those below threshold
+      geom_sf_interactive(data = map_data, 
+                          aes(fill = ifelse(MeetsThreshold, overall_rank, NA),
+                              tooltip = paste(WardName, 
+                                              "\nUrban %:", round(UrbanPercent, 1),
+                                              "\nRank:", overall_rank,
+                                              "\nStatus:", ifelse(MeetsThreshold, "Prioritized", "De-prioritized"))),
+                          color = "black") +
+      # Layer for non-prioritized areas (below threshold)
+      geom_sf_interactive(data = map_data[!map_data$MeetsThreshold, ], 
+                          fill = "#CCCCCC", alpha = 0.7,
+                          color = "black",
+                          aes(tooltip = paste(WardName, 
+                                              "\nUrban %:", round(UrbanPercent, 1),
+                                              "\n(Below urban threshold)"))) +
+      scale_fill_viridis_c(option = "plasma", direction = -1, 
+                           name = "Vulnerability Rank",
+                           na.value = "#CCCCCC",
+                           guide = guide_colorbar(
+                             title.position = "top",
+                             title.hjust = 0.5,
+                             label.theme = element_text(size = 12),
+                             barwidth = 15,
+                             barheight = 1
+                           )) +
+      theme_void() +
+      labs(title = paste("Ward Vulnerability Map (Urban Threshold:", threshold, "%)")) +
+      theme(legend.position = "bottom",
+            legend.box = "vertical",
+            legend.margin = margin(t = 10, b = 10),
+            plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
+      # Annotations for clarity
+      annotate("text", x = -Inf, y = -Inf, label = "Low Vulnerability (Rank 1)", 
+               hjust = 0, vjust = -1, size = 4, color = "darkred", fontface = "bold") +
+      annotate("text", x = Inf, y = -Inf, label = "High Vulnerability (Highest Rank)", 
+               hjust = 1, vjust = -1, size = 4, color = "darkblue", fontface = "bold")
+    
+    girafe(ggobj = plot, width_svg = 10, height_svg = 8)
+  })
+  
+  #' Create a table with deprioritization statistics
+  output$deprioritization_stats <- renderTable({
+    req(rv$ward_rankings, rv$shp_data, input$urban_threshold)
+    
+    # Get threshold from numeric input
+    threshold <- as.numeric(input$urban_threshold)
+    
+    # Apply urban extent threshold filtering
+    filtered_data <- filter_by_urban_extent(rv$shp_data, threshold)
+    
+    # Join with vulnerability rankings
+    map_data <- left_join(filtered_data, rv$ward_rankings, by = "WardName")
+    
+    # Calculate statistics
+    total_wards <- nrow(map_data)
+    prioritized_wards <- sum(map_data$MeetsThreshold)
+    deprioritized_wards <- total_wards - prioritized_wards
+    
+    # Create a statistics table
+    data.frame(
+      Metric = c("Total Wards", "Deprioritized Wards", "Prioritized Wards", "Prioritization %"),
+      Value = c(
+        total_wards,
+        prioritized_wards,
+        deprioritized_wards,
+        paste0(round(deprioritized_wards / total_wards * 100, 1), "%")
+      )
+    )
+  }, striped = TRUE, hover = TRUE, bordered = TRUE, align = 'l')
+  
+  #' Observer to update deprioritized wards list
+  observe({
+    req(rv$shp_data, rv$ward_rankings, input$urban_threshold)
+    
+    # Get the threshold value from the numeric input
+    threshold <- as.numeric(input$urban_threshold)
+    
+    if(threshold > 0) {
+      # Filter data based on threshold
+      filtered_data <- filter_by_urban_extent(rv$shp_data, threshold)
+      
+      # Combine with vulnerability rankings
+      combined_data <- left_join(filtered_data, rv$ward_rankings, by = "WardName")
+      
+      # Get list of de-prioritized wards (those below threshold)
+      deprioritized <- combined_data %>%
+        filter(!MeetsThreshold) %>%
+        select(WardName, UrbanPercent, overall_rank) %>%
+        arrange(desc(overall_rank))
+      
+      rv$deprioritized_wards(deprioritized)
+    } else {
+      rv$deprioritized_wards(NULL)
+    }
+  })
+  
+  #============================================================================
   # Decision Tree
+  #============================================================================
   
+  #' Update decision tree progress
+  observe({
+    rv$decision_tree_progress(modifyList(rv$decision_tree_progress(), list(
+      data_loaded = TRUE,
+      variables_selected = TRUE,
+      normalization_done = TRUE,
+      composite_scores_calculated = TRUE
+    )))
+  })
   
+  #' Initialize the decision tree
+  output$decisionTree <- renderGrViz({
+    req(rv$cleaned_data)
+    all_vars <- get_columns_after_wardname(rv$cleaned_data)
+    selected_vars <- input$composite_vars
+    excluded_vars <- setdiff(all_vars, selected_vars)
+    
+    top_5_wards <- if (!is.null(rv$ward_rankings)) {
+      rv$ward_rankings %>%
+        arrange(desc(overall_rank)) %>%
+        slice_head(n = 5) %>%
+        pull(WardName)
+    } else {
+      character(0)
+    }
+    
+    decision_tree_function(all_vars, selected_vars, excluded_vars, rv$decision_tree_progress(), top_5_wards)
+  })
   
-  # Replace the existing download handlers with these improved versions
+  #' Update decision tree when parameters change
+  observe({
+    req(rv$decision_tree_progress())
+    output$decisionTree <- renderGrViz({
+      req(rv$cleaned_data)
+      all_vars <- get_columns_after_wardname(rv$cleaned_data)
+      selected_vars <- input$composite_vars
+      excluded_vars <- setdiff(all_vars, selected_vars)
+      
+      top_5_wards <- if (!is.null(rv$ward_rankings)) {
+        rv$ward_rankings %>%
+          arrange(overall_rank) %>%
+          slice_head(n = 5) %>%
+          pull(WardName)
+      } else {
+        character(0)
+      }
+      
+      decision_tree_function(all_vars, selected_vars, excluded_vars, rv$decision_tree_progress(), top_5_wards)
+    })
+  })
+  
+  #' Download decision tree as PNG
   output$downloadPNG <- downloadHandler(
     filename = function() {
       paste0("decision_tree_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".png")
@@ -1056,6 +1885,7 @@ server <- function(input, output, session) {
     }
   )
   
+  #' Download decision tree as PDF
   output$downloadPDF <- downloadHandler(
     filename = function() {
       paste0("decision_tree_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".pdf")
@@ -1102,383 +1932,1407 @@ server <- function(input, output, session) {
     }
   )
   
-  observe({
-    rv$decision_tree_progress(modifyList(rv$decision_tree_progress(), list(
-      data_loaded = TRUE,
-      variables_selected = TRUE,
-      normalization_done = TRUE,
-      composite_scores_calculated = TRUE
-    )))
-  })
   
+  #============================================================================
+  # Manual Labeling
+  #============================================================================
   
-  wrap_text <- function(text, width = 20) {
-    paste(strwrap(text, width = width), collapse = "\n")
-  }
-  
-
-  decision_tree_function <- function(all_variables, selected_variables, excluded_variables, progress, top_5_wards = character(0)) {
-    # Format variables lists with bullets
-    format_var_list <- function(vars) {
-      if (length(vars) == 0) return("None")
-      paste(sapply(vars, function(x) paste0("• ", x)), collapse = "\\n")
-    }
+  #' Display manual deprioritization stats
+  output$manual_deprioritization_stats <- renderUI({
+    req(rv$shp_data, input$urban_threshold)
     
-    # Format top 5 wards
-    formatted_top_5 <- if (length(top_5_wards) > 0) {
-      paste("1.", top_5_wards[1], "\\n2.", top_5_wards[2], "\\n3.", 
-            top_5_wards[3], "\\n4.", top_5_wards[4], "\\n5.", top_5_wards[5])
-    } else {
-      "No wards available"
-    }
+    # Use the threshold from the input (defaults to 30%)
+    threshold <- as.numeric(input$urban_threshold)
     
-    # Define precise professional color scheme
-    colors <- list(
-      navy = "#1B2631",       # Darker navy for headers
-      orange = "#E67E22",     # Bright orange for diamond
-      teal = "#16A596",       # Bright teal for included
-      gray = "#7F8C8D",       # Medium gray for excluded
-      green = "#27AE60",      # Bright green for process
-      blue = "#2980B9",       # Bright blue for maps
-      purple = "#8E44AD",     # Bright purple for final nodes
-      arrow = "#34495E"       # Dark arrow color
+    # Force recalculation each time
+    filtered_data <- filter_by_urban_extent(rv$shp_data, threshold)
+    
+    # Calculate statistics
+    total_wards <- nrow(filtered_data)
+    prioritized_wards <- sum(filtered_data$MeetsThreshold)
+    deprioritized_wards <- total_wards - prioritized_wards
+    deprioritized_percent <- round(deprioritized_wards / total_wards * 100, 1)
+    
+    # Create info box with dynamic threshold
+    tagList(
+      div(style = "margin-bottom: 10px;",
+          p(style = "margin: 0;",
+            HTML(paste0(
+              "<strong>", prioritized_wards, "</strong> wards (", round(100 - deprioritized_percent, 1), "%) meet the threshold.<br>",
+              "<strong>", deprioritized_wards, "</strong> wards (", deprioritized_percent, "%) are below the threshold."
+            ))
+          )
+      ),
+      p(style = "font-style: italic; color: #666; font-size: 12px; margin-bottom: 0;",
+        "Select a ward type below to begin detailed analysis.")
     )
-    
-    graph_string <- sprintf('
-  digraph G {
-    graph [rankdir=LR,
-           nodesep=0.6,
-           ranksep=0.8,
-           splines=ortho,
-           pad=0.5,
-           compound=true]
-    
-    node [shape=rect,
-          style="filled,rounded",
-          fontname="Arial",
-          fontsize=11,
-          margin="0.2,0.2",
-          penwidth=1.2]
-    
-    edge [color="%s",
-          penwidth=1.2,
-          arrowsize=0.9,
-          arrowhead=vee]
-    // Initial nodes
-    start [label="Malaria Risk Assessment\\nVariable Selection"
-           fillcolor="%s"
-           fontcolor="white"]
-    vars [label="Variables:\\n%s"
-          fillcolor="%s"
-          fontcolor="white"]
-    // Evaluation diamond
-    eval [label="Variable\\nEvaluation"
-          shape=diamond
-          fillcolor="%s"
-          fontcolor="white"
-          width=1.5
-          height=1.5]
-    // Variable groups
-    included [label="Included Variables:\\n%s"
-             fillcolor="%s"
-             fontcolor="white"]
-    excluded [label="Excluded Variables:\\n%s"
-             fillcolor="%s"
-             fontcolor="white"]
-    // Processing and results
-    process [label="Data Normalization &\\nComposite Score Calculation"
-            fillcolor="%s"
-            fontcolor="white"]
-    maps [label="Generated Risk Maps\\nfor All Combinations"
-          fillcolor="%s"
-          fontcolor="white"]
-    recommended [label="Recommended Risk Map\\nby the Box and Whisker Plot"
-                fillcolor="%s"
-                fontcolor="white"]
-    priority [label="Top 5 Wards\\nfor Reprioritization:\\n%s"
-             fillcolor="%s"
-             fontcolor="white"]
-    // Edge definitions with improved spacing
-    start -> vars [weight=2]
-    vars -> eval [weight=2]
-    eval -> included [label=" Include"]
-    eval -> excluded [label=" Exclude"]
-    included -> process [weight=2]
-    process -> maps [weight=2]
-    maps -> recommended [weight=2]
-    recommended -> priority [weight=2]
-    // Rank definitions for better alignment
-    {rank=same; start; vars}
-    {rank=same; included; excluded}
-    {rank=same; process; maps}
-    {rank=same; recommended; priority}
-    // Add invisible edges for better spacing
-    included -> excluded [style=invis]
-    maps -> recommended [style=invis]
-  }',
-                            colors$arrow,
-                            colors$navy, format_var_list(all_variables), colors$navy,
-                            colors$orange,
-                            format_var_list(selected_variables), colors$teal,
-                            format_var_list(excluded_variables), colors$gray,
-                            colors$green, colors$blue,
-                            colors$purple, formatted_top_5, colors$purple
-    )
-    
-    grViz(graph_string)
-  }
-  
-  
-  
-  # Dynamic UI for variable selection
-  output$decision_tree_variables <- renderUI({
-    req(rv$cleaned_data)
-    all_vars <- get_columns_after_wardname(rv$cleaned_data)
-    checkboxGroupInput("selected_vars", "Select Variables:",
-                       choices = all_vars,
-                       selected = all_vars)
   })
   
-  # Initialize the decision tree
-  output$decisionTree <- renderGrViz({
-    req(rv$cleaned_data)
-    all_vars <- get_columns_after_wardname(rv$cleaned_data)
-    selected_vars <- input$composite_vars
-    excluded_vars <- setdiff(all_vars, selected_vars)
+  #' Create ward selection dropdown
+  output$filtered_ward_select <- renderUI({
+    # Require both shapefile data and ward rankings to be available
+    req(rv$shp_data, rv$ward_rankings)
     
-    top_5_wards <- if (!is.null(rv$ward_rankings)) {
-      rv$ward_rankings %>%
-        arrange(desc(overall_rank)) %>%
-        slice_head(n = 5) %>%
-        pull(WardName)
-    } else {
-      character(0)
-    }
+    # Fixed 30% threshold as specified
+    threshold <- 30
     
-    decision_tree_function(all_vars, selected_vars, excluded_vars, rv$decision_tree_progress(), top_5_wards)
-  })
-  
-  # In the observe block
-  observe({
-    req(rv$decision_tree_progress())
-    output$decisionTree <- renderGrViz({
-      req(rv$cleaned_data)
-      all_vars <- get_columns_after_wardname(rv$cleaned_data)
-      selected_vars <- input$composite_vars
-      excluded_vars <- setdiff(all_vars, selected_vars)
-      
-      top_5_wards <- if (!is.null(rv$ward_rankings)) {
-        rv$ward_rankings %>%
-          arrange(overall_rank) %>%
-          slice_head(n = 5) %>%
-          pull(WardName)
+    # Get urban percent information directly from shapefile if available
+    if (!"UrbanPercent" %in% names(rv$shp_data)) {
+      if ("Urban" %in% names(rv$shp_data)) {
+        # Convert from Yes/No to percentages if that's what's available
+        rv$shp_data$UrbanPercent <- ifelse(rv$shp_data$Urban == "Yes", 100, 0)
       } else {
-        character(0)
+        # Show error message if no urban data available
+        return(div(
+          style = "padding: 10px; background-color: #f8d7da; border-radius: 5px; margin-bottom: 10px;",
+          p(style = "margin: 0; color: #721c24;",
+            "Error: No urban extent data available. Please ensure your shapefile contains urban information.")
+        ))
+      }
+    }
+    
+    # Create a data frame with just WardName and UrbanPercent
+    urban_data <- rv$shp_data %>%
+      st_drop_geometry() %>%
+      select(WardName, UrbanPercent)
+    
+    # Join with ward rankings
+    combined_data <- rv$ward_rankings %>%
+      inner_join(urban_data, by = "WardName")
+    
+    # Filter to include ONLY wards above the threshold
+    filtered_wards <- combined_data %>%
+      filter(UrbanPercent >= threshold) %>%
+      arrange(overall_rank)
+    
+    # Check if any wards meet the threshold
+    if(nrow(filtered_wards) == 0) {
+      return(div(
+        style = "padding: 10px; background-color: #f8d7da; border-radius: 5px; margin-bottom: 10px;",
+        p(style = "margin: 0; color: #721c24;",
+          paste0("No wards found above the ", threshold, "% urban threshold. Please check your data."))
+      ))
+    }
+    
+    # Create named vector for selectInput choices
+    ward_choices <- setNames(
+      filtered_wards$WardName,
+      paste0(filtered_wards$WardName, " (Rank: ", 
+             filtered_wards$overall_rank, ", Urban: ", 
+             round(filtered_wards$UrbanPercent, 1), "%)")
+    )
+    
+    # Create the select input
+    selectInput("selected_ward", paste0("Select Ward (Meets ", threshold, "% Threshold):"), 
+                choices = c("Select a ward" = "", ward_choices),
+                selected = "")
+  })
+  
+  #' Show urban info for selected ward
+  output$selected_ward_urban_info <- renderUI({
+    req(input$selected_ward, rv$shp_data)
+    
+    # Get urban info for the selected ward
+    ward_data <- rv$shp_data %>% filter(WardName == input$selected_ward)
+    
+    if (nrow(ward_data) == 0) {
+      return(p("No data available for this ward."))
+    }
+    
+    # Apply urban extent threshold filtering with fixed 30% threshold
+    threshold <- 30
+    filtered_data <- filter_by_urban_extent(ward_data, threshold)
+    
+    # Get urban percentage and threshold status
+    urban_percent <- filtered_data$UrbanPercent[1]
+    meets_threshold <- filtered_data$MeetsThreshold[1]
+    
+    # Get vulnerability rank if available
+    rank_text <- ""
+    if (!is.null(rv$ward_rankings)) {
+      ward_rank <- rv$ward_rankings %>%
+        filter(WardName == input$selected_ward)
+      
+      if (nrow(ward_rank) > 0) {
+        rank_text <- paste0("<br>Vulnerability Rank: <strong>", ward_rank$overall_rank[1], "</strong>")
+      }
+    }
+    
+    # Format display - UPDATED TERMINOLOGY
+    tagList(
+      HTML(paste0(
+        "<div style='margin-bottom: 5px;'>",
+        "<span>Ward: </span>",
+        "<span style='font-weight: bold;'>", input$selected_ward, "</span>",
+        "</div>",
+        
+        "<div style='margin-bottom: 5px;'>",
+        "<span>Urban Extent: </span>",
+        "<span style='font-weight: bold; color: ", 
+        ifelse(meets_threshold, "#dc3545", "#28a745"), ";'>",  # Colors reversed
+        round(urban_percent, 1), "%</span>",
+        "</div>",
+        
+        "<div>",
+        "<span>Status: </span>",
+        "<span style='font-weight: bold; color: ", 
+        ifelse(meets_threshold, "#dc3545", "#28a745"), ";'>",  # Colors reversed
+        ifelse(meets_threshold, "Re-prioritized", "Prioritized"), "</span>",  # Terminology updated
+        rank_text,
+        "</div>"
+      ))
+    )
+  })
+  
+  #' Handle grid help button clicks
+  observeEvent(input$grid_help, {
+    shinyjs::toggle("grid_help_content")
+  })
+  
+  #' Handle close help button clicks
+  observeEvent(input$close_help, {
+    shinyjs::hide("grid_help_content")
+  })
+  
+  #' Create ward grid and map
+  observeEvent(input$plot_ward_map, {
+    req(input$selected_ward, rv$shp_data)
+    
+    withProgress(message = 'Processing ward data...', value = 0, {
+      incProgress(0.2, detail = "Loading ward data...")
+      
+      # Create grid for the selected ward
+      if (input$enable_grid) {
+        # Create the grid (using 500m as default if not specified)
+        grid_data <- create_ward_grid(
+          input$selected_ward, 
+          rv$shp_data, 
+          as.numeric(input$grid_cell_size %||% 500)
+        )
+        
+        # Store the grid in the reactive value
+        if (!is.null(grid_data)) {
+          # If we already have grids stored, update or append
+          existing_grids <- rv$gridded_wards()
+          if (!is.null(existing_grids)) {
+            # Remove any existing grid for this ward
+            existing_grids <- existing_grids[existing_grids$WardName != input$selected_ward, ]
+            # Combine with the new grid
+            grid_data <- rbind(existing_grids, grid_data)
+          }
+          rv$gridded_wards(grid_data)
+          
+          incProgress(0.6, detail = "Grid created successfully!")
+        } else {
+          showNotification("Could not create grid for this ward. Check console for errors.", type = "error")
+        }
       }
       
-      decision_tree_function(all_vars, selected_vars, excluded_vars, rv$decision_tree_progress(), top_5_wards)
+      # Determine if this is a prioritized or re-prioritized ward
+      ward_data <- rv$shp_data %>%
+        filter(WardName == input$selected_ward)
+      
+      threshold <- 30
+      filtered_ward <- filter_by_urban_extent(ward_data, threshold)
+      is_prioritized <- filtered_ward$MeetsThreshold[1]
+      
+      # Render the map with our enhanced function
+      output$ward_map <- renderLeaflet({
+        process_and_view_shapefile_and_csv_enhanced(
+          input$selected_ward, 
+          rv$shp_data,
+          rv$grid_annotations(),
+          enable_grid = input$enable_grid,
+          grid_cell_size = as.numeric(input$grid_cell_size %||% 500)
+        )
+      })
+      
+      incProgress(1, detail = "Map created!")
     })
   })
   
-  
-  # Manual Labelling Tab
-  
-  # Set the directories for the shapefiles and CSV files
-  shapefile_dir <- "www/data/shapefiles"
-  csv_dir <- "www/data/csv"
-  
-  # Function to process and view shapefile and CSV for a given ward
-  process_and_view_shapefile_and_csv <- function(ward_name, shapefile_dir, csv_dir) {
-    # Get the full path to the directories
-    shapefile_dir <- file.path(getwd(), shapefile_dir)
-    csv_dir <- file.path(getwd(), csv_dir)
-    # Split the selected ward name into parts
-    ward_parts <- unlist(strsplit(tolower(ward_name), " "))
+  #' Observer for classification from popup
+  observeEvent(input$classify_grid, {
+    req(input$classify_grid, rv$gridded_wards())
     
-    # Find matching shapefile ZIP file using partial matching
-    shapefile_zip_files <- list.files(shapefile_dir, pattern = ".zip$", full.names = TRUE)
-    matching_shapefile <- shapefile_zip_files[Reduce(`&`, lapply(ward_parts, function(x) grepl(x, tolower(shapefile_zip_files))))]
+    # Extract the classification data
+    ward_name <- input$classify_grid$wardName
+    grid_id <- as.integer(input$classify_grid$gridId)
+    classification <- input$classify_grid$classification
+    timestamp <- input$classify_grid$timestamp
+    method <- input$classify_grid$method %||% "manual"
     
-    # Check if a single matching shapefile is found
-    if (length(matching_shapefile) != 1) {
-      stop(paste("Found", length(matching_shapefile), "matching shapefiles for ward:", ward_name))
+    # Map old classifications to new classification scheme if needed
+    if (classification == "No Buildings" || classification == "Avoid Area") {
+      classification <- "No Buildings/Avoid Area"
     }
     
-    shapefile_zip_path <- matching_shapefile
-    cat("Extracting shapefile from:", shapefile_zip_path, "\n")
+    # Create a data frame with the information
+    new_annotation <- data.frame(
+      WardName = ward_name,
+      GridID = grid_id,
+      Classification = classification,
+      Timestamp = timestamp,
+      Method = method,
+      stringsAsFactors = FALSE
+    )
     
-    # Extract the shapefile from the ZIP archive
-    temp_dir <- tempdir()
-    unzip(shapefile_zip_path, exdir = temp_dir)
+    # Get current annotations
+    annotations <- rv$grid_annotations()
     
-    # Find the shapefile path within the extracted files
-    shapefile_path <- list.files(temp_dir, pattern = "\\.shp$", full.names = TRUE)
+    # Check if this grid cell is already annotated
+    existing_idx <- which(annotations$WardName == ward_name & 
+                            annotations$GridID == grid_id)
     
-    if (length(shapefile_path) == 0) {
-      stop("No shapefile (.shp) found in the extracted archive.")
-    } else if (length(shapefile_path) > 1) {
-      # If multiple shapefiles are found, use the one that matches the ward name most closely
-      shapefile_path <- shapefile_path[which.max(sapply(shapefile_path, function(x) sum(grepl(ward_parts, tolower(x)))))]
-    }
-    
-    cat("Shapefile path:", shapefile_path, "\n")
-    
-    # Read the shapefile
-    shapefile <- st_read(shapefile_path)
-    
-    # Find the CSV file path
-    csv_files <- list.files(csv_dir, pattern = ".csv$", full.names = TRUE)
-    matching_csv <- csv_files[Reduce(`&`, lapply(ward_parts, function(x) grepl(x, tolower(csv_files))))]
-    
-    # Check if a single matching CSV is found
-    if (length(matching_csv) != 1) {
-      stop(paste("Found", length(matching_csv), "matching CSV files for ward:", ward_name))
-    }
-    
-    csv_path <- matching_csv
-    cat("CSV file path:", csv_path, "\n")
-    
-    # Read the CSV file
-    data_points <- read.csv(csv_path, stringsAsFactors = FALSE)
-    
-    # Print available columns for debugging
-    print(paste("Available columns:", paste(names(data_points), collapse = ", ")))
-    
-    # Function to detect coordinate system
-    detect_coordinate_system <- function(data) {
-      lat_col <- grep("latitude", names(data), value = TRUE, ignore.case = TRUE)
-      lon_col <- grep("longitude", names(data), value = TRUE, ignore.case = TRUE)
-      
-      if (length(lat_col) == 0 || length(lon_col) == 0) {
-        stop("The CSV file must contain 'latitude' and 'longitude' columns in their names.")
-      }
-      
-      # Check if coordinates are likely to be in decimal degrees
-      if (max(abs(data[[lat_col]])) <= 90 && max(abs(data[[lon_col]])) <= 180) {
-        return(list(type = "WGS84", lat = lat_col, lon = lon_col))
-      } else {
-        return(list(type = "projected", x = lon_col, y = lat_col))
-      }
-    }
-    
-    # Detect coordinate system
-    coord_system <- detect_coordinate_system(data_points)
-    
-    print(paste("Detected coordinate system:", coord_system$type))
-    
-    # Create an sf object from the data points
-    if (coord_system$type == "WGS84") {
-      data_points_sf <- st_as_sf(data_points, coords = c(coord_system$lon, coord_system$lat), crs = 4326)
+    if (length(existing_idx) > 0) {
+      # Update existing annotation
+      annotations$Classification[existing_idx] <- classification
+      annotations$Timestamp[existing_idx] <- timestamp
+      annotations$Method[existing_idx] <- method
     } else {
-      # Assuming the projected coordinate system is the same as the shapefile
-      data_points_sf <- st_as_sf(data_points, coords = c(coord_system$x, coord_system$y), crs = st_crs(shapefile))
+      # Add new annotation
+      annotations <- rbind(annotations, new_annotation)
     }
     
-    # Transform shapefile and data points to WGS84
-    shapefile_wgs84 <- st_transform(shapefile, crs = 4326)
-    df_wgs84 <- st_transform(data_points_sf, crs = 4326)
+    # Update annotations
+    rv$grid_annotations(annotations)
     
-    # Filter by settlement type
-    formal_points <- df_wgs84[df_wgs84$Impression == "Formal", ]
-    informal_points <- df_wgs84[df_wgs84$Impression == "Informal", ]
-    slum_points <- df_wgs84[df_wgs84$Impression == "Slum", ]
-    nonresidential_points <- df_wgs84[df_wgs84$Impression == "Non residential", ]
+    # Refresh the map with the updated classifications
+    output$ward_map <- renderLeaflet({
+      process_and_view_shapefile_and_csv_enhanced(
+        input$selected_ward, 
+        rv$shp_data,
+        rv$grid_annotations(),
+        enable_grid = input$enable_grid,
+        grid_cell_size = as.numeric(input$grid_cell_size %||% 500)
+      )
+    })
     
-    # Create a Leaflet map
+    # Show notification
+    showNotification(paste("Grid", grid_id, "classified as", classification), 
+                     type = "message", duration = 2)
+  })
+  
+  #' Display classification summary badges
+  output$classification_badges <- renderUI({
+    req(input$selected_ward, rv$grid_annotations())
+    
+    # Get classifications for the selected ward
+    annotations <- rv$grid_annotations() %>%
+      filter(WardName == input$selected_ward)
+    
+    # Count by classification type
+    formal_count <- sum(annotations$Classification == "Formal")
+    informal_count <- sum(annotations$Classification == "Informal")
+    avoid_count <- sum(annotations$Classification == "No Buildings/Avoid Area")
+    unclassified_count <- 0
+    
+    # If we have grid data, calculate unclassified count
+    grid_data <- rv$gridded_wards()
+    if (!is.null(grid_data)) {
+      ward_grid <- grid_data %>% 
+        filter(WardName == input$selected_ward)
+      
+      total_cells <- nrow(ward_grid)
+      classified_cells <- nrow(annotations)
+      unclassified_count <- total_cells - classified_cells
+    }
+    
+    # Create badges with explanatory text
+    tagList(
+      div(style = "margin-bottom: 10px;", 
+          p("Classifications help identify areas that may need nets despite the ward being above the 30% threshold:")),
+      div(style = "display: flex; flex-wrap: wrap; gap: 5px;",
+          if (formal_count > 0) div(class = "classification-badge badge-formal", paste("Formal:", formal_count)),
+          if (informal_count > 0) div(class = "classification-badge badge-informal", paste("Informal:", informal_count)),
+          if (avoid_count > 0) div(class = "classification-badge badge-avoid", paste("No Buildings/Avoid:", avoid_count)),
+          if (unclassified_count > 0) div(class = "classification-badge badge-unclassified", paste("Unclassified:", unclassified_count))
+      ),
+      div(style = "margin-top: 10px; font-style: italic; color: #666; font-size: 12px;", 
+          "Formal and Informal areas will be considered for net distribution.")
+    )
+  })
+  
+  #' Clear all annotations
+  observeEvent(input$clear_annotations, {
+    req(input$selected_ward)
+    
+    # Get current annotations
+    annotations <- rv$grid_annotations()
+    
+    # Filter out annotations for the current ward
+    annotations <- annotations %>%
+      filter(WardName != input$selected_ward)
+    
+    # Update annotations
+    rv$grid_annotations(annotations)
+    
+    # Refresh the map
+    output$ward_map <- renderLeaflet({
+      process_and_view_shapefile_and_csv_enhanced(
+        input$selected_ward, 
+        rv$shp_data,
+        rv$grid_annotations(),
+        enable_grid = input$enable_grid,
+        grid_cell_size = as.numeric(input$grid_cell_size %||% 500)
+      )
+    })
+    
+    showNotification("All annotations cleared for the selected ward.", type = "message")
+  })
+  
+  #' Download grid shapefile
+  output$download_grid <- downloadHandler(
+    filename = function() {
+      paste0("gridded_", gsub(" ", "_", input$selected_ward), ".zip")
+    },
+    content = function(file) {
+      # Create a temporary directory
+      temp_dir <- tempdir()
+      grid_data <- rv$gridded_wards()
+      
+      if (is.null(grid_data)) {
+        showNotification("No grid data available. Please generate a grid first.", type = "warning")
+        return()
+      }
+      
+      # Filter to just the selected ward's grid
+      ward_grid <- grid_data[grid_data$WardName == input$selected_ward, ]
+      
+      if (nrow(ward_grid) == 0) {
+        showNotification("No grid data available for the selected ward. Please generate a grid first.", type = "warning")
+        return()
+      }
+      
+      # Write shapefile to temp directory
+      shapefile_dir <- file.path(temp_dir, "shapefile")
+      dir.create(shapefile_dir, showWarnings = FALSE, recursive = TRUE)
+      
+      tryCatch({
+        st_write(ward_grid, file.path(shapefile_dir, "grid.shp"), append = FALSE)
+        
+        # Create zip file
+        files_to_zip <- list.files(shapefile_dir, full.names = TRUE)
+        zip(file, files_to_zip)
+      }, error = function(e) {
+        showNotification(paste("Error creating shapefile:", e$message), type = "error")
+      })
+    }
+  )
+  
+  #' Download grid annotations
+  output$download_annotations <- downloadHandler(
+    filename = function() {
+      paste0("annotations_", gsub(" ", "_", input$selected_ward), "_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv")
+    },
+    content = function(file) {
+      # Get current annotations for selected ward
+      annotations <- rv$grid_annotations()
+      ward_annotations <- annotations[annotations$WardName == input$selected_ward, ]
+      
+      if (nrow(ward_annotations) == 0) {
+        showNotification("No annotations available for this ward.", type = "warning")
+        write.csv(data.frame(Message = "No annotations available for this ward"), file, row.names = FALSE)
+        return()
+      }
+      
+      # Get grid data for this ward to extract coordinates
+      grid_data <- NULL
+      if (!is.null(rv$gridded_wards())) {
+        grid_data <- rv$gridded_wards() %>% 
+          filter(WardName == input$selected_ward)
+      }
+      
+      # Create a new data frame with coordinates
+      export_data <- ward_annotations
+      
+      # Add coordinates if grid data is available
+      if (!is.null(grid_data) && nrow(grid_data) > 0) {
+        # Calculate centroids for each grid cell
+        grid_centroids <- st_centroid(grid_data)
+        # Extract coordinates
+        coords <- st_coordinates(grid_centroids)
+        # Create a lookup table
+        coord_lookup <- data.frame(
+          GridID = grid_data$GridID,
+          Longitude = coords[, 1],
+          Latitude = coords[, 2],
+          stringsAsFactors = FALSE
+        )
+        
+        # Join with annotations
+        export_data <- left_join(export_data, coord_lookup, by = "GridID")
+      }
+      
+      # Add metadata columns
+      export_data$ExportDate <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+      export_data$GridCellSize <- input$grid_cell_size
+      export_data$GridCellDescription <- paste0(input$grid_cell_size, "m × ", input$grid_cell_size, "m square (for operational purposes)")
+      
+      # Get urban info
+      if (!is.null(rv$shp_data)) {
+        ward_data <- rv$shp_data %>%
+          filter(WardName == input$selected_ward)
+        
+        if (nrow(ward_data) > 0) {
+          # Get urban percentage
+          urban_percent <- if ("UrbanPercent" %in% names(ward_data)) {
+            ward_data$UrbanPercent[1]
+          } else if ("Urban" %in% names(ward_data)) {
+            ifelse(ward_data$Urban[1] == "Yes", 100, 0)
+          } else {
+            NA
+          }
+          
+          export_data$UrbanPercent <- urban_percent
+        }
+      }
+      
+      # Add grid statistics
+      if (!is.null(rv$gridded_wards())) {
+        ward_grid <- rv$gridded_wards() %>% 
+          filter(WardName == input$selected_ward)
+        
+        if (nrow(ward_grid) > 0) {
+          export_data$TotalGridCells <- nrow(ward_grid)
+          export_data$PercentClassified <- round(nrow(ward_annotations) / nrow(ward_grid) * 100, 1)
+        }
+      }
+      
+      # Write to CSV
+      write.csv(export_data, file, row.names = FALSE)
+      
+      showNotification(paste("Successfully downloaded annotations for", input$selected_ward), type = "message")
+    }
+  )
+  
+  
+  # Create ward map with grid classifications
+  observeEvent(input$plot_ward_map, {
+    req(input$selected_ward, rv$shp_data)
+    
+    withProgress(message = 'Processing ward data...', value = 0, {
+      incProgress(0.2, detail = "Loading ward data...")
+      
+      # Create grid for the selected ward
+      if (input$enable_grid) {
+        # Create the grid (using 500m as default if not specified)
+        grid_data <- create_ward_grid(
+          input$selected_ward, 
+          rv$shp_data, 
+          as.numeric(input$grid_cell_size %||% 500)
+        )
+        
+        # Store the grid in the reactive value
+        if (!is.null(grid_data)) {
+          # If we already have grids stored, update or append
+          existing_grids <- rv$gridded_wards()
+          if (!is.null(existing_grids)) {
+            # Remove any existing grid for this ward
+            existing_grids <- existing_grids[existing_grids$WardName != input$selected_ward, ]
+            # Combine with the new grid
+            grid_data <- rbind(existing_grids, grid_data)
+          }
+          rv$gridded_wards(grid_data)
+          
+          incProgress(0.6, detail = "Grid created successfully!")
+        } else {
+          showNotification("Could not create grid for this ward. Check console for errors.", type = "error")
+        }
+      }
+      
+      # Determine if this is a prioritized or re-prioritized ward
+      ward_data <- rv$shp_data %>%
+        filter(WardName == input$selected_ward)
+      
+      threshold <- 30
+      filtered_ward <- filter_by_urban_extent(ward_data, threshold)
+      is_prioritized <- filtered_ward$MeetsThreshold[1]
+      
+      # Render the map with our enhanced function
+      output$ward_map <- renderLeaflet({
+        process_and_view_shapefile_and_csv_enhanced(
+          input$selected_ward, 
+          rv$shp_data,
+          rv$grid_annotations(),
+          enable_grid = input$enable_grid,
+          grid_cell_size = as.numeric(input$grid_cell_size %||% 500)
+        )
+      })
+      
+      incProgress(1, detail = "Map created!")
+    })
+  })
+  
+  # Observer for classification from popup
+  observeEvent(input$classify_grid, {
+    req(input$classify_grid, rv$gridded_wards())
+    
+    # Extract the classification data
+    ward_name <- input$classify_grid$wardName
+    grid_id <- as.integer(input$classify_grid$gridId)
+    classification <- input$classify_grid$classification
+    timestamp <- input$classify_grid$timestamp
+    method <- input$classify_grid$method %||% "manual"
+    
+    # Map old classifications to new classification scheme if needed
+    if (classification == "No Buildings" || classification == "Avoid Area") {
+      classification <- "No Buildings/Avoid Area"
+    }
+    
+    # Create a data frame with the information
+    new_annotation <- data.frame(
+      WardName = ward_name,
+      GridID = grid_id,
+      Classification = classification,
+      Timestamp = timestamp,
+      Method = method,
+      stringsAsFactors = FALSE
+    )
+    
+    # Get current annotations
+    annotations <- rv$grid_annotations()
+    
+    # Check if this grid cell is already annotated
+    existing_idx <- which(annotations$WardName == ward_name & 
+                            annotations$GridID == grid_id)
+    
+    if (length(existing_idx) > 0) {
+      # Update existing annotation
+      annotations$Classification[existing_idx] <- classification
+      annotations$Timestamp[existing_idx] <- timestamp
+      annotations$Method[existing_idx] <- method
+    } else {
+      # Add new annotation
+      annotations <- rbind(annotations, new_annotation)
+    }
+    
+    # Update annotations
+    rv$grid_annotations(annotations)
+    
+    # Refresh the map with the updated classifications
+    output$ward_map <- renderLeaflet({
+      process_and_view_shapefile_and_csv_enhanced(
+        input$selected_ward, 
+        rv$shp_data,
+        rv$grid_annotations(),
+        enable_grid = input$enable_grid,
+        grid_cell_size = as.numeric(input$grid_cell_size %||% 500)
+      )
+    })
+    
+    # Show notification
+    showNotification(paste("Grid", grid_id, "classified as", classification), 
+                     type = "message", duration = 2)
+  })
+  
+  # NEW - Download Map functionality 
+  output$download_map <- downloadHandler(
+    filename = function() {
+      paste0("classified_map_", 
+             gsub(" ", "_", input$selected_ward), "_", 
+             format(Sys.time(), "%Y%m%d_%H%M%S"), 
+             ".png")
+    },
+    content = function(file) {
+      # Create a temporary HTML file to save the leaflet widget
+      temp_html <- tempfile(fileext = ".html")
+      
+      # Create a clean version of the map for download
+      download_map <- create_downloadable_map(
+        input$selected_ward, 
+        rv$shp_data,
+        rv$grid_annotations(),
+        enable_grid = input$enable_grid,
+        grid_cell_size = as.numeric(input$grid_cell_size %||% 500)
+      )
+      
+      # Save the map to the temporary file
+      htmlwidgets::saveWidget(download_map, temp_html, selfcontained = TRUE)
+      
+      # Add a delay to ensure all map elements are loaded
+      Sys.sleep(1)
+      
+      # Use webshot2 to capture the map as PNG
+      webshot2::webshot(
+        url = temp_html,
+        file = file,
+        delay = 2,  # Wait 2 seconds for rendering
+        cliprect = "viewport",
+        zoom = 2  # Higher quality
+      )
+      
+      # Clean up
+      unlink(temp_html)
+      
+      # Show success notification
+      showNotification("Map downloaded successfully!", type = "message")
+    }
+  )
+  
+  #============================================================================
+  # Net Distribution
+  #============================================================================
+  
+  #' Process grid annotations to find overrides for prioritized wards
+  observe({
+    req(rv$grid_annotations(), rv$shp_data)
+    
+    # Get all annotations
+    annotations <- rv$grid_annotations()
+    
+    if (nrow(annotations) == 0) {
+      rv$grid_overrides(NULL)
+      return()
+    }
+    
+    # Apply urban extent threshold filtering with fixed 30% threshold
+    threshold <- 30
+    filtered_data <- filter_by_urban_extent(rv$shp_data, threshold)
+    
+    # Find prioritized wards (below threshold) - UPDATED TERMINOLOGY
+    prioritized_wards <- filtered_data %>%
+      filter(MeetsThreshold) %>%
+      pull(WardName)
+    
+    # Find grids in prioritized wards that are classified as formal/informal
+    # These areas will receive nets in the prioritized distribution
+    override_areas <- annotations %>%
+      filter(WardName %in% prioritized_wards,
+             Classification %in% c("Formal", "Informal")) %>%
+      group_by(WardName) %>%
+      summarize(
+        FormalGrids = sum(Classification == "Formal"),
+        InformalGrids = sum(Classification == "Informal"),
+        TotalValidGrids = FormalGrids + InformalGrids,
+        .groups = 'drop'
+      ) %>%
+      filter(TotalValidGrids >= 3) # Only consider wards with at least 3 valid grid cells
+    
+    # Store these overrides
+    rv$grid_overrides(override_areas)
+  })
+  
+  #' Calculate net distribution
+  observeEvent(input$calculate_distribution, {
+    req(rv$shp_data, rv$ward_rankings, input$total_nets, input$avg_household_size)
+    
+    # Show a loading message
+    withProgress(message = 'Calculating optimal net distribution...', value = 0, {
+      
+      # Get the input values - with validation
+      total_nets <- as.numeric(input$total_nets)
+      if (is.na(total_nets) || total_nets <= 0) {
+        total_nets <- 10000 # Default if invalid
+        showNotification("Invalid net count. Using 10,000 as default.", type = "warning")
+      }
+      
+      avg_household_size <- as.numeric(input$avg_household_size)
+      if (is.na(avg_household_size) || avg_household_size <= 0) {
+        avg_household_size <- 5 # Default if invalid
+        showNotification("Invalid household size. Using 5 as default.", type = "warning")
+      }
+      
+      # Use the threshold from the Box and Whisker Plot tab
+      threshold <- as.numeric(input$urban_threshold)
+      if (is.na(threshold) || threshold < 0 || threshold > 100) {
+        threshold <- 30 # Default if invalid
+        showNotification("Invalid threshold. Using 30% as default.", type = "warning")
+      }
+      
+      # Join shapefile data with ward rankings
+      ward_data <- left_join(rv$shp_data, rv$ward_rankings, by = "WardName")
+      
+      # Add area calculation if not present
+      if (!"area" %in% names(ward_data)) {
+        incProgress(0.1, detail = "Calculating area...")
+        ward_data$area <- st_area(ward_data) %>% 
+          as.numeric() / 1000000  # Convert to sq km
+      }
+      
+      # Get manual grid overrides
+      grid_overrides <- rv$grid_overrides()
+      
+      incProgress(0.3, detail = "Applying manual classification overrides...")
+      
+      # Calculate the net distribution with improved strategy
+      distribution_results <- calculate_prioritized_net_distribution(
+        ward_data = ward_data, 
+        total_nets = total_nets, 
+        avg_household_size = avg_household_size, 
+        urban_threshold = threshold, 
+        strategy = "rank", # Use ranking strategy
+        grid_overrides = grid_overrides
+      )
+      
+      # Verify we have valid data in the summary before storing
+      if (is.null(distribution_results$summary$TargetPopulation) || 
+          distribution_results$summary$TargetPopulation <= 0) {
+        # Set a reasonable default
+        distribution_results$summary$TargetPopulation <- sum(ward_data$EstimatedPopulation, na.rm = TRUE)
+      }
+      
+      # Store results in reactive value
+      rv$net_distribution_results(distribution_results)
+      
+      incProgress(1, detail = "Complete!")
+      
+      # Show a notification with key stats
+      showNotification(
+        paste0(
+          "Distribution plan generated: ", 
+          format(distribution_results$summary$NetsDistributed, big.mark = ","), 
+          " nets allocated (", 
+          distribution_results$summary$CoveragePercent, 
+          "% coverage)"
+        ), 
+        type = "message", 
+        duration = 5
+      )
+    })
+  })
+  
+  #' Population statistic
+  output$stat_population <- renderUI({
+    req(rv$net_distribution_results)
+    results <- rv$net_distribution_results()
+    
+    if (is.null(results) || is.null(results$summary)) {
+      # Provide default values instead of NULL
+      return(div(class = "stat-value", "0"))
+    }
+    
+    # Ensure we use a valid population value
+    population_value <- results$summary$TargetPopulation
+    if (is.null(population_value) || is.na(population_value) || population_value <= 0) {
+      # Try to get the total population from a different source
+      if (!is.null(results$summary$TotalPopulation) && !is.na(results$summary$TotalPopulation)) {
+        population_value <- results$summary$TotalPopulation
+      } else {
+        # Default to calculating from wards data if available
+        if (!is.null(results$wards)) {
+          population_value <- sum(results$wards$EstimatedPopulation, na.rm = TRUE)
+        } else {
+          population_value <- 0
+        }
+      }
+    }
+    
+    tagList(
+      div(class = "stat-value", format(population_value, big.mark = ",")),
+      div(class = "stat-label", "TARGET POPULATION")
+    )
+  })
+  
+  #' Households statistic
+  output$stat_households <- renderUI({
+    req(rv$net_distribution_results)
+    results <- rv$net_distribution_results()
+    
+    if (is.null(results) || is.null(results$summary)) {
+      return(div(class = "stat-value", "0"))
+    }
+    
+    # Get the households count, either directly or calculated from population
+    households_value <- 0
+    households_covered <- 0
+    
+    if (!is.null(results$summary$TotalHouseholds) && !is.na(results$summary$TotalHouseholds)) {
+      households_value <- results$summary$TotalHouseholds
+    } else if (!is.null(results$summary$TargetPopulation) && !is.na(results$summary$TargetPopulation)) {
+      # Calculate from population using average household size
+      avg_household_size <- input$avg_household_size
+      if (is.null(avg_household_size) || is.na(avg_household_size) || avg_household_size <= 0) {
+        avg_household_size <- 5 # Default value
+      }
+      households_value <- ceiling(results$summary$TargetPopulation / avg_household_size)
+    }
+    
+    # Calculate households covered
+    if (!is.null(results$summary$HouseholdsCovered) && !is.na(results$summary$HouseholdsCovered)) {
+      households_covered <- results$summary$HouseholdsCovered
+    } else if (!is.null(results$summary$PopulationCovered) && !is.na(results$summary$PopulationCovered)) {
+      # Calculate from covered population
+      avg_household_size <- input$avg_household_size
+      if (is.null(avg_household_size) || is.na(avg_household_size) || avg_household_size <= 0) {
+        avg_household_size <- 5 # Default value
+      }
+      households_covered <- ceiling(results$summary$PopulationCovered / avg_household_size)
+    }
+    
+    tagList(
+      div(class = "stat-value", 
+          HTML(paste0(
+            format(households_covered, big.mark = ","), 
+            " / ", 
+            format(households_value, big.mark = ",")
+          ))),
+      div(class = "stat-label", "HOUSEHOLDS COVERED / TOTAL")
+    )
+  })
+  
+  #' Nets statistic
+  output$stat_nets <- renderUI({
+    req(rv$net_distribution_results)
+    results <- rv$net_distribution_results()
+    
+    if (is.null(results) || is.null(results$summary)) {
+      return(div(class = "stat-value", "0 / 0"))
+    }
+    
+    # Get nets distributed and nets needed
+    nets_distributed <- 0
+    nets_needed <- 0
+    
+    if (!is.null(results$summary$NetsDistributed) && !is.na(results$summary$NetsDistributed)) {
+      nets_distributed <- results$summary$NetsDistributed
+    }
+    
+    if (!is.null(results$summary$NetsNeeded) && !is.na(results$summary$NetsNeeded)) {
+      nets_needed <- results$summary$NetsNeeded
+    }
+    
+    tagList(
+      div(class = "stat-value", 
+          HTML(paste0(
+            format(nets_distributed, big.mark = ","), 
+            " / ", 
+            format(nets_needed, big.mark = ",")
+          ))),
+      div(class = "stat-label", "NETS DISTRIBUTED / NEEDED")
+    )
+  })
+  
+  #' Coverage statistic
+  output$stat_coverage <- renderUI({
+    req(rv$net_distribution_results)
+    results <- rv$net_distribution_results()
+    
+    if (is.null(results) || is.null(results$summary)) {
+      return(div(class = "stat-value", "0%"))
+    }
+    
+    # Get coverage percentage
+    coverage <- 0
+    
+    if (!is.null(results$summary$CoveragePercent) && !is.na(results$summary$CoveragePercent)) {
+      coverage <- results$summary$CoveragePercent
+    }
+    
+    tagList(
+      div(class = "stat-value", paste0(coverage, "%")),
+      div(class = "stat-label", "COVERAGE")
+    )
+  })
+  
+  #' Population coverage bar
+  output$population_coverage_bar <- renderUI({
+    req(rv$net_distribution_results)
+    results <- rv$net_distribution_results()
+    
+    if (is.null(results) || is.null(results$summary)) {
+      return(div(
+        "No distribution data available. Please click 'Calculate Distribution' to generate results.",
+        style = "text-align: center; color: #777; padding: 20px;"
+      ))
+    }
+    
+    coverage <- results$summary$CoveragePercent
+    
+    # Determine color based on coverage level
+    bar_color <- if (coverage < 50) {
+      "linear-gradient(to right, #FF5722, #FF9800)"  # Red-orange for low coverage
+    } else if (coverage < 75) {
+      "linear-gradient(to right, #FFC107, #CDDC39)"  # Yellow-lime for medium coverage
+    } else {
+      "linear-gradient(to right, #4CAF50, #8BC34A)"  # Green for good coverage
+    }
+    
+    # Determine message based on coverage
+    if (coverage < 50) {
+      status_message <- paste0("Critical: ", 
+                               format(results$summary$NetsNeeded - results$summary$NetsDistributed, big.mark = ","), 
+                               " more nets needed for full coverage.")
+      status_color <- "#FF5722"
+    } else if (coverage < 80) {
+      status_message <- paste0("Attention: ", 
+                               format(results$summary$NetsNeeded - results$summary$NetsDistributed, big.mark = ","), 
+                               " more nets needed for full coverage.")
+      status_color <- "#FF9800"
+    } else if (coverage < 100) {
+      status_message <- "Good coverage. Additional nets would achieve full coverage."
+      status_color <- "#8BC34A"
+    } else {
+      status_message <- "Excellent! Full population coverage achieved."
+      status_color <- "#4CAF50"
+    }
+    
+    # Household coverage information
+    households_info <- ""
+    if (!is.null(results$summary$TotalHouseholds) && !is.null(results$summary$HouseholdsCovered)) {
+      households_info <- paste0(
+        "<div style='margin-top: 10px; background-color: #f5f5f5; padding: 10px; border-radius: 5px;'>",
+        "<strong>Household Coverage:</strong> ", 
+        format(results$summary$HouseholdsCovered, big.mark = ","), 
+        " of ", 
+        format(results$summary$TotalHouseholds, big.mark = ","), 
+        " households covered (", 
+        round(results$summary$HouseholdsCovered / max(results$summary$TotalHouseholds, 1) * 100, 1), 
+        "%)",
+        "</div>"
+      )
+    }
+    
+    # Prioritized vs de-prioritized areas details
+    reprioritized_coverage <- 0
+    if (!is.null(results$summary$ReprioritizedCoverage)) {
+      reprioritized_coverage <- results$summary$ReprioritizedCoverage
+    }
+    
+    prioritized_message <- paste0(
+      "Prioritized areas: ", 
+      results$summary$PrioritizedCoverage, "% coverage (",
+      format(results$summary$PrioritizedNets, big.mark = ","), " nets)"
+    )
+    
+    deprioritized_message <- paste0(
+      "De-prioritized areas: ", 
+      reprioritized_coverage, "% coverage (",
+      format(results$summary$ReprioritizedNets, big.mark = ","), " nets)"
+    )
+    
+    tagList(
+      div(class = "coverage-bar",
+          div(class = "coverage-fill",
+              paste0(coverage, "% Population Covered"),
+              style = paste0("width: ", coverage, "%; background: ", bar_color, ";")
+          )
+      ),
+      div(
+        style = paste0("margin-top: 10px; color: ", status_color, "; font-weight: bold;"),
+        status_message
+      ),
+      div(
+        style = "margin-top: 5px; color: #555;",
+        paste0("With ", format(results$summary$TotalNets, big.mark = ","), " nets, you can cover ", 
+               format(results$summary$PopulationCovered, big.mark = ","), " out of ", 
+               format(results$summary$TargetPopulation, big.mark = ","), " people in targeted areas.")
+      ),
+      div(
+        style = "margin-top: 5px; display: flex; justify-content: space-between; color: #666;",
+        div(prioritized_message),
+        div(deprioritized_message)
+      ),
+      HTML(households_info)
+    )
+  })
+  
+  #' Distribution summary
+  output$distribution_summary <- renderUI({
+    req(rv$net_distribution_results)
+    results <- rv$net_distribution_results()
+    
+    if (is.null(results) || is.null(results$summary)) {
+      return(NULL)
+    }
+    
+    # Count wards by priority type
+    prioritized_count <- results$summary$PrioritizedWards
+    grid_classified_count <- results$summary$GridClassifiedWards
+    reprioritized_count <- results$summary$ReprioritizedWards
+    
+    # Create summary box
+    div(
+      style = "background-color: #f8f9fa; border-radius: 8px; padding: 15px; margin: 15px 0;",
+      h4("Distribution Strategy Summary", style = "margin-top: 0; color: #5D4E6D;"),
+      
+      div(style = "display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 10px;",
+          # Prioritized wards info
+          div(style = "flex: 1; min-width: 200px; background-color: #e8f5e9; padding: 10px; border-radius: 5px;",
+              h5(style = "margin-top: 0;", "Prioritized Wards (<30% urban)"),
+              p(style = "margin-bottom: 5px;", 
+                HTML(paste0("<strong>", prioritized_count, "</strong> wards below 30% urban threshold"))),
+              p(style = "margin-bottom: 0;", 
+                HTML(paste0("<strong>", results$summary$PrioritizedNets, "</strong> nets allocated")))
+          ),
+          
+          # Grid-classified wards info (only show if there are any)
+          if (grid_classified_count > 0) {
+            div(style = "flex: 1; min-width: 200px; background-color: #fff8e1; padding: 10px; border-radius: 5px;",
+                h5(style = "margin-top: 0;", "Grid-Classified Areas"),
+                p(style = "margin-bottom: 5px;", 
+                  HTML(paste0("<strong>", grid_classified_count, "</strong> wards with manual grid classification"))),
+                p(style = "margin-bottom: 0;", 
+                  HTML(paste0("<strong>", results$summary$GridClassifiedNets, "</strong> nets allocated")))
+            )
+          },
+          
+          # Re-prioritized wards info
+          div(style = "flex: 1; min-width: 200px; background-color: #ffebee; padding: 10px; border-radius: 5px;",
+              h5(style = "margin-top: 0;", "Re-prioritized Wards (>30% urban)"),
+              p(style = "margin-bottom: 5px;", 
+                HTML(paste0("<strong>", reprioritized_count, "</strong> wards above 30% urban threshold"))),
+              p(style = "margin-bottom: 0;", 
+                HTML(paste0("<strong>", results$summary$ReprioritizedNets, "</strong> nets allocated")))
+          )
+      ),
+      
+      # Show remaining nets information
+      if (results$summary$RemainingNets > 0) {
+        div(style = "background-color: #e3f2fd; padding: 10px; border-radius: 5px; margin-top: 10px;",
+            p(style = "margin: 0;", 
+              HTML(paste0("<strong>", results$summary$RemainingNets, "</strong> nets remaining unallocated. Consider increasing the population estimates for target areas.")))
+        )
+      }
+    )
+  })
+  
+  #' Distribution map
+  output$distribution_map <- renderLeaflet({
+    req(rv$net_distribution_results)
+    results <- rv$net_distribution_results()
+    
+    if (is.null(results) || is.null(results$wards)) {
+      return(
+        leaflet() %>%
+          addTiles() %>%
+          addControl(
+            html = paste("<div style='padding: 15px; background: white; border-radius: 5px;'>",
+                         "<h4>No Distribution Data</h4>",
+                         "<p>Please calculate distribution first using the button above.</p>",
+                         "</div>"),
+            position = "topright"
+          )
+      )
+    }
+    
+    # Prepare data for mapping
+    map_data <- results$wards %>%
+      st_transform(crs = 4326) # Transform to WGS84 for leaflet
+    
+    # Create a custom color palette for coverage with different colors by priority
+    get_color <- function(coverage, priority) {
+      if (priority == "Prioritized") {
+        if (coverage <= 0) return("#CCCCCC")
+        else if (coverage < 25) return("#FF5722")
+        else if (coverage < 50) return("#FFC107")
+        else if (coverage < 75) return("#8BC34A")
+        else if (coverage < 100) return("#4CAF50")
+        else return("#1B5E20")  # 100% coverage
+      } else if (priority == "Grid-Classified") {
+        if (coverage <= 0) return("#CCCCCC")
+        else if (coverage < 25) return("#FF9800")
+        else if (coverage < 50) return("#FFB74D")
+        else if (coverage < 75) return("#FFD54F")
+        else if (coverage < 100) return("#FFE082")
+        else return("#FFD700")  # 100% coverage - gold
+      } else {
+        return("#E0E0E0")  # Re-prioritized areas in gray
+      }
+    }
+    
+    # Apply colors
+    map_data$DisplayColor <- mapply(get_color, map_data$CoveragePercent, map_data$Priority)
+    
+    # Create label text based on priority and coverage
+    map_data$LabelText <- ifelse(
+      map_data$Priority == "Re-prioritized" & map_data$CoveragePercent == 0,
+      paste0(map_data$WardName, " (Re-prioritized)"),
+      paste0(map_data$WardName, ": ", map_data$CoveragePercent, "% Coverage")
+    )
+    
+    # Build leaflet map
     map <- leaflet() %>%
       addTiles() %>%
-      fitBounds(lng1 = st_bbox(shapefile_wgs84)[[1]],
-                lat1 = st_bbox(shapefile_wgs84)[[2]],
-                lng2 = st_bbox(shapefile_wgs84)[[3]],
-                lat2 = st_bbox(shapefile_wgs84)[[4]])
+      addPolygons(
+        data = map_data,
+        fillColor = ~DisplayColor,
+        fillOpacity = 0.7,
+        color = "#333333",
+        weight = 1,
+        smoothFactor = 0.2,
+        highlightOptions = highlightOptions(
+          weight = 2,
+          color = "#666",
+          fillOpacity = 0.9,
+          bringToFront = TRUE
+        ),
+        label = ~LabelText,
+        popup = ~paste0(
+          "<div style='min-width: 150px;'>",
+          "<h4 style='margin-top: 0;'>", WardName, "</h4>",
+          "<table style='width: 100%; border-collapse: collapse;'>",
+          "<tr><td>Priority:</td><td>", Priority, "</td></tr>",
+          "<tr><td>Urban %:</td><td>", round(UrbanPercent, 1), "%</td></tr>",
+          "<tr><td>Coverage:</td><td>", CoveragePercent, "%</td></tr>",
+          "<tr><td>Population:</td><td>", format(EstimatedPopulation, big.mark = ","), "</td></tr>",
+          "<tr><td>Nets Allocated:</td><td>", format(NetsAllocated, big.mark = ","), "</td></tr>",
+          "<tr><td>Nets Needed:</td><td>", format(NetsNeeded, big.mark = ","), "</td></tr>",
+          "</table>",
+          "</div>"
+        )
+      )
     
-    # Add shapefile to the map
-    map <- map %>%
-      addPolygons(data = shapefile_wgs84,
-                  color = "black",
-                  weight = 1,
-                  smoothFactor = 0.5,
-                  opacity = 1.0,
-                  fillOpacity = 0.0,
-                  highlightOptions = highlightOptions(
-                    weight = 2,
-                    color = "#666666",
-                    fillOpacity = 0.0,
-                    bringToFront = TRUE),
-                  label = shapefile_wgs84$WardName,
-                  popup = shapefile_wgs84$WardName)
-    
-    # Function to add points to the map
-    add_points <- function(map, points, color) {
-      if (nrow(points) > 0) {
-        print(paste("Adding points for:", color))
-        print(head(points))
-        print(st_coordinates(points))
-        map <- map %>%
-          addCircleMarkers(data = points,
-                           lng = ~st_coordinates(geometry)[,1],
-                           lat = ~st_coordinates(geometry)[,2],
-                           radius = 5,
-                           color = color,
-                           stroke = TRUE,
-                           weight = 2,
-                           fillOpacity = 0.7,
-                           popup = ~Impression)
-      }
-      return(map)
-    }
-    
-    # Add points to the map
-    map <- add_points(map, formal_points, "#0074D9")
-    map <- add_points(map, informal_points, "#FF4136")
-    map <- add_points(map, slum_points, "#FFDC00")
-    map <- add_points(map, nonresidential_points, "#2ECC40")
-    
-    # Add legend to the map
+    # Add legends
     map <- map %>%
       addLegend(
         position = "bottomright",
-        colors = c("#0074D9", "#FF4136", "#FFDC00", "#2ECC40"),
-        labels = c("Formal", "Informal", "Slum", "Nonresidential"),
-        title = "Settlement Type",
+        colors = c("#1B5E20", "#4CAF50", "#8BC34A", "#FFC107", "#FF5722", "#FFD700", "#E0E0E0"),
+        labels = c("Full Coverage (100%)", "High (76-99%)", "Good (51-75%)", "Medium (26-50%)", 
+                   "Low (1-25%)", "Grid-Classified", "Re-prioritized"),
+        title = "Coverage Level",
         opacity = 0.7
       )
     
     return(map)
-  }
-  
-  # Get top wards for the dropdown
-  top_wards <- reactive({
-    req(rv$ward_rankings)
-    rv$ward_rankings %>%
-      arrange(overall_rank) %>%
-      slice_head(n = 5) %>%
-      pull(WardName)
   })
   
-  # Ward selection dropdown for Manual Labelling tab
-  output$ward_select <- renderUI({
-    req(top_wards())
-    selectInput("selected_ward", "Select Ward:", choices = top_wards())
-  })
-  
-  observeEvent(input$plot_ward_map, {
-    req(input$selected_ward)
-    selected_ward <- input$selected_ward
+  #' Ward coverage table
+  output$ward_coverage_table <- renderDT({
+    req(rv$net_distribution_results)
+    results <- rv$net_distribution_results()
     
-    # Render the Leaflet map
-    output$ward_map <- renderLeaflet({
-      tryCatch({
-        process_and_view_shapefile_and_csv(selected_ward, shapefile_dir, csv_dir)
-      }, error = function(e) {
-        showNotification(paste("Error:", e$message), type = "error")
-        cat("Error details:", conditionMessage(e), "\n")
-        return(NULL)
-      })
-    })
+    if (is.null(results) || is.null(results$wards)) {
+      return(NULL)
+    }
+    
+    # Prepare data for table
+    table_data <- results$wards %>%
+      st_drop_geometry() %>%
+      select(WardName, Priority, UrbanPercent, overall_rank, EstimatedPopulation, 
+             NetsNeeded, NetsAllocated, CoveragePercent) %>%
+      arrange(Priority, overall_rank)
+    
+    # Format for display
+    display_data <- table_data %>%
+      mutate(
+        `Ward Name` = WardName,
+        `Priority` = Priority,
+        `Urban %` = round(UrbanPercent, 1),
+        `Vulnerability Rank` = overall_rank,
+        `Population` = EstimatedPopulation,
+        `Nets Needed` = NetsNeeded,
+        `Nets Allocated` = NetsAllocated,
+        `Coverage %` = CoveragePercent
+      ) %>%
+      select(`Ward Name`, `Priority`, `Urban %`, `Vulnerability Rank`, 
+             `Population`, `Nets Needed`, `Nets Allocated`, `Coverage %`)
+    
+    # Create the datatable
+    datatable(display_data,
+              options = list(
+                pageLength = 10,
+                autoWidth = TRUE,
+                dom = 'Bfrtip',
+                buttons = c('copy', 'csv', 'excel')
+              ),
+              rownames = FALSE) %>%
+      formatStyle(
+        'Priority',
+        backgroundColor = styleEqual(
+          c("Prioritized", "Re-prioritized", "Grid-Classified"),
+          c("#E8F5E9", "#FFEBEE", "#FFF8E1")
+        )
+      ) %>%
+      formatStyle(
+        'Coverage %',
+        backgroundColor = styleInterval(
+          c(1, 25, 50, 75, 99),
+          c('#CCCCCC', '#FF5722', '#FFC107', '#8BC34A', '#4CAF50', '#1B5E20')
+        ),
+        color = styleInterval(
+          c(50),
+          c('black', 'white')
+        )
+      ) %>%
+      formatCurrency('Population', currency = "", interval = 3, mark = ",", digits = 0) %>%
+      formatCurrency('Nets Needed', currency = "", interval = 3, mark = ",", digits = 0) %>%
+      formatCurrency('Nets Allocated', currency = "", interval = 3, mark = ",", digits = 0)
+  })
+  
+  #' Manual override table (grid classifications)
+  output$manual_override_table <- renderDT({
+    req(rv$net_distribution_results, rv$grid_overrides)
+    results <- rv$net_distribution_results()
+    overrides <- rv$grid_overrides()
+    
+    if (is.null(results) || is.null(results$wards) || is.null(overrides) || nrow(overrides) == 0) {
+      return(datatable(
+        data.frame(
+          Message = "No grid classifications found. To create these, use the Manual Labelling tab to classify grid cells in priority wards."
+        ),
+        options = list(dom = 't'),
+        rownames = FALSE
+      ))
+    }
+    
+    # Get data for manually prioritized wards
+    grid_classified_wards <- results$wards %>%
+      st_drop_geometry() %>%
+      filter(Priority == "Grid-Classified") %>%
+      select(WardName, UrbanPercent, overall_rank, EstimatedPopulation, 
+             AdjustedPopulation, NetsNeeded, NetsAllocated, CoveragePercent)
+    
+    # Merge with grid override info
+    override_data <- left_join(grid_classified_wards, overrides, by = "WardName") %>%
+      mutate(
+        `Ward Name` = WardName,
+        `Urban %` = round(UrbanPercent, 1),
+        `Vulnerability Rank` = overall_rank,
+        `Total Population` = EstimatedPopulation,
+        `Adjusted Population` = AdjustedPopulation,
+        `Formal Grid Cells` = FormalGrids,
+        `Informal Grid Cells` = InformalGrids,
+        `Total Valid Cells` = TotalValidGrids,
+        `Nets Allocated` = NetsAllocated,
+        `Coverage %` = CoveragePercent
+      ) %>%
+      select(`Ward Name`, `Urban %`, `Vulnerability Rank`, `Total Population`, 
+             `Adjusted Population`, `Formal Grid Cells`, `Informal Grid Cells`, 
+             `Total Valid Cells`, `Nets Allocated`, `Coverage %`)
+    
+    # Create the datatable
+    datatable(override_data,
+              caption = "Wards with Grid Classifications",
+              options = list(
+                pageLength = 10,
+                autoWidth = TRUE,
+                dom = 'Bfrtip',
+                buttons = c('copy', 'csv', 'excel')
+              ),
+              rownames = FALSE) %>%
+      formatStyle(
+        'Coverage %',
+        backgroundColor = styleInterval(
+          c(1, 25, 50, 75, 99),
+          c('#CCCCCC', '#FF5722', '#FFC107', '#8BC34A', '#4CAF50', '#1B5E20')
+        ),
+        color = styleInterval(
+          c(50),
+          c('black', 'white')
+        )
+      ) %>%
+      formatCurrency('Total Population', currency = "", interval = 3, mark = ",", digits = 0) %>%
+      formatCurrency('Adjusted Population', currency = "", interval = 3, mark = ",", digits = 0) %>%
+      formatCurrency('Nets Allocated', currency = "", interval = 3, mark = ",", digits = 0)
+  })
+  
+  #' Download distribution plan
+  output$download_distribution <- downloadHandler(
+    filename = function() {
+      paste0("net_distribution_plan_", format(Sys.Date(), "%Y%m%d"), ".csv")
+    },
+    content = function(file) {
+      req(rv$net_distribution_results)
+      results <- rv$net_distribution_results()
+      
+      if (is.null(results) || is.null(results$wards)) {
+        # If no results, create a message file
+        write.csv(data.frame(Message = "No distribution results available. Please calculate distribution first."), 
+                  file, row.names = FALSE)
+        return()
+      }
+      
+      # Prepare export data
+      export_data <- results$wards %>%
+        st_drop_geometry() %>%
+        mutate(
+          Date = format(Sys.Date(), "%Y-%m-%d"),
+          UrbanThreshold = 30,  # Fixed 30% threshold
+          TotalNetsAvailable = input$total_nets,
+          AverageHouseholdSize = input$avg_household_size
+        )
+      
+      # Write to CSV
+      write.csv(export_data, file, row.names = FALSE)
+    }
+  )
+  
+  #' Observer to link urban threshold between tabs
+  observe({
+    req(input$urban_threshold)
+    if (input$urban_threshold != 0) {  # Only sync when a threshold is selected
+      updateNumericInput(session, "dist_urban_threshold", value = input$urban_threshold)
+    }
   })
   
   
+  # In server function, add this to update information about population data source
+  output$population_data_source <- renderUI({
+    req(rv$net_distribution_results)
+    results <- rv$net_distribution_results()
+    
+    if (is.null(results) || is.null(results$wards)) {
+      return(NULL)
+    }
+    
+    # Check if we found any ITN data matches
+    matches_found <- results$wards$ITNDataMatches[1] %||% 0
+    total_wards <- results$wards$TotalWards[1] %||% 0
+    state_name <- results$summary$StateName %||% "this"
+    
+    if (matches_found > 0) {
+      div(
+        style = "padding: 15px; background-color: #dff0d8; border-left: 5px solid #5cb85c; margin: 15px 0;",
+        h4("Population Data Source", style = "margin-top: 0; color: #3c763d;"),
+        p(paste0("Using actual population data from ITN distribution records for ", 
+                 state_name, " state."), 
+          style = "font-weight: bold;"),
+        p(paste0("Found ITN distribution data for ", matches_found, 
+                 " out of ", total_wards, " wards (", 
+                 round(matches_found/total_wards*100), "% coverage)."))
+      )
+    } else {
+      div(
+        style = "padding: 15px; background-color: #fcf8e3; border-left: 5px solid #f0ad4e; margin: 15px 0;",
+        h4("Population Data Source", style = "margin-top: 0; color: #8a6d3b;"),
+        p("Using estimated population based on settlement types and densities.", 
+          style = "font-weight: bold;"),
+        if (is.null(state_name)) {
+          p("Could not determine which state this area belongs to.")
+        } else {
+          p(paste0("No matching ward names found in ITN distribution data for ", state_name, " state."))
+        }
+      )
+    }
+  })
+  
+  #============================================================================
+  # Synchronization Between Tabs
+  #============================================================================
+  
+  # Synchronize ward selection across tabs
+  observeEvent(input$selected_ward, {
+    updateSelectInput(session, "population_ward", selected = input$selected_ward)
+  }, ignoreInit = TRUE)
+  
+  observeEvent(input$population_ward, {
+    updateSelectInput(session, "selected_ward", selected = input$population_ward)
+  }, ignoreInit = TRUE)
+  
+  # Synchronize urban threshold across tabs
+  observe({
+    req(input$urban_threshold)
+    
+    # Only sync when a valid threshold is selected
+    if (!is.na(input$urban_threshold) && input$urban_threshold > 0) {
+      updateNumericInput(session, "manual_urban_threshold", value = input$urban_threshold)
+    }
+  })
+  
+  observe({
+    req(input$manual_urban_threshold)
+    
+    # Sync with urban threshold if different
+    if (!is.na(input$manual_urban_threshold) && 
+        input$manual_urban_threshold != input$urban_threshold) {
+      updateNumericInput(session, "urban_threshold", value = input$manual_urban_threshold)
+    }
+  })
 }
+
+#==============================================================================
+# Complete App Definition
+#==============================================================================
 
 shinyApp(ui = ui, server = server)

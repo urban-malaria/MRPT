@@ -1,78 +1,62 @@
 # Load required libraries
 library(sf)
-library(vroom)
-library(stringr)
 library(dplyr)
 library(tidyr)
 library(reshape2)
 library(ggplot2)
 library(ggiraph)
 library(RColorBrewer)
-library(gridExtra)
-library(shinythemes)
+library(stringr)
 library(viridis)
-library(shinyjs)
-library(readxl)
-library(shinydashboard)
-library(shinyBS)
-library(rlang)
-library(shiny)
-library(bslib)
-library(plotly)
+library(leaflet)
 library(spdep)
-library(stringdist)
+library(plotly)
 library(DiagrammeR)
 library(DiagrammeRsvg)
 library(rsvg)
-library(webshot)
-library(glue)
-library(DT)
 library(ggtext)
-library(googledrive)
-library(leaflet)
-#library(reticulate)
-library(rgee)
+library(DT)
+library(htmlwidgets)
+library(webshot2)
+library(leaflet.extras)
 
+# Define NULL-default operator
+`%||%` <- function(x, y) if (is.null(x)) y else x
 
+# ==============================================================================
+# DATA HANDLING AND MANIPULATION
+# ==============================================================================
 
-# Function to generate a list of column name patterns
-generate_pattern_list <- function(df) {
-  sapply(names(df), function(col) {
-    pattern <- tolower(gsub("\\s+", "_", col))
-    c(col, pattern)
-  }, simplify = FALSE, USE.NAMES = TRUE)
-}
-
-# Function to rename columns based on generated patterns
+#' Rename columns in a dataframe for consistency
+#'
+#' @param df Dataframe to process
+#' @return Dataframe with renamed columns
 rename_columns <- function(df) {
   # First rename Ward to WardName if it exists
   if ("Ward" %in% names(df)) {
     df <- df %>% rename(WardName = Ward)
   }
   
-  pattern_list <- generate_pattern_list(df)
+  # Generate name patterns
+  pattern_list <- sapply(names(df), function(col) {
+    pattern <- tolower(gsub("\\s+", "_", col))
+    c(col, pattern)
+  }, simplify = FALSE, USE.NAMES = TRUE)
+  
+  # Apply rename with patterns
   for (pattern in names(pattern_list)) {
-    df <- df %>% rename_with(~ gsub("\\.", " ", pattern), all_of(intersect(names(df), pattern_list[[pattern]])))
-  }
-  df
-}
-
-# Modified filter_columns function to be more flexible with column names
-filter_columns <- function(data) {
-  # Check for either Ward or WardName
-  ward_col <- intersect(c("Ward", "WardName"), names(data))
-  
-  if (length(ward_col) == 0) {
-    warning("Neither Ward nor WardName column found. Using all columns.")
-    return(data)
+    df <- df %>% rename_with(~ gsub("\\.", " ", pattern), 
+                             all_of(intersect(names(df), pattern_list[[pattern]])))
   }
   
-  ward_name_index <- which(names(data) == ward_col[1])
-  selected_columns <- c(ward_col[1], names(data)[(ward_name_index + 1):ncol(data)])
-  return(data[, selected_columns])
+  return(df)
 }
 
-# Modified get_columns_after_wardname function
+#' Get columns after WardName column, optionally filtering for specific columns
+#'
+#' @param data Dataframe to process
+#' @param specific_columns Optional vector of specific column names to filter for
+#' @return Vector of column names
 get_columns_after_wardname <- function(data, specific_columns = NULL) {
   # Check for either Ward or WardName
   ward_col <- intersect(c("Ward", "WardName"), names(data))
@@ -95,38 +79,49 @@ get_columns_after_wardname <- function(data, specific_columns = NULL) {
   return(columns_after_wardname)
 }
 
-
-
-# Function to set a custom theme for maps
-map_theme <- function(){
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks = element_blank(),
-        rect = element_blank(),
-        plot.background = element_rect(fill = "white", colour = NA), 
-        plot.title = element_text(hjust = 0.5),
-        legend.title = element_text(hjust = 0.5, size = 8, colour = 'black'),
-        legend.text = element_text(size = 8, colour = 'black'),
-        legend.key.height = unit(0.65, "cm"))
+#' Check for missing values in a dataframe
+#'
+#' @param data Dataframe to check
+#' @return List with columns containing missing values and the original data
+check_missing_values <- function(data) {
+  missing_cols <- sapply(data, function(x) any(is.na(x)))
+  cols_with_missing <- names(missing_cols[missing_cols])
+  return(list(columns = cols_with_missing, data = data))
 }
 
-
-theme_manuscript <- function(){
-  theme_bw() + 
-    theme(panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
-          plot.title = element_text(hjust = 0.5),
-          axis.text.x = element_text(size = 22, color = "black"), 
-          axis.text.y = element_text(size = 22, color = "black"),
-          axis.title.x = element_text(size = 22),
-          axis.title.y = element_text(size =22),
-          legend.title=element_text(size=22, colour = 'black'),
-          legend.text =element_text(size = 22, colour = 'black'),
-          legend.key.height = unit(1, "cm"))
+#' Check for ward name mismatches between CSV and shapefile data
+#'
+#' @param csv_data CSV data containing ward names
+#' @param shp_data Shapefile data containing ward names
+#' @return Dataframe of mismatched ward names or NULL if no mismatches
+check_wardname_mismatches <- function(csv_data, shp_data) {
+  csv_wardnames <- csv_data$WardName
+  shp_wardnames <- shp_data$WardName
+  
+  mismatched_wards <- setdiff(csv_wardnames, shp_wardnames)
+  
+  if (length(mismatched_wards) > 0) {
+    mismatches <- data.frame(
+      CSV_WardName = mismatched_wards,
+      Shapefile_Options = I(replicate(length(mismatched_wards), list(shp_wardnames))),
+      stringsAsFactors = FALSE
+    )
+    return(mismatches)
+  } else {
+    return(NULL)
+  }
 }
 
+# ==============================================================================
+# DATA CLEANING AND IMPUTATION
+# ==============================================================================
 
-
-# Function to handle NA values using spatial weights
+#' Handle missing values using spatial neighbor mean
+#'
+#' @param data Dataframe containing the data
+#' @param shp_data Shapefile data for spatial relationships
+#' @param col Column name to process, or NULL to process all columns with missing values
+#' @return Dataframe with imputed values
 handle_na_neighbor_mean <- function(data, shp_data, col = NULL) {
   if (is.null(col)) {
     cols_to_process <- names(data)[sapply(data, function(x) any(is.na(x)))]
@@ -164,7 +159,11 @@ handle_na_neighbor_mean <- function(data, shp_data, col = NULL) {
   return(data)
 }
 
-# Function to handle NA values using mean of entire region
+#' Handle missing values using mean of entire region
+#'
+#' @param data Dataframe containing the data
+#' @param col Column name to process, or NULL to process all columns with missing values
+#' @return Dataframe with imputed values
 handle_na_region_mean <- function(data, col = NULL) {
   if (is.null(col)) {
     cols_to_process <- names(data)[sapply(data, function(x) any(is.na(x)))]
@@ -179,7 +178,11 @@ handle_na_region_mean <- function(data, col = NULL) {
   return(data)
 }
 
-# Function to handle NA values using mode of entire region
+#' Handle missing values using mode of entire region
+#'
+#' @param data Dataframe containing the data
+#' @param col Column name to process, or NULL to process all columns with missing values
+#' @return Dataframe with imputed values
 handle_na_region_mode <- function(data, col = NULL) {
   get_mode <- function(x) {
     ux <- unique(x)
@@ -199,10 +202,18 @@ handle_na_region_mode <- function(data, col = NULL) {
   return(data)
 }
 
+# ==============================================================================
+# PLOTTING AND VISUALIZATION
+# ==============================================================================
 
-
-
-# Modified plot_map_00 function to work with both raw and cleaned data
+#' Plot map for visualizing variable distribution in wards
+#'
+#' @param variable_name Name of the variable to plot
+#' @param shp_data_reactive Shapefile data
+#' @param dataframe_reactive Dataframe with variables
+#' @param title Plot title
+#' @param na_handling_method NA handling method (for display purposes)
+#' @return Girafe object with interactive map
 plot_map_00 <- function(variable_name, 
                         shp_data_reactive, 
                         dataframe_reactive, 
@@ -239,38 +250,46 @@ plot_map_00 <- function(variable_name,
   girafe(ggobj = plot, width_svg = 10, height_svg = 8)
 }
 
-
-
-
-# Function to check for missing values:
-
-check_missing_values <- function(data) {
-  missing_cols <- sapply(data, function(x) any(is.na(x)))
-  cols_with_missing <- names(missing_cols[missing_cols])
-  return(list(columns = cols_with_missing, data = data))
+#' Set custom theme for maps
+#'
+#' @return Theme object
+map_theme <- function(){
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        rect = element_blank(),
+        plot.background = element_rect(fill = "white", colour = NA), 
+        plot.title = element_text(hjust = 0.5),
+        legend.title = element_text(hjust = 0.5, size = 8, colour = 'black'),
+        legend.text = element_text(size = 8, colour = 'black'),
+        legend.key.height = unit(0.65, "cm"))
 }
 
-# Function to check for wardname mismatches:
-check_wardname_mismatches <- function(csv_data, shp_data) {
-  csv_wardnames <- csv_data$WardName
-  shp_wardnames <- shp_data$WardName
-  
-  mismatched_wards <- setdiff(csv_wardnames, shp_wardnames)
-  
-  if (length(mismatched_wards) > 0) {
-    mismatches <- data.frame(
-      CSV_WardName = mismatched_wards,
-      Shapefile_Options = I(replicate(length(mismatched_wards), list(shp_wardnames))),
-      stringsAsFactors = FALSE
-    )
-    return(mismatches)
-  } else {
-    return(NULL)
-  }
+#' Set manuscript theme for plots
+#'
+#' @return Theme object
+theme_manuscript <- function(){
+  theme_bw() + 
+    theme(panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
+          plot.title = element_text(hjust = 0.5),
+          axis.text.x = element_text(size = 22, color = "black"), 
+          axis.text.y = element_text(size = 22, color = "black"),
+          axis.title.x = element_text(size = 22),
+          axis.title.y = element_text(size =22),
+          legend.title=element_text(size=22, colour = 'black'),
+          legend.text =element_text(size = 22, colour = 'black'),
+          legend.key.height = unit(1, "cm"))
 }
 
+# ==============================================================================
+# NORMALIZATION AND SCORING
+# ==============================================================================
 
-# Normalization function
+#' Normalize data based on variable relationships
+#'
+#' @param cleaned_data Dataframe with cleaned data
+#' @param variable_relationships Named list with relationships (direct/inverse)
+#' @return Dataframe with normalized variables
 normalize_data <- function(cleaned_data, variable_relationships) { 
   tryCatch({
     print("Input data structure (cleaned data):")
@@ -317,9 +336,12 @@ normalize_data <- function(cleaned_data, variable_relationships) {
   })
 } 
 
-
-
-# Function to plot normalized map
+#' Plot normalized map
+#'
+#' @param shp_data Shapefile data
+#' @param processed_csv Processed CSV data with normalized variables
+#' @param selected_vars Selected variables to plot
+#' @return Girafe object with interactive map
 plot_normalized_map <- function(shp_data, processed_csv, selected_vars) {
   palette_func <- brewer.pal(5, "YlOrRd")
   
@@ -346,14 +368,17 @@ plot_normalized_map <- function(shp_data, processed_csv, selected_vars) {
           legend.text = element_text(size = 10),
           axis.text = element_blank(),
           axis.ticks = element_blank(),
-          axis.line = element_blank())  # This line removes the axis lines
+          axis.line = element_blank())
   
   girafe(ggobj = plot, width_svg = 10, height_svg = 8)
 }
 
-
-# Function to calculate composite scores for different models
-
+#' Calculate composite scores for different models
+#'
+#' @param normalized_data Dataframe with normalized data
+#' @param selected_vars Selected variables for composite scores
+#' @param shp_data Shapefile data
+#' @return List with model formulas and final data
 composite_score_models <- function(normalized_data, selected_vars, shp_data) {
   print("Entering composite_score_models function")
   print("Normalized data structure:")
@@ -438,7 +463,10 @@ composite_score_models <- function(normalized_data, selected_vars, shp_data) {
        final_data = final_data)
 }
 
-# Function to generate model formulas
+#' Generate model formulas
+#'
+#' @param model_data Model data from composite_score_models
+#' @return Dataframe with model formulas
 models_formulas <- function(model_data) {
   model_formulas_data <- data.frame(model = character(), 
                                     variables = character(),
@@ -455,8 +483,10 @@ models_formulas <- function(model_data) {
   return(model_formulas_data)
 }
 
-
-# Function to process model scores
+#' Process model scores for plotting
+#'
+#' @param data_to_process Data with model scores
+#' @return Processed data for plotting
 process_model_score <- function(data_to_process){
   # Separate Urban column
   urban_data <- data_to_process %>% select(WardName, Urban)
@@ -487,8 +517,13 @@ process_model_score <- function(data_to_process){
   plottingdata
 }
 
-
-# Function to plot model score map
+#' Plot model score map
+#'
+#' @param shp_data Shapefile data
+#' @param processed_csv Processed CSV data with model scores
+#' @param model_formulas Model formulas from models_formulas function
+#' @param maps_per_page Number of maps per page
+#' @return List of Girafe objects with interactive maps
 plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_per_page = 4) {
   palette_func <- brewer.pal(5, "YlOrRd")
   
@@ -531,7 +566,7 @@ plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_p
       # Add a new layer for flagged wards
       geom_sf_interactive(data = current_data %>% filter(flag_not_ideal), 
                           aes(geometry = geometry), 
-                          fill = NA, color = "blue", size = 1) + # Add red border
+                          fill = NA, color = "blue", size = 1) + # Add blue border
       facet_wrap(~variable, ncol = 2, labeller = labeller(variable = facet_labels)) +
       scale_fill_discrete(drop=FALSE, name="Malaria Risk Score", type = palette_func,
                           labels = c("Very Low", "Low", "Medium", "High", "Very High")) +
@@ -557,16 +592,13 @@ plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_p
     plot_list[[page]] <- girafe(ggobj = plot, height_svg = plot_height) 
   }
   
-  # Add a note about flagged models
-  plot <- plot +
-    labs(caption = "Blue outline indicates non-urban wards in top 5 (model may not be ideal)")
-  
-  
   return(plot_list)
 }
 
-
-#Function for boxplots
+#' Create box plot of ward rankings
+#'
+#' @param plottingdata Plotting data from process_model_score
+#' @return List with plotly object and ward rankings
 box_plot_function <- function(plottingdata) {
   df_long <- plottingdata %>%
     select(WardName, variable, rank)
@@ -601,4 +633,1758 @@ box_plot_function <- function(plottingdata) {
     config(scrollZoom = TRUE)
   
   return(list(plot = plot, ward_rankings = ward_rankings))
+}
+
+# ==============================================================================
+# DECISION TREE VISUALIZATION
+# ==============================================================================
+
+#' Create decision tree visualization
+#'
+#' @param all_variables All variables in the dataset
+#' @param selected_variables Selected variables for the model
+#' @param excluded_variables Excluded variables
+#' @param progress Progress information for tree steps
+#' @param top_5_wards Top 5 wards by vulnerability ranking
+#' @return grViz object with decision tree
+decision_tree_function <- function(all_variables, selected_variables, excluded_variables, progress, top_5_wards = character(0)) {
+  # Format variables lists with bullets
+  format_var_list <- function(vars) {
+    if (length(vars) == 0) return("None")
+    paste(sapply(vars, function(x) paste0("• ", x)), collapse = "\\n")
+  }
+  
+  # Format top 5 wards
+  formatted_top_5 <- if (length(top_5_wards) > 0) {
+    paste("1.", top_5_wards[1], "\\n2.", top_5_wards[2], "\\n3.", 
+          top_5_wards[3], "\\n4.", top_5_wards[4], "\\n5.", top_5_wards[5])
+  } else {
+    "No wards available"
+  }
+  
+  # Define precise professional color scheme
+  colors <- list(
+    navy = "#1B2631",       # Darker navy for headers
+    orange = "#E67E22",     # Bright orange for diamond
+    teal = "#16A596",       # Bright teal for included
+    gray = "#7F8C8D",       # Medium gray for excluded
+    green = "#27AE60",      # Bright green for process
+    blue = "#2980B9",       # Bright blue for maps
+    purple = "#8E44AD",     # Bright purple for final nodes
+    arrow = "#34495E"       # Dark arrow color
+  )
+  
+  graph_string <- sprintf('
+  digraph G {
+    graph [rankdir=LR,
+           nodesep=0.6,
+           ranksep=0.8,
+           splines=ortho,
+           pad=0.5,
+           compound=true]
+    
+    node [shape=rect,
+          style="filled,rounded",
+          fontname="Arial",
+          fontsize=11,
+          margin="0.2,0.2",
+          penwidth=1.2]
+    
+    edge [color="%s",
+          penwidth=1.2,
+          arrowsize=0.9,
+          arrowhead=vee]
+    // Initial nodes
+    start [label="Malaria Risk Assessment\\nVariable Selection"
+           fillcolor="%s"
+           fontcolor="white"]
+    vars [label="Variables:\\n%s"
+          fillcolor="%s"
+          fontcolor="white"]
+    // Evaluation diamond
+    eval [label="Variable\\nEvaluation"
+          shape=diamond
+          fillcolor="%s"
+          fontcolor="white"
+          width=1.5
+          height=1.5]
+    // Variable groups
+    included [label="Included Variables:\\n%s"
+             fillcolor="%s"
+             fontcolor="white"]
+    excluded [label="Excluded Variables:\\n%s"
+             fillcolor="%s"
+             fontcolor="white"]
+    // Processing and results
+    process [label="Data Normalization &\\nComposite Score Calculation"
+            fillcolor="%s"
+            fontcolor="white"]
+    maps [label="Generated Risk Maps\\nfor All Combinations"
+          fillcolor="%s"
+          fontcolor="white"]
+    recommended [label="Recommended Risk Map\\nby the Box and Whisker Plot"
+                fillcolor="%s"
+                fontcolor="white"]
+    priority [label="Top 5 Wards\\nfor Reprioritization:\\n%s"
+             fillcolor="%s"
+             fontcolor="white"]
+    // Edge definitions with improved spacing
+    start -> vars [weight=2]
+    vars -> eval [weight=2]
+    eval -> included [label=" Include"]
+    eval -> excluded [label=" Exclude"]
+    included -> process [weight=2]
+    process -> maps [weight=2]
+    maps -> recommended [weight=2]
+    recommended -> priority [weight=2]
+    // Rank definitions for better alignment
+    {rank=same; start; vars}
+    {rank=same; included; excluded}
+    {rank=same; process; maps}
+    {rank=same; recommended; priority}
+    // Add invisible edges for better spacing
+    included -> excluded [style=invis]
+    maps -> recommended [style=invis]
+  }',
+                          colors$arrow,
+                          colors$navy, format_var_list(all_variables), colors$navy,
+                          colors$orange,
+                          format_var_list(selected_variables), colors$teal,
+                          format_var_list(excluded_variables), colors$gray,
+                          colors$green, colors$blue,
+                          colors$purple, formatted_top_5, colors$purple
+  )
+  
+  grViz(graph_string)
+}
+
+# ==============================================================================
+# GRID AND SPATIAL ANALYSIS
+# ==============================================================================
+
+#' Create grid for a ward
+#'
+#' @param polygon Polygon to subdivide into a grid
+#' @param cell_size Cell size in coordinate units
+#' @return SF object with grid cells
+subdivide_polygon <- function(polygon, cell_size = 500) {
+  # Extract the geometry
+  polygon_sf <- st_geometry(polygon)
+  
+  # Get bounding box
+  bounds <- st_bbox(polygon_sf)
+  
+  # Calculate number of cells based on cell_size
+  x_span <- bounds["xmax"] - bounds["xmin"]
+  y_span <- bounds["ymax"] - bounds["ymin"]
+  
+  # Calculate number of columns and rows
+  cols <- ceiling(x_span / cell_size)
+  rows <- ceiling(y_span / cell_size)
+  
+  # Ensure we have at least 2 rows and columns
+  cols <- max(2, cols)
+  rows <- max(2, rows)
+  
+  # Create grid
+  x_range <- seq(bounds["xmin"], bounds["xmax"], length.out = cols + 1)
+  y_range <- seq(bounds["ymin"], bounds["ymax"], length.out = rows + 1)
+  
+  # Create sub-polygons
+  sub_polygons <- list()
+  for (i in 1:cols) {
+    for (j in 1:rows) {
+      sub_poly <- st_polygon(list(rbind(
+        c(x_range[i], y_range[j]),
+        c(x_range[i + 1], y_range[j]),
+        c(x_range[i + 1], y_range[j + 1]),
+        c(x_range[i], y_range[j + 1]),
+        c(x_range[i], y_range[j])
+      )))
+      sub_polygons <- append(sub_polygons, list(sub_poly))
+    }
+  }
+  
+  # Convert to sf collection
+  grid_sfc <- st_sfc(sub_polygons, crs = st_crs(polygon_sf))
+  
+  # Create a grid sf object
+  grid_sf <- st_sf(geometry = grid_sfc)
+  
+  # Add cell IDs
+  grid_sf$cell_id <- 1:nrow(grid_sf)
+  
+  # Handle case where polygon has multiple features
+  if (length(polygon_sf) > 1) {
+    # Convert multiple polygons to a single multipolygon
+    combined_poly <- st_union(polygon_sf)
+    # Create a single-row sf object
+    single_poly_sf <- st_sf(geometry = st_sfc(combined_poly, crs = st_crs(polygon_sf)))
+    
+    # Intersect the grid with this single polygon
+    grid_intersection <- st_intersection(grid_sf, single_poly_sf)
+  } else {
+    # For single polygon case
+    single_poly_sf <- st_sf(geometry = polygon_sf)
+    grid_intersection <- st_intersection(grid_sf, single_poly_sf)
+  }
+  
+  # Create final grid sf with attributes
+  # Ensure each grid cell gets a unique ID
+  final_grid <- grid_intersection %>%
+    mutate(
+      WardName = polygon$WardName[1],  # Just take the first one if multiple
+      GridID = row_number(),
+      CellSize = cell_size,  # Store the cell size for reference
+      Settlement = ifelse("Urban" %in% names(polygon), polygon$Urban[1], "Unknown")
+    )
+  
+  return(final_grid)
+}
+
+#' Create ward grid from shapefile data
+#'
+#' @param ward_name Ward name
+#' @param shapefile_data Shapefile data
+#' @param cell_size Cell size in coordinate units
+#' @return SF object with grid cells
+create_ward_grid <- function(ward_name, shapefile_data, cell_size = 500) {
+  # Filter the shapefile to get just the selected ward
+  ward_shape <- shapefile_data %>% filter(WardName == ward_name)
+  
+  if(nrow(ward_shape) == 0) {
+    return(NULL)
+  }
+  
+  # Create the grid
+  tryCatch({
+    grid <- subdivide_polygon(ward_shape, cell_size)
+    return(grid)
+  }, error = function(e) {
+    message("Error creating grid: ", e$message)
+    return(NULL)
+  })
+}
+
+#' Create HTML for grid cell classification popup
+#'
+#' @param ward_name Ward name
+#' @param grid_id Grid ID
+#' @param current_class Current classification
+#' @return HTML string for classification popup
+create_classification_popup <- function(ward_name, grid_id, current_class = "Unclassified") {
+  # Create a unique ID for the popup form
+  popup_id <- paste0("popup_", ward_name, "_", grid_id)
+  
+  # Create the classification checklist HTML
+  html <- paste0(
+    "<div class='classification-checklist' style='min-width: 300px; max-width: 400px;'>",
+    "<h4 style='margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 8px;'>Grid Cell Classification</h4>",
+    
+    "<div id='checklist-", popup_id, "' style='margin-bottom: 15px;'>",
+    "<p style='font-weight: bold; margin-bottom: 5px;'>Answer these questions to determine classification:</p>",
+    
+    "<div class='checklist-item' style='margin-bottom: 8px;'>",
+    "<label style='display: block; font-weight: bold; margin-bottom: 4px;'>1. Building Density:</label>",
+    "<div style='display: flex;'>",
+    "<label style='margin-right: 10px;'><input type='radio' name='buildings' value='high'> High</label>",
+    "<label style='margin-right: 10px;'><input type='radio' name='buildings' value='medium'> Medium</label>",
+    "<label style='margin-right: 10px;'><input type='radio' name='buildings' value='low'> Low</label>",
+    "<label><input type='radio' name='buildings' value='none'> None</label>",
+    "</div>",
+    "</div>",
+    
+    "<div class='checklist-item' style='margin-bottom: 8px;'>",
+    "<label style='display: block; font-weight: bold; margin-bottom: 4px;'>2. Road Access:</label>",
+    "<div style='display: flex;'>",
+    "<label style='margin-right: 10px;'><input type='radio' name='roads' value='good'> Good</label>",
+    "<label style='margin-right: 10px;'><input type='radio' name='roads' value='limited'> Limited</label>",
+    "<label><input type='radio' name='roads' value='none'> None</label>",
+    "</div>",
+    "</div>",
+    
+    "<div class='checklist-item' style='margin-bottom: 8px;'>",
+    "<label style='display: block; font-weight: bold; margin-bottom: 4px;'>3. Building Organization:</label>",
+    "<div style='display: flex;'>",
+    "<label style='margin-right: 10px;'><input type='radio' name='organization' value='planned'> Planned</label>",
+    "<label style='margin-right: 10px;'><input type='radio' name='organization' value='mixed'> Mixed</label>",
+    "<label><input type='radio' name='organization' value='unplanned'> Unplanned</label>",
+    "</div>",
+    "</div>",
+    
+    "<div class='checklist-item' style='margin-bottom: 8px;'>",
+    "<label style='display: block; font-weight: bold; margin-bottom: 4px;'>4. Special Conditions:</label>",
+    "<div style='display: flex; flex-wrap: wrap;'>",
+    "<label style='margin-right: 10px; flex: 0 0 45%;'><input type='checkbox' name='special' value='water'> Water Body</label>",
+    "<label style='margin-right: 10px; flex: 0 0 45%;'><input type='checkbox' name='special' value='forest'> Forest/Vegetation</label>",
+    "<label style='margin-right: 10px; flex: 0 0 45%;'><input type='checkbox' name='special' value='industrial'> Industrial</label>",
+    "<label style='flex: 0 0 45%;'><input type='checkbox' name='special' value='hazard'> Hazardous Area</label>",
+    "</div>",
+    "</div>",
+    "</div>",
+    
+    "<div id='classification-result-", popup_id, "' style='margin-bottom: 15px; padding: 10px; background-color: #f5f5f5; border-radius: 5px;'>",
+    "<h5 style='margin-top: 0; margin-bottom: 5px;'>Current Classification:</h5>",
+    "<p style='font-weight: bold; margin: 0;'>", current_class, "</p>",
+    "</div>",
+    
+    "<div style='display: flex; justify-content: space-between;'>",
+    "<button type='button' class='btn btn-sm btn-primary' onclick='window.determineClassification(\"", 
+    ward_name, "\", ", grid_id, ", \"", popup_id, "\")' style='flex: 1; margin-right: 5px;'>",
+    "Determine Classification</button>",
+    
+    "<button type='button' class='btn btn-sm btn-success' onclick='window.setCustomClassification(\"", 
+    ward_name, "\", ", grid_id, ", this.form)' style='flex: 1; margin-left: 5px;'>",
+    "Manually Set Classification</button>",
+    "</div>",
+    
+    "<div id='manual-classification-", popup_id, "' style='display: none; margin-top: 10px;'>",
+    "<label style='display: block; font-weight: bold; margin-bottom: 4px;'>Manual Classification:</label>",
+    "<select id='manual-class-", popup_id, "' style='width: 100%; padding: 5px;'>",
+    "<option value='Formal'", ifelse(current_class == "Formal", " selected", ""), ">Formal Settlement</option>",
+    "<option value='Informal'", ifelse(current_class == "Informal", " selected", ""), ">Informal Settlement</option>",
+    "<option value='No Buildings/Avoid Area'", ifelse(current_class == "No Buildings/Avoid Area", " selected", ""), ">No Buildings/Avoid Area</option>",
+    "</select>",
+    
+    "<button type='button' class='btn btn-sm btn-success' onclick='window.manualClassify(\"", 
+    ward_name, "\", ", grid_id, ", document.getElementById(\"manual-class-", popup_id, "\").value)' ",
+    "style='width: 100%; margin-top: 5px;'>Save Manual Classification</button>",
+    "</div>",
+    
+    "<script>",
+    "  document.querySelector('button:contains(\"Manually Set Classification\")').addEventListener('click', function() {",
+    "    document.getElementById('manual-classification-", popup_id, "').style.display = 'block';",
+    "  });",
+    "</script>",
+    "</div>"
+  )
+  
+  return(html)
+}
+
+#' Process and view shapefile and CSV data with grid enhancements
+#'
+#' @param ward_name Ward name
+#' @param shp_data Shapefile data
+#' @param grid_annotations Grid annotations
+#' @param enable_grid Whether to enable grid
+#' @param grid_cell_size Grid cell size
+#' @return Leaflet map with grid
+# Modified function in functions.R
+process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, grid_annotations = NULL, 
+                                                        enable_grid = TRUE, grid_cell_size = 500) {
+  # Filter the main shapefile to get just the selected ward
+  ward_shape <- shp_data %>% filter(WardName == ward_name)
+  
+  if (nrow(ward_shape) == 0) {
+    return(
+      leaflet() %>%
+        addTiles() %>%
+        addControl(
+          html = paste("<div style='padding: 15px; background: white; border-radius: 5px;'>",
+                       "<h4>Ward not found</h4>",
+                       "<p>The selected ward '", ward_name, "' was not found in the shapefile.</p>",
+                       "</div>"),
+          position = "topright"
+        )
+    )
+  }
+  
+  # Transform shapefile to WGS84 for leaflet
+  shapefile_wgs84 <- st_transform(ward_shape, crs = 4326)
+  
+  # Create a Leaflet map with satellite imagery
+  map <- leaflet() %>%
+    addProviderTiles(providers$Esri.WorldImagery, group = "Satellite") %>%
+    addProviderTiles(providers$OpenStreetMap, group = "OpenStreetMap") %>%
+    addProviderTiles(providers$CartoDB.Positron, group = "CartoDB Light") %>%
+    fitBounds(lng1 = st_bbox(shapefile_wgs84)[[1]],
+              lat1 = st_bbox(shapefile_wgs84)[[2]],
+              lng2 = st_bbox(shapefile_wgs84)[[3]],
+              lat2 = st_bbox(shapefile_wgs84)[[4]])
+  
+  # Add layer control
+  map <- map %>%
+    addLayersControl(
+      baseGroups = c("Satellite", "OpenStreetMap", "CartoDB Light"),
+      options = layersControlOptions(collapsed = FALSE)
+    )
+  
+  # Add ward boundary (outline only)
+  map <- map %>%
+    addPolygons(data = shapefile_wgs84,
+                color = "yellow",       # Boundary color
+                weight = 3,             # Thicker line for visibility
+                opacity = 1.0,          # Fully opaque line
+                fillOpacity = 0.0,      # Completely transparent fill (no shading)
+                label = ward_name)
+  
+  # Create grid if enabled
+  if (enable_grid) {
+    # Create grid for the ward
+    grid_sf <- tryCatch({
+      create_ward_grid(ward_name, shp_data, grid_cell_size)
+    }, error = function(e) {
+      message("Error creating grid: ", e$message)
+      NULL
+    })
+    
+    if (!is.null(grid_sf)) {
+      # Transform to WGS84
+      grid_wgs84 <- st_transform(grid_sf, crs = 4326)
+      
+      # Add Classification column with default value
+      grid_wgs84$Classification <- "Unclassified"
+      
+      # Update classifications from annotations if they exist for this ward
+      if (!is.null(grid_annotations) && nrow(grid_annotations) > 0) {
+        ward_annotations <- grid_annotations[grid_annotations$WardName == ward_name, ]
+        if (nrow(ward_annotations) > 0) {
+          for (i in 1:nrow(ward_annotations)) {
+            grid_idx <- which(grid_wgs84$GridID == ward_annotations$GridID[i])
+            if (length(grid_idx) > 0) {
+              grid_wgs84$Classification[grid_idx] <- ward_annotations$Classification[i]
+            }
+          }
+        }
+      }
+      
+      # Create color palette for classifications - UPDATED COLORS TO MATCH LEGEND EXACTLY
+      classification_colors <- c(
+        "Formal" = "#0074D9",           # Blue
+        "Informal" = "#FF4136",         # Red
+        "No Buildings/Avoid Area" = "#2ECC40",  # Green
+        "Unclassified" = "#AAAAAA"      # Gray
+      )
+      
+      # UPDATED: Increased opacity settings for better visibility
+      unclassified_opacity <- 0.1   # Slightly more visible for unclassified cells
+      classified_opacity <- 0.7      # More opaque for classified cells (increased from 0.6)
+      
+      # Split grid data for better visualization
+      unclassified_cells <- grid_wgs84[grid_wgs84$Classification == "Unclassified", ]
+      
+      # IMPROVED: Directly filter for each classification type
+      formal_cells <- grid_wgs84[grid_wgs84$Classification == "Formal", ]
+      informal_cells <- grid_wgs84[grid_wgs84$Classification == "Informal", ]
+      avoid_cells <- grid_wgs84[grid_wgs84$Classification == "No Buildings/Avoid Area", ]
+      
+      # Add unclassified grid cells first (with just borders, minimal fill)
+      if (nrow(unclassified_cells) > 0) {
+        map <- map %>%
+          addPolygons(data = unclassified_cells,
+                      color = "white",
+                      weight = 1,
+                      opacity = 0.8,     # Increased opacity of grid lines
+                      fillColor = classification_colors["Unclassified"],
+                      fillOpacity = unclassified_opacity,
+                      layerId = ~paste(WardName, GridID, "unclassified", sep = "_"),
+                      label = ~paste("Grid ID:", GridID, "- Unclassified"),
+                      popup = ~create_classification_popup(WardName, GridID, Classification),
+                      group = "UnclassifiedGrid")
+      }
+      
+      # Add formal cells with blue color
+      if (nrow(formal_cells) > 0) {
+        map <- map %>%
+          addPolygons(data = formal_cells,
+                      color = "white",
+                      weight = 2, 
+                      opacity = 0.9,
+                      fillColor = classification_colors["Formal"],
+                      fillOpacity = classified_opacity,
+                      layerId = ~paste(WardName, GridID, "formal", sep = "_"),
+                      label = ~paste("Grid ID:", GridID, "- Formal Settlement"),
+                      popup = ~create_classification_popup(WardName, GridID, Classification),
+                      group = "ClassifiedGrid_Formal")
+      }
+      
+      # Add informal cells with red color
+      if (nrow(informal_cells) > 0) {
+        map <- map %>%
+          addPolygons(data = informal_cells,
+                      color = "white",
+                      weight = 2,
+                      opacity = 0.9,
+                      fillColor = classification_colors["Informal"],
+                      fillOpacity = classified_opacity,
+                      layerId = ~paste(WardName, GridID, "informal", sep = "_"),
+                      label = ~paste("Grid ID:", GridID, "- Informal Settlement"),
+                      popup = ~create_classification_popup(WardName, GridID, Classification),
+                      group = "ClassifiedGrid_Informal")
+      }
+      
+      # Add avoid cells with green color
+      if (nrow(avoid_cells) > 0) {
+        map <- map %>%
+          addPolygons(data = avoid_cells,
+                      color = "white",
+                      weight = 2,
+                      opacity = 0.9,
+                      fillColor = classification_colors["No Buildings/Avoid Area"],
+                      fillOpacity = classified_opacity,
+                      layerId = ~paste(WardName, GridID, "avoid", sep = "_"),
+                      label = ~paste("Grid ID:", GridID, "- No Buildings/Avoid Area"),
+                      popup = ~create_classification_popup(WardName, GridID, Classification),
+                      group = "ClassifiedGrid_Avoid")
+      }
+      
+      # Add classification legend with proper colors
+      map <- map %>%
+        addLegend(
+          position = "bottomright",
+          colors = unname(classification_colors),
+          labels = names(classification_colors),
+          title = "Grid Classification",
+          opacity = 0.9
+        )
+    }
+  }
+  
+  # Add JavaScript functions for handling classification from popup
+  map <- map %>% 
+    htmlwidgets::onRender(paste0("
+      function(el, x) {
+        // Define the classification functions globally so they can be called from popups
+        window.determineClassification = function(wardName, gridId, popupId) {
+          // Get form elements
+          const checklist = document.getElementById('checklist-' + popupId);
+          const buildingDensity = checklist.querySelector('input[name=\"buildings\"]:checked')?.value || '';
+          const roadAccess = checklist.querySelector('input[name=\"roads\"]:checked')?.value || '';
+          const organization = checklist.querySelector('input[name=\"organization\"]:checked')?.value || '';
+          
+          // Get special conditions
+          const specialConditions = [];
+          checklist.querySelectorAll('input[name=\"special\"]:checked').forEach(cb => {
+            specialConditions.push(cb.value);
+          });
+          
+          console.log('Classification inputs:', {
+            buildingDensity,
+            roadAccess,
+            organization,
+            specialConditions
+          });
+          
+          // FIXED CLASSIFICATION LOGIC
+          let classification = 'Unclassified';
+          
+          // First check for special conditions that would make it No Buildings/Avoid Area
+          if (buildingDensity === 'none' || 
+              specialConditions.includes('water') || 
+              specialConditions.includes('hazard')) {
+            classification = 'No Buildings/Avoid Area';
+          }
+          // For all other density levels, check road access and organization
+          else if (buildingDensity === 'high' || buildingDensity === 'medium' || buildingDensity === 'low') {
+            // For Formal classification, must have planned organization AND good road access
+            if (organization === 'planned' && roadAccess === 'good') {
+              classification = 'Formal';
+            } 
+            // Otherwise it's Informal
+            else {
+              classification = 'Informal';
+            }
+          }
+          
+          console.log('Determined classification:', classification);
+          
+          // Update the classification result display
+          const resultElement = document.getElementById('classification-result-' + popupId);
+          if (resultElement) {
+            resultElement.innerHTML = `
+              <h5 style='margin-top: 0; margin-bottom: 5px;'>Recommended Classification:</h5>
+              <p style='font-weight: bold; margin: 0;'>${classification}</p>
+            `;
+          }
+          
+          // Save the classification automatically
+          window.manualClassify(wardName, gridId, classification);
+        };
+        
+        window.setCustomClassification = function(wardName, gridId, form) {
+          const manualClassificationDiv = document.getElementById('manual-classification-popup_' + wardName + '_' + gridId);
+          if (manualClassificationDiv) {
+            manualClassificationDiv.style.display = manualClassificationDiv.style.display === 'none' ? 'block' : 'none';
+          }
+        };
+        
+        window.manualClassify = function(wardName, gridId, classification) {
+          console.log('Saving classification:', {
+            wardName,
+            gridId,
+            classification
+          });
+          
+          // Send data to Shiny
+          Shiny.setInputValue('classify_grid', {
+            wardName: wardName,
+            gridId: gridId,
+            classification: classification,
+            timestamp: new Date().toISOString(),
+            method: 'manual'
+          });
+          
+          // Show confirmation message
+          const popup = document.querySelector('.leaflet-popup-content');
+          if (popup) {
+            const confirmationMsg = document.createElement('div');
+            confirmationMsg.style.marginTop = '10px';
+            confirmationMsg.style.padding = '5px';
+            confirmationMsg.style.backgroundColor = '#dff0d8';
+            confirmationMsg.style.borderRadius = '3px';
+            confirmationMsg.style.color = '#3c763d';
+            confirmationMsg.style.textAlign = 'center';
+            confirmationMsg.innerHTML = 'Classification saved successfully!';
+            popup.appendChild(confirmationMsg);
+            
+            // Remove message after a short delay
+            setTimeout(function() {
+              try {
+                popup.removeChild(confirmationMsg);
+                // Close the popup after saving
+                setTimeout(() => {
+                  document.querySelector('.leaflet-popup-close-button').click();
+                }, 500);
+              } catch (e) {
+                console.log('Error removing confirmation message', e);
+              }
+            }, 1500);
+          }
+        };
+        
+        // ADDED: Function to prepare map for download
+        window.prepareMapForDownload = function() {
+          // Hide UI controls for cleaner screenshot
+          document.querySelectorAll('.leaflet-control-container .leaflet-top').forEach(el => {
+            el.style.display = 'none';
+          });
+          
+          // Add map title
+          const title = document.createElement('div');
+          title.id = 'map-title-for-export';
+          title.style.position = 'absolute';
+          title.style.top = '10px';
+          title.style.left = '50%';
+          title.style.transform = 'translateX(-50%)';
+          title.style.background = 'rgba(255,255,255,0.8)';
+          title.style.padding = '5px 15px';
+          title.style.borderRadius = '4px';
+          title.style.zIndex = '1000';
+          title.style.fontWeight = 'bold';
+          title.innerHTML = '", ward_name, " Ward Classification Map';
+          
+          document.querySelector('.leaflet-container').appendChild(title);
+          
+          // Signal to Shiny that map is ready for download
+          Shiny.setInputValue('map_ready_for_download', true);
+        };
+      }
+    "))
+  
+  return(map)
+}
+
+# New function to create a map for downloading
+create_downloadable_map <- function(ward_name, shp_data, grid_annotations, 
+                                    enable_grid = TRUE, grid_cell_size = 500) {
+  # Start with the regular map
+  map <- process_and_view_shapefile_and_csv_enhanced(ward_name, shp_data, grid_annotations, 
+                                                     enable_grid, grid_cell_size)
+  
+  # Modify for downloading - remove interactive elements
+  map <- map %>%
+    htmlwidgets::onRender("
+      function(el, x) {
+        // Remove controls for download
+        $('.leaflet-control-container').hide();
+        
+        // Add title
+        const title = document.createElement('div');
+        title.style.position = 'absolute';
+        title.style.top = '10px';
+        title.style.left = '10px';
+        title.style.zIndex = '1000';
+        title.style.background = 'white';
+        title.style.padding = '5px 10px';
+        title.style.borderRadius = '4px';
+        title.style.fontWeight = 'bold';
+        title.innerHTML = 'Ward Classification Map: " + ward_name + "';
+        el.appendChild(title);
+        
+        // Add legend explanation
+        const legend = document.createElement('div');
+        legend.style.position = 'absolute';
+        legend.style.bottom = '30px';
+        legend.style.right = '10px';
+        legend.style.zIndex = '1000';
+        legend.style.background = 'rgba(255,255,255,0.9)';
+        legend.style.padding = '8px';
+        legend.style.borderRadius = '4px';
+        legend.style.maxWidth = '300px';
+        legend.innerHTML = '<strong>Classification Legend</strong><br>' +
+                          '<span style=\"color:#0074D9;\">■</span> Formal Settlement<br>' +
+                          '<span style=\"color:#FF4136;\">■</span> Informal Settlement<br>' +
+                          '<span style=\"color:#2ECC40;\">■</span> No Buildings/Avoid Area<br>' +
+                          '<span style=\"color:#AAAAAA;\">■</span> Unclassified';
+        el.appendChild(legend);
+      }
+    ")
+  
+  return(map)
+}
+
+# Add a helper function for retrieving classification colors
+get_classification_color <- function(classification) {
+  colors <- c(
+    "Formal" = "#0074D9",           # Blue
+    "Informal" = "#FF4136",         # Red
+    "No Buildings/Avoid Area" = "#2ECC40",  # Green
+    "Unclassified" = "#AAAAAA"      # Gray
+  )
+  
+  if (classification %in% names(colors)) {
+    return(colors[classification])
+  } else {
+    return("#AAAAAA")  # Default gray for unclassified or unknown
+  }
+}
+
+# ==============================================================================
+# URBAN EXTENT ANALYSIS
+# ==============================================================================
+
+#' Filter shapefile data based on urban extent threshold
+#'
+#' @param shp_data Shapefile data
+#' @param threshold Urban extent threshold
+#' @return Shapefile data with added urban extent information
+filter_by_urban_extent <- function(shp_data, threshold = 30) {
+  # Ensure Urban column exists and is numeric
+  if (!"UrbanPercent" %in% names(shp_data)) {
+    if ("Urban" %in% names(shp_data)) {
+      # If Urban is binary (Yes/No), convert to percentage (100/0)
+      shp_data$UrbanPercent <- ifelse(shp_data$Urban == "Yes", 100, 0)
+    } else {
+      # Create random data for demonstration if needed
+      shp_data$UrbanPercent <- runif(nrow(shp_data), min = 0, max = 100)
+      warning("No Urban or UrbanPercent column found in shapefile data, using random values for demonstration")
+    }
+  }
+  
+  # Convert to numeric if it's not already
+  if (!is.numeric(shp_data$UrbanPercent)) {
+    shp_data$UrbanPercent <- as.numeric(as.character(shp_data$UrbanPercent))
+  }
+  
+  # Handle NA values by setting to 0
+  shp_data$UrbanPercent[is.na(shp_data$UrbanPercent)] <- 0
+  
+  # Add a column to indicate if the ward meets the threshold
+  shp_data$MeetsThreshold <- shp_data$UrbanPercent >= threshold
+  
+  return(shp_data)
+}
+
+# ==============================================================================
+# POPULATION ESTIMATION
+# ==============================================================================
+
+#' Estimate ward population
+#'
+#' @param ward_name Ward name
+#' @param grid_annotations Grid annotations
+#' @param shp_data Shapefile data
+#' @param gridded_wards Gridded wards data
+#' @return List with population estimates
+# Update the ward population estimation function to use ITN data when available
+estimate_ward_population <- function(ward_name, grid_annotations, shp_data, gridded_wards = NULL) {
+  # Extract the state code from the shapefile if available
+  state_code <- NULL
+  state_name <- NULL
+  
+  if ("StateCode" %in% names(shp_data)) {
+    # Get the state code for this ward
+    ward_data <- shp_data %>% filter(WardName == ward_name)
+    if (nrow(ward_data) > 0) {
+      state_code <- ward_data$StateCode[1]
+      # Map the code to full state name
+      state_name <- map_state_code(state_code)
+    }
+  }
+  
+  # Try to get ITN distribution data if state name is available
+  actual_population <- NULL
+  
+  if (!is.null(state_name)) {
+    itn_data <- load_itn_population(state_name)
+    
+    if (!is.null(itn_data)) {
+      # Try exact match first
+      ward_match <- itn_data %>% filter(Ward == ward_name)
+      
+      # If no exact match, try case-insensitive match
+      if (nrow(ward_match) == 0) {
+        ward_match <- itn_data %>% filter(tolower(Ward) == tolower(ward_name))
+      }
+      
+      if (nrow(ward_match) > 0) {
+        actual_population <- ward_match$Population[1]
+      }
+    }
+  }
+  
+  # Get ward shape for area calculation
+  ward_shape <- shp_data %>% filter(WardName == ward_name)
+  
+  if (nrow(ward_shape) == 0) {
+    return(NULL)
+  }
+  
+  # Calculate ward area in sq km
+  ward_area <- st_area(ward_shape) %>% 
+    units::set_units(km^2) %>% 
+    as.numeric()
+  
+  # If we have actual population data from ITN distribution
+  if (!is.null(actual_population) && !is.na(actual_population) && actual_population > 0) {
+    return(list(
+      summary = data.frame(
+        WardName = ward_name,
+        TotalArea_sqkm = ward_area,
+        TotalPopulation = actual_population,
+        PopulationSource = "ITN_Distribution_Data",
+        PopulationDensity = actual_population / ward_area
+      ),
+      classification = data.frame(
+        Classification = "Actual",
+        Area_sqkm = ward_area,
+        EstimatedPopulation = actual_population,
+        DensityEstimate = actual_population / ward_area
+      )
+    ))
+  }
+  
+  # If no actual data is available, use estimation based on ward attributes and grid data
+  # Default density estimates by classification type (people per sq km)
+  density_estimates <- list(
+    "Formal" = 5000,
+    "Informal" = 8000,
+    "Slum" = 12000,
+    "No Buildings/Avoid Area" = 0,
+    "Unclassified" = 2500  # Default for unclassified areas
+  )
+  
+  # Get ward urban status
+  is_urban <- FALSE
+  if ("Urban" %in% names(ward_shape)) {
+    is_urban <- ward_shape$Urban[1] %in% c("Yes", "YES", "yes", "Y", "y")
+  } else if ("UrbanPercent" %in% names(ward_shape)) {
+    is_urban <- ward_shape$UrbanPercent[1] > 30  # Using 30% threshold
+  }
+  
+  # Base density on urban status
+  base_density <- if (is_urban) 5000 else 500
+  
+  # Get grid annotations for the ward
+  if (!is.null(grid_annotations) && nrow(grid_annotations) > 0) {
+    ward_annotations <- grid_annotations %>%
+      filter(WardName == ward_name)
+  } else {
+    ward_annotations <- data.frame()
+  }
+  
+  # Check for gridded wards
+  if (is.null(gridded_wards)) {
+    # If no grid, use simple ward-level estimate
+    total_population <- ward_area * base_density
+    
+    return(list(
+      summary = data.frame(
+        WardName = ward_name,
+        TotalArea_sqkm = ward_area,
+        TotalPopulation = round(total_population),
+        PopulationSource = "Density_Estimate",
+        PopulationDensity = base_density
+      ),
+      classification = data.frame(
+        Classification = if (is_urban) "Urban" else "Rural",
+        Area_sqkm = ward_area,
+        EstimatedPopulation = round(total_population),
+        DensityEstimate = base_density
+      )
+    ))
+  }
+  
+  # Filter gridded ward to current ward
+  gridded_ward <- gridded_wards[gridded_wards$WardName == ward_name,]
+  
+  # Make sure gridded_ward is not empty
+  if (nrow(gridded_ward) == 0) {
+    # If filtered data is empty, use simple ward-level estimate
+    total_population <- ward_area * base_density
+    
+    return(list(
+      summary = data.frame(
+        WardName = ward_name,
+        TotalArea_sqkm = ward_area,
+        TotalPopulation = round(total_population),
+        PopulationSource = "Density_Estimate",
+        PopulationDensity = base_density
+      ),
+      classification = data.frame(
+        Classification = if (is_urban) "Urban" else "Rural",
+        Area_sqkm = ward_area,
+        EstimatedPopulation = round(total_population),
+        DensityEstimate = base_density
+      )
+    ))
+  }
+  
+  # Add classification to all grid cells
+  gridded_ward$Classification <- "Unclassified"
+  
+  # Update classifications from annotations
+  if (nrow(ward_annotations) > 0) {
+    for (i in 1:nrow(ward_annotations)) {
+      grid_idx <- which(gridded_ward$GridID == ward_annotations$GridID[i])
+      
+      if (length(grid_idx) > 0) {
+        gridded_ward$Classification[grid_idx] <- ward_annotations$Classification[i]
+      }
+    }
+  }
+  
+  # Calculate area and population for each classification type
+  classification_summary <- gridded_ward %>%
+    group_by(Classification) %>%
+    summarize(
+      Area_sqkm = sum(st_area(geometry)) %>% units::set_units(km^2) %>% as.numeric(),
+      .groups = 'drop'
+    ) %>%
+    mutate(
+      DensityEstimate = sapply(Classification, function(c) {
+        if (c %in% names(density_estimates)) {
+          return(density_estimates[[c]])
+        } else {
+          return(1000)  # Default density
+        }
+      }),
+      EstimatedPopulation = round(Area_sqkm * DensityEstimate)
+    )
+  
+  # Calculate total classified and unclassified areas
+  classified_area <- sum(classification_summary$Area_sqkm[classification_summary$Classification != "Unclassified"])
+  unclassified_area <- sum(classification_summary$Area_sqkm[classification_summary$Classification == "Unclassified"])
+  
+  # Calculate total population
+  total_population <- sum(classification_summary$EstimatedPopulation)
+  
+  return(list(
+    summary = data.frame(
+      WardName = ward_name,
+      TotalArea_sqkm = ward_area,
+      TotalPopulation = total_population,
+      PopulationSource = "Grid_Classification_Estimate",
+      ClassifiedArea_sqkm = classified_area,
+      UnclassifiedArea_sqkm = unclassified_area
+    ),
+    classification = classification_summary
+  ))
+}
+
+# ==============================================================================
+# NET DISTRIBUTION CALCULATION
+# ==============================================================================
+
+#' Calculate net distribution
+#'
+#' @param population_data Population data
+#' @param total_nets Total number of nets available
+#' @param hh_distribution Household distribution by size
+#' @param nets_per_hh Nets per household by size
+#' @return List with net distribution results
+calculate_net_distribution <- function(population_data, total_nets, hh_distribution, nets_per_hh) {
+  # Default household size distribution if not provided
+  if (missing(hh_distribution)) {
+    hh_distribution <- c(`1-2` = 0.3, `3-4` = 0.4, `5+` = 0.3)
+  }
+  
+  # Default nets per household size if not provided
+  if (missing(nets_per_hh)) {
+    nets_per_hh <- c(`1-2` = 1, `3-4` = 2, `5+` = 3)
+  }
+  
+  # Normalize household distribution to sum to 1
+  hh_distribution <- hh_distribution / sum(hh_distribution)
+  
+  # Average people per household category
+  avg_people_per_hh <- c(`1-2` = 1.5, `3-4` = 3.5, `5+` = 5.5)
+  
+  # Calculate average household size
+  avg_hh_size <- sum(hh_distribution * avg_people_per_hh)
+  
+  # Process each classification
+  results <- list()
+  
+  if (!is.null(population_data) && !is.null(population_data$classification)) {
+    classifications <- population_data$classification
+    
+    # Only include populated areas (excluding No Buildings and Avoid Area)
+    populated_areas <- classifications[classifications$EstimatedPopulation > 0, ]
+    
+    if (nrow(populated_areas) > 0) {
+      # Calculate total households in each classification
+      populated_areas$TotalHouseholds <- round(populated_areas$EstimatedPopulation / avg_hh_size)
+      
+      # Calculate households by size category
+      populated_areas$Households_small <- round(populated_areas$TotalHouseholds * hh_distribution[["1-2"]])
+      populated_areas$Households_medium <- round(populated_areas$TotalHouseholds * hh_distribution[["3-4"]])
+      populated_areas$Households_large <- round(populated_areas$TotalHouseholds * hh_distribution[["5+"]])
+      
+      # Calculate nets needed
+      populated_areas$NetsNeeded <- (populated_areas$Households_small * nets_per_hh[["1-2"]]) +
+        (populated_areas$Households_medium * nets_per_hh[["3-4"]]) +
+        (populated_areas$Households_large * nets_per_hh[["5+"]])
+      
+      # Calculate percentage of total nets
+      total_nets_needed <- sum(populated_areas$NetsNeeded)
+      populated_areas$NetPercentNeeded <- populated_areas$NetsNeeded / max(total_nets_needed, 1) * 100
+      
+      # Allocate available nets proportionally
+      if (total_nets <= total_nets_needed) {
+        # Not enough nets for full coverage - allocate proportionally
+        populated_areas$NetsAllocated <- round(populated_areas$NetPercentNeeded / 100 * total_nets)
+      } else {
+        # More than enough nets - everyone gets what they need
+        populated_areas$NetsAllocated <- populated_areas$NetsNeeded
+      }
+      
+      # Calculate population covered
+      populated_areas$AllocatedNetCoverage <- populated_areas$NetsAllocated / populated_areas$NetsNeeded
+      populated_areas$PopulationCovered <- round(populated_areas$EstimatedPopulation * 
+                                                   pmin(1, populated_areas$AllocatedNetCoverage))
+      
+      # Overall coverage metrics
+      total_population <- sum(populated_areas$EstimatedPopulation)
+      total_population_covered <- sum(populated_areas$PopulationCovered)
+      percent_population_covered <- round(total_population_covered / max(total_population, 1) * 100, 1)
+      
+      # Prepare results
+      results <- list(
+        classification_results = populated_areas,
+        summary = data.frame(
+          TotalPopulation = total_population,
+          TotalHouseholds = sum(populated_areas$TotalHouseholds),
+          TotalNetsNeeded = total_nets_needed,
+          TotalNetsAvailable = total_nets,
+          TotalPopulationCovered = total_population_covered,
+          PercentPopulationCovered = percent_population_covered,
+          AverageHouseholdSize = avg_hh_size
+        )
+      )
+    }
+  }
+  
+  return(results)
+}
+
+#' Calculate prioritized net distribution
+#'
+#' @param ward_data Ward data
+#' @param total_nets Total number of nets available
+#' @param avg_household_size Average household size
+#' @param urban_threshold Urban extent threshold
+#' @param strategy Distribution strategy
+#' @param grid_overrides Grid overrides
+#' @return List with net distribution results
+calculate_prioritized_net_distribution <- function(ward_data, total_nets, avg_household_size, 
+                                                   urban_threshold = 30, strategy = "rank",
+                                                   grid_overrides = NULL) {
+  # Ensure the required columns exist in ward_data
+  if (!"UrbanPercent" %in% names(ward_data)) {
+    if ("Urban" %in% names(ward_data)) {
+      # If Urban is binary (Yes/No), convert to percentage (100/0)
+      ward_data$UrbanPercent <- ifelse(ward_data$Urban %in% c("Yes", "YES", "yes", "Y", "y"), 100, 0)
+    } else {
+      ward_data$UrbanPercent <- 0  # Default assumption
+      warning("No Urban data found, assuming all areas are non-urban")
+    }
+  }
+  
+  # Extract all ward names from shapefile
+  all_ward_names <- ward_data$WardName
+  
+  # Try to get state information
+  state_name <- NULL
+  if ("StateCode" %in% names(ward_data)) {
+    # Get the first state code (assuming all wards are from the same state)
+    state_code <- ward_data$StateCode[1]
+    state_name <- map_state_code(state_code)
+    cat("Detected state code:", state_code, "mapped to state name:", state_name, "\n")
+  }
+  
+  # Initialize population source column
+  ward_data$PopulationSource <- "Density_Estimate"
+  
+  # Get ITN population data matching our ward names
+  if (!is.null(state_name)) {
+    # Build file path to ITN data
+    file_path <- file.path("www/data/population", paste0("pbi_distribution_", state_name, ".csv"))
+    excel_path <- file.path("www/data/population", paste0("pbi_distribution_", state_name, ".xlsx"))
+    
+    # Check if file exists
+    itn_file_exists <- file.exists(file_path) || file.exists(excel_path)
+    cat("Looking for ITN data file:", file_path, "or", excel_path, "- Exists:", itn_file_exists, "\n")
+    
+    if (itn_file_exists) {
+      # Read ITN data
+      if (file.exists(file_path)) {
+        itn_data <- read.csv(file_path)
+      } else {
+        itn_data <- readxl::read_excel(excel_path, sheet = 1)
+      }
+      
+      # Process the ITN data for ward population
+      ward_population_data <- itn_data %>%
+        rename(population = N_FamilyMembers,
+               Ward = AdminLevel3) %>%
+        select(Ward, population) %>%
+        # Group by ward and sum population
+        group_by(Ward) %>%
+        summarise(Population = sum(population, na.rm = TRUE)) %>%
+        ungroup()
+      
+      cat("ITN data loaded with", nrow(ward_population_data), "wards\n")
+      cat("Sample ITN wards:", paste(head(ward_population_data$Ward), collapse=", "), "\n")
+      cat("Sample shapefile wards:", paste(head(all_ward_names), collapse=", "), "\n")
+      
+      # Create lowercase versions for matching
+      ward_population_data$Ward_lower <- tolower(ward_population_data$Ward)
+      
+      # Result dataframe for matched wards
+      ward_matches <- data.frame(
+        WardName = character(),
+        Population = numeric(),
+        MatchFound = logical(),
+        stringsAsFactors = FALSE
+      )
+      
+      # Check each ward name for matches
+      for (ward in all_ward_names) {
+        ward_lower <- tolower(ward)
+        match_found <- any(ward_population_data$Ward_lower == ward_lower)
+        
+        if (match_found) {
+          # Get the population for this ward
+          ward_pop <- ward_population_data$Population[ward_population_data$Ward_lower == ward_lower]
+          population <- ward_pop[1]  # Take first match if multiple
+        } else {
+          population <- NA
+        }
+        
+        # Add to result
+        ward_matches <- rbind(ward_matches, data.frame(
+          WardName = ward,
+          Population = population,
+          MatchFound = match_found,
+          stringsAsFactors = FALSE
+        ))
+      }
+      
+      # Count how many matches we found
+      matches_found <- sum(ward_matches$MatchFound, na.rm = TRUE)
+      cat("Found matches for", matches_found, "out of", length(all_ward_names), "wards\n")
+      
+      # Only join if we found matches
+      if (matches_found > 0) {
+        # Join the population data with ward_data
+        ward_data <- left_join(ward_data, 
+                               ward_matches %>% select(WardName, Population),
+                               by = "WardName")
+        
+        # Where we found a match, use ITN population data
+        for (i in 1:nrow(ward_data)) {
+          if (!is.na(ward_data$Population[i])) {
+            ward_data$EstimatedPopulation[i] <- ward_data$Population[i]
+            ward_data$PopulationSource[i] <- "ITN_Distribution_Data"
+          }
+        }
+      }
+      
+      # Store match statistics for display
+      ward_data$ITNDataMatches <- matches_found
+      ward_data$TotalWards <- length(all_ward_names)
+    }
+  }
+  
+  # Initialize all the columns we'll use later to avoid the replacement error
+  ward_data$HasGridClassifications <- FALSE
+  ward_data$ValidGridCells <- NA_integer_
+  ward_data$AdjustedPopulation <- NA_real_
+  ward_data$TotalGridCells <- NA_integer_
+  
+  # Apply manual grid overrides if available
+  if (!is.null(grid_overrides) && nrow(grid_overrides) > 0) {
+    for (i in 1:nrow(grid_overrides)) {
+      ward_name <- grid_overrides$WardName[i]
+      idx <- which(ward_data$WardName == ward_name)
+      
+      if (length(idx) > 0) {
+        # Mark the ward as having grid classifications
+        ward_data$HasGridClassifications[idx] <- TRUE
+        # Store the number of valid grid cells
+        ward_data$ValidGridCells[idx] <- grid_overrides$TotalValidGrids[i]
+      }
+    }
+  }
+  
+  # Ensure EstimatedPopulation column exists for density-based estimates
+  if (!"EstimatedPopulation" %in% names(ward_data)) {
+    ward_data$EstimatedPopulation <- NA_real_
+  }
+  
+  # For wards without population data, estimate it
+  for (i in 1:nrow(ward_data)) {
+    if (is.na(ward_data$EstimatedPopulation[i])) {
+      # Use area-based estimation
+      if ("area" %in% names(ward_data) && !is.na(ward_data$area[i])) {
+        # Urban status affects density
+        is_urban <- !is.na(ward_data$UrbanPercent[i]) && ward_data$UrbanPercent[i] >= urban_threshold
+        base_density <- if (is_urban) 5000 else 500
+        ward_data$EstimatedPopulation[i] <- ward_data$area[i] * base_density
+      } else {
+        # Default population if no area data
+        ward_data$EstimatedPopulation[i] <- 5000
+      }
+    }
+  }
+  
+  # Filter based on urban threshold
+  ward_data$MeetsThreshold <- !is.na(ward_data$UrbanPercent) & ward_data$UrbanPercent >= urban_threshold
+  
+  # For wards with grid classifications, adjust population estimate based on valid grid cells
+  if (!is.null(grid_overrides) && nrow(grid_overrides) > 0) {
+    for (i in 1:nrow(grid_overrides)) {
+      ward_name <- grid_overrides$WardName[i]
+      idx <- which(ward_data$WardName == ward_name)
+      
+      if (length(idx) > 0 && !is.na(ward_data$ValidGridCells[idx])) {
+        # Get total grid cells for this ward
+        if ("TotalGridCells" %in% names(ward_data) && !is.na(ward_data$TotalGridCells[idx])) {
+          # If we know total cells, adjust population proportionally
+          total_cells <- ward_data$TotalGridCells[idx]
+          valid_cells <- ward_data$ValidGridCells[idx]
+          
+          # If total cells is available, adjust population by grid cell ratio
+          if (total_cells > 0) {
+            ward_data$AdjustedPopulation[idx] <- ward_data$EstimatedPopulation[idx] * 
+              (valid_cells / total_cells)
+          } else {
+            # Otherwise use a fixed amount per cell
+            ward_data$AdjustedPopulation[idx] <- valid_cells * 250 # Assume 250 people per grid cell
+          }
+        } else {
+          # If no total grid cells, use fixed amount per cell
+          ward_data$AdjustedPopulation[idx] <- grid_overrides$TotalValidGrids[i] * 250
+        }
+      }
+    }
+  }
+  
+  # Calculate total households
+  ward_data$TotalHouseholds <- ceiling(ward_data$EstimatedPopulation / avg_household_size)
+  
+  # Calculate nets needed (1 net per 1.8 people, min 1 per household)
+  ward_data$NetsNeeded <- pmax(ceiling(ward_data$EstimatedPopulation / 1.8), 
+                               ward_data$TotalHouseholds)
+  
+  # For wards with grid classifications, calculate nets needed based on adjusted population
+  for (i in 1:nrow(ward_data)) {
+    if (ward_data$HasGridClassifications[i] && !is.na(ward_data$AdjustedPopulation[i])) {
+      ward_data$NetsNeeded[i] <- max(
+        ceiling(ward_data$AdjustedPopulation[i] / 1.8),
+        ceiling(ward_data$AdjustedPopulation[i] / avg_household_size)
+      )
+    }
+  }
+  
+  # Create prioritization categories:
+  # 1. Prioritized: Below threshold (these get nets first)
+  # 2. Grid-Classified: Has valid grid classifications indicating habitable areas
+  # 3. Re-prioritized: Above threshold and no grid classifications (lowest priority)
+  
+  ward_data$Priority <- "Re-prioritized"  # Default
+  # Update priority based on conditions
+  ward_data$Priority[!ward_data$MeetsThreshold] <- "Prioritized"
+  ward_data$Priority[ward_data$HasGridClassifications] <- "Grid-Classified"
+  
+  # First, get wards in order of allocation priority
+  prioritized_wards <- ward_data %>%
+    filter(Priority == "Prioritized") 
+  
+  # Sort by vulnerability rank if available
+  if ("overall_rank" %in% names(prioritized_wards)) {
+    prioritized_wards <- prioritized_wards %>% arrange(overall_rank)
+  }
+  
+  grid_classified_wards <- ward_data %>%
+    filter(Priority == "Grid-Classified")
+  
+  # Sort by vulnerability rank if available
+  if ("overall_rank" %in% names(grid_classified_wards)) {
+    grid_classified_wards <- grid_classified_wards %>% arrange(overall_rank)
+  }
+  
+  reprioritized_wards <- ward_data %>%
+    filter(Priority == "Re-prioritized")
+  
+  # Sort by vulnerability rank if available
+  if ("overall_rank" %in% names(reprioritized_wards)) {
+    reprioritized_wards <- reprioritized_wards %>% arrange(overall_rank)
+  }
+  
+  # Initialize allocation columns
+  ward_data$NetsAllocated <- 0
+  ward_data$CoveragePercent <- 0
+  
+  # Function to allocate nets to a group of wards
+  allocate_nets <- function(wards, remaining_nets) {
+    if(nrow(wards) == 0) {
+      return(list(wards = wards, remaining_nets = remaining_nets))
+    }
+    
+    wards$NetsAllocated <- 0
+    wards$CoveragePercent <- 0
+    
+    for (i in 1:nrow(wards)) {
+      nets_needed <- wards$NetsNeeded[i]
+      
+      if (remaining_nets >= nets_needed) {
+        # Full coverage
+        wards$NetsAllocated[i] <- nets_needed
+        wards$CoveragePercent[i] <- 100
+        remaining_nets <- remaining_nets - nets_needed
+      } else if (remaining_nets > 0) {
+        # Partial coverage
+        wards$NetsAllocated[i] <- remaining_nets
+        wards$CoveragePercent[i] <- round(remaining_nets / nets_needed * 100, 1)
+        remaining_nets <- 0
+      } else {
+        # No nets left
+        wards$NetsAllocated[i] <- 0
+        wards$CoveragePercent[i] <- 0
+      }
+    }
+    
+    return(list(wards = wards, remaining_nets = remaining_nets))
+  }
+  
+  # Allocate nets to prioritized wards first (below threshold)
+  remaining_nets <- total_nets
+  
+  if (nrow(prioritized_wards) > 0) {
+    allocation <- allocate_nets(prioritized_wards, remaining_nets)
+    prioritized_wards <- allocation$wards
+    remaining_nets <- allocation$remaining_nets
+    
+    # Update main ward_data with allocation
+    for (i in 1:nrow(prioritized_wards)) {
+      idx <- which(ward_data$WardName == prioritized_wards$WardName[i])
+      if (length(idx) > 0) {
+        ward_data$NetsAllocated[idx] <- prioritized_wards$NetsAllocated[i]
+        ward_data$CoveragePercent[idx] <- prioritized_wards$CoveragePercent[i]
+      }
+    }
+  }
+  
+  # Next, allocate to grid-classified wards
+  if (nrow(grid_classified_wards) > 0 && remaining_nets > 0) {
+    allocation <- allocate_nets(grid_classified_wards, remaining_nets)
+    grid_classified_wards <- allocation$wards
+    remaining_nets <- allocation$remaining_nets
+    
+    # Update main ward_data with allocation
+    for (i in 1:nrow(grid_classified_wards)) {
+      idx <- which(ward_data$WardName == grid_classified_wards$WardName[i])
+      if (length(idx) > 0) {
+        ward_data$NetsAllocated[idx] <- grid_classified_wards$NetsAllocated[i]
+        ward_data$CoveragePercent[idx] <- grid_classified_wards$CoveragePercent[i]
+      }
+    }
+  }
+  
+  # Finally, if nets remain, allocate to re-prioritized wards (above threshold)
+  if (nrow(reprioritized_wards) > 0 && remaining_nets > 0) {
+    allocation <- allocate_nets(reprioritized_wards, remaining_nets)
+    reprioritized_wards <- allocation$wards
+    remaining_nets <- allocation$remaining_nets
+    
+    # Update main ward_data with allocation
+    for (i in 1:nrow(reprioritized_wards)) {
+      idx <- which(ward_data$WardName == reprioritized_wards$WardName[i])
+      if (length(idx) > 0) {
+        ward_data$NetsAllocated[idx] <- reprioritized_wards$NetsAllocated[i]
+        ward_data$CoveragePercent[idx] <- reprioritized_wards$CoveragePercent[i]
+      }
+    }
+  }
+  
+  # Calculate population covered based on coverage percentage
+  ward_data$PopulationCovered <- 0  # Initialize to avoid errors
+  
+  for (i in 1:nrow(ward_data)) {
+    if (ward_data$HasGridClassifications[i] && !is.na(ward_data$AdjustedPopulation[i])) {
+      # Use adjusted population for grid-classified
+      ward_data$PopulationCovered[i] <- round(ward_data$AdjustedPopulation[i] * ward_data$CoveragePercent[i] / 100)
+    } else {
+      # Use regular population otherwise
+      ward_data$PopulationCovered[i] <- round(ward_data$EstimatedPopulation[i] * ward_data$CoveragePercent[i] / 100)
+    }
+  }
+  
+  # Calculate households covered based on coverage percentage
+  ward_data$HouseholdsCovered <- ceiling(ward_data$TotalHouseholds * ward_data$CoveragePercent / 100)
+  
+  # Calculate summary statistics
+  # Target population includes prioritized wards and grid-classified areas
+  target_population <- sum(
+    sum(ward_data$EstimatedPopulation[ward_data$Priority == "Prioritized"], na.rm = TRUE),
+    sum(
+      ifelse(
+        ward_data$Priority == "Grid-Classified" & !is.na(ward_data$AdjustedPopulation),
+        ward_data$AdjustedPopulation,
+        0
+      ),
+      na.rm = TRUE
+    )
+  )
+  
+  # Ensure target population is never zero to avoid division issues
+  if (target_population <= 0) {
+    target_population <- sum(ward_data$EstimatedPopulation, na.rm = TRUE)
+  }
+  
+  # Calculate total population that will be covered
+  population_covered <- sum(ward_data$PopulationCovered, na.rm = TRUE)
+  
+  # Calculate total households 
+  total_households <- sum(ward_data$TotalHouseholds, na.rm = TRUE)
+  
+  # Calculate total households covered
+  households_covered <- sum(ward_data$HouseholdsCovered, na.rm = TRUE)
+  
+  # Calculate statistics by priority group
+  prioritized_allocation <- sum(ward_data$NetsAllocated[ward_data$Priority == "Prioritized"], na.rm = TRUE)
+  grid_classified_allocation <- sum(ward_data$NetsAllocated[ward_data$Priority == "Grid-Classified"], na.rm = TRUE)
+  reprioritized_allocation <- sum(ward_data$NetsAllocated[ward_data$Priority == "Re-prioritized"], na.rm = TRUE)
+  
+  prioritized_needed <- sum(ward_data$NetsNeeded[ward_data$Priority == "Prioritized"], na.rm = TRUE)
+  grid_classified_needed <- sum(ward_data$NetsNeeded[ward_data$Priority == "Grid-Classified"], na.rm = TRUE)
+  
+  prioritized_coverage <- ifelse(prioritized_needed > 0,
+                                 round(prioritized_allocation / prioritized_needed * 100, 1),
+                                 0)
+  
+  grid_classified_coverage <- ifelse(grid_classified_needed > 0,
+                                     round(grid_classified_allocation / grid_classified_needed * 100, 1),
+                                     0)
+  
+  # Calculate overall coverage percentage
+  overall_coverage_percent <- round(population_covered / max(target_population, 1) * 100, 1)
+  
+  # Count ITN data matches
+  itn_matches <- sum(ward_data$PopulationSource == "ITN_Distribution_Data", na.rm = TRUE)
+  using_itn_data <- itn_matches > 0
+  
+  # Prepare summary statistics
+  summary <- list(
+    TotalPopulation = sum(ward_data$EstimatedPopulation, na.rm = TRUE),
+    TargetPopulation = max(target_population, 1),  # Avoid division by zero
+    PopulationCovered = population_covered,
+    CoveragePercent = overall_coverage_percent,
+    TotalNets = total_nets,
+    NetsDistributed = sum(ward_data$NetsAllocated, na.rm = TRUE),
+    NetsNeeded = prioritized_needed + grid_classified_needed,
+    PrioritizedWards = sum(ward_data$Priority == "Prioritized", na.rm = TRUE),
+    GridClassifiedWards = sum(ward_data$Priority == "Grid-Classified", na.rm = TRUE),
+    ReprioritizedWards = sum(ward_data$Priority == "Re-prioritized", na.rm = TRUE),
+    PrioritizedNets = prioritized_allocation,
+    GridClassifiedNets = grid_classified_allocation,
+    ReprioritizedNets = reprioritized_allocation,
+    PrioritizedCoverage = prioritized_coverage,
+    GridClassifiedCoverage = grid_classified_coverage,
+    ReprioritizedCoverage = 0,  # Will calculate below if possible
+    RemainingNets = remaining_nets,
+    TotalHouseholds = total_households,
+    HouseholdsCovered = households_covered,
+    UsingITNData = using_itn_data,
+    ITNDataMatches = itn_matches,
+    TotalWards = nrow(ward_data),
+    StateName = state_name
+  )
+  
+  # Calculate reprioritized coverage if data available
+  reprioritized_needed <- sum(ward_data$NetsNeeded[ward_data$Priority == "Re-prioritized"], na.rm = TRUE)
+  if (reprioritized_needed > 0) {
+    summary$ReprioritizedCoverage <- round(reprioritized_allocation / reprioritized_needed * 100, 1)
+  }
+  
+  # Return both ward data and summary statistics
+  return(list(
+    wards = ward_data,
+    summary = summary
+  ))
+}
+
+# ==============================================================================
+# UTILITY FUNCTIONS
+# ==============================================================================
+
+#' Get color for coverage level
+#'
+#' @param coverage Coverage percentage
+#' @return Hex color code
+get_coverage_color <- function(coverage) {
+  if (is.na(coverage)) return("#CCCCCC")
+  
+  if (coverage <= 0) return("#CCCCCC")
+  else if (coverage < 25) return("#FF5722")
+  else if (coverage < 50) return("#FFC107")
+  else if (coverage < 75) return("#8BC34A")
+  else if (coverage < 100) return("#4CAF50")
+  else return("#1B5E20")  # 100% coverage
+}
+
+#' Get color for classification
+#'
+#' @param classification Classification
+#' @return Hex color code
+get_classification_color <- function(classification) {
+  colors <- c(
+    "Formal" = "#0074D9",           # Blue
+    "Informal" = "#FF4136",         # Red
+    "No Buildings/Avoid Area" = "#2ECC40",  # Green
+    "Unclassified" = "#AAAAAA"      # Gray
+  )
+  
+  if (classification %in% names(colors)) {
+    return(colors[classification])
+  } else {
+    return("#AAAAAA")  # Default gray for unclassified or unknown
+  }
+}
+
+#' Create color palette for coverage levels
+#'
+#' @return Color palette function
+get_coverage_color_palette <- function() {
+  colorBin(
+    palette = c("#CCCCCC", "#FF5722", "#FFC107", "#8BC34A", "#4CAF50", "#1B5E20"),
+    domain = 0:100,
+    bins = c(0, 1, 25, 50, 75, 100),
+    na.color = "#CCCCCC"
+  )
+}
+
+
+# Add these CSS styles to your create_custom_css function
+create_custom_css <- function() {
+  tags$head(
+    tags$style(HTML("
+      /* Existing CSS styles... */
+      
+      /* NEW styles for map visualization */
+      .leaflet-container {
+        background-color: #f8f8f8 !important;
+      }
+      
+      /* Make the colors more vibrant */
+      .formal-cell {
+        stroke: white !important;
+        stroke-width: 2px !important;
+        fill: rgba(0, 116, 217, 0.7) !important; /* Blue */
+        fill-opacity: 0.7 !important;
+      }
+      
+      .informal-cell {
+        stroke: white !important;
+        stroke-width: 2px !important;
+        fill: rgba(255, 65, 54, 0.7) !important; /* Red */
+        fill-opacity: 0.7 !important;
+      }
+      
+      .avoid-cell {
+        stroke: white !important;
+        stroke-width: 2px !important;
+        fill: rgba(46, 204, 64, 0.7) !important; /* Green */
+        fill-opacity: 0.7 !important;
+      }
+      
+      .unclassified-cell {
+        stroke: white !important;
+        stroke-width: 1px !important;
+        fill: rgba(170, 170, 170, 0.1) !important; /* Light gray */
+        fill-opacity: 0.1 !important;
+      }
+      
+      /* Improve map download button appearance */
+      #download_map {
+        background-color: #5D4E6D;
+        color: white;
+        transition: background-color 0.3s;
+      }
+      
+      #download_map:hover {
+        background-color: #4A3D57;
+      }
+      
+      .download-tooltip {
+        position: absolute;
+        background: white;
+        padding: 5px 10px;
+        border-radius: 3px;
+        box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        display: none;
+        z-index: 1000;
+      }
+      
+      /* Styles for map download modal */
+      .map-download-modal .modal-content {
+        background-color: #f7f7f7;
+      }
+      
+      .map-download-modal .modal-header {
+        background-color: #5D4E6D;
+        color: white;
+      }
+      
+      .map-download-options {
+        padding: 15px;
+        background-color: #f0f0f0;
+        border-radius: 5px;
+        margin-bottom: 15px;
+      }
+      
+      .map-preview {
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        overflow: hidden;
+      }
+    "))
+  )
+}
+
+
+
+
+
+
+###############################################################################
+# Added Functions for population estimates
+################################################################################
+
+# Map state codes to full state names
+map_state_code <- function(state_code) {
+  state_mapping <- list(
+    "DE" = "Delta",
+    "KN" = "Kano",
+    "KD" = "Kaduna",
+    "KT" = "Katsina",
+    "NG" = "Niger",
+    "OS" = "Osun",
+    "TB" = "Taraba",
+    "YB" = "Yobe"
+  )
+  
+  if (state_code %in% names(state_mapping)) {
+    return(state_mapping[[state_code]])
+  } else {
+    return(NULL)  # Return NULL if code not found
+  }
+}
+
+
+
+# Load population data from ITN distribution files
+# Updated function to load and match ITN population data
+load_itn_population <- function(state_name, ward_names, data_dir = "www/data/population") {
+  # Build file path
+  file_path <- file.path(data_dir, paste0("pbi_distribution_", state_name, ".csv"))
+  
+  # Check if file exists
+  if (!file.exists(file_path)) {
+    # Try Excel format if CSV not found
+    excel_path <- file.path(data_dir, paste0("pbi_distribution_", state_name, ".xlsx"))
+    if (!file.exists(excel_path)) {
+      return(NULL)
+    }
+    
+    # Read Excel file
+    tryCatch({
+      itn_data <- readxl::read_excel(excel_path, sheet = 1)
+    }, error = function(e) {
+      message("Error reading Excel file: ", e$message)
+      return(NULL)
+    })
+  } else {
+    # Read CSV file
+    tryCatch({
+      itn_data <- read.csv(file_path)
+    }, error = function(e) {
+      message("Error reading CSV file: ", e$message)
+      return(NULL)
+    })
+  }
+  
+  # Process the ITN data and match with provided ward names
+  tryCatch({
+    # Extract population data for AdminLevel3 (ward level)
+    ward_population_data <- itn_data %>%
+      rename(population = N_FamilyMembers,
+             Ward = AdminLevel3) %>%
+      select(Ward, population) %>%
+      # Group by ward and sum population
+      group_by(Ward) %>%
+      summarise(Population = sum(population, na.rm = TRUE)) %>%
+      ungroup()
+    
+    # Create lowercase versions for matching
+    ward_population_data$Ward_lower <- tolower(ward_population_data$Ward)
+    
+    # Create a result dataframe for the matched wards
+    result <- data.frame(
+      WardName = character(),
+      Population = numeric(),
+      MatchFound = logical(),
+      stringsAsFactors = FALSE
+    )
+    
+    # Check each ward name for matches
+    for (ward in ward_names) {
+      ward_lower <- tolower(ward)
+      match_found <- ward_lower %in% ward_population_data$Ward_lower
+      
+      if (match_found) {
+        # Get the population for this ward
+        ward_pop <- ward_population_data$Population[ward_population_data$Ward_lower == ward_lower]
+        population <- ward_pop[1]  # Take first match if multiple
+      } else {
+        population <- NA
+      }
+      
+      # Add to result
+      result <- rbind(result, data.frame(
+        WardName = ward,
+        Population = population,
+        MatchFound = match_found,
+        stringsAsFactors = FALSE
+      ))
+    }
+    
+    return(result)
+  }, error = function(e) {
+    message("Error processing ITN data: ", e$message)
+    return(NULL)
+  })
 }
