@@ -876,50 +876,46 @@ create_classification_popup <- function(ward_name, grid_id, current_class = "Unc
   # Create a unique ID for the popup form
   popup_id <- paste0("popup_", ward_name, "_", grid_id)
   
-  # Create the classification checklist HTML
+  # Create the simplified classification checklist HTML
   html <- paste0(
     "<div class='classification-checklist' style='min-width: 300px; max-width: 400px;'>",
     "<h4 style='margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 8px;'>Grid Cell Classification</h4>",
     
     "<div id='checklist-", popup_id, "' style='margin-bottom: 15px;'>",
-    "<p style='font-weight: bold; margin-bottom: 5px;'>Answer these questions to determine classification:</p>",
+    "<p style='font-weight: bold; margin-bottom: 5px;'>Select the most appropriate classification for this area:</p>",
     
-    "<div class='checklist-item' style='margin-bottom: 8px;'>",
-    "<label style='display: block; font-weight: bold; margin-bottom: 4px;'>1. Building Density:</label>",
-    "<div style='display: flex;'>",
-    "<label style='margin-right: 10px;'><input type='radio' name='buildings' value='high'> High</label>",
-    "<label style='margin-right: 10px;'><input type='radio' name='buildings' value='medium'> Medium</label>",
-    "<label style='margin-right: 10px;'><input type='radio' name='buildings' value='low'> Low</label>",
-    "<label><input type='radio' name='buildings' value='none'> None</label>",
-    "</div>",
-    "</div>",
-    
-    "<div class='checklist-item' style='margin-bottom: 8px;'>",
-    "<label style='display: block; font-weight: bold; margin-bottom: 4px;'>2. Road Access:</label>",
-    "<div style='display: flex;'>",
-    "<label style='margin-right: 10px;'><input type='radio' name='roads' value='good'> Good</label>",
-    "<label style='margin-right: 10px;'><input type='radio' name='roads' value='limited'> Limited</label>",
-    "<label><input type='radio' name='roads' value='none'> None</label>",
-    "</div>",
+    "<div class='classification-options' style='margin-bottom: 15px;'>",
+    "<div style='margin-bottom: 10px;'>",
+    "<label style='display: block; font-weight: bold; cursor: pointer;'>",
+    "<input type='radio' name='classification' value='Formal'> <span style='color: #0074D9;'>Formal Settlement</span>",
+    "</label>",
+    "<ul style='margin-top: 5px; margin-bottom: 10px; padding-left: 20px; color: #666;'>",
+    "<li>Planned layout with good road access</li>",
+    "<li>Regular building patterns</li>",
+    "<li>Typically with infrastructure</li>",
+    "</ul>",
     "</div>",
     
-    "<div class='checklist-item' style='margin-bottom: 8px;'>",
-    "<label style='display: block; font-weight: bold; margin-bottom: 4px;'>3. Building Organization:</label>",
-    "<div style='display: flex;'>",
-    "<label style='margin-right: 10px;'><input type='radio' name='organization' value='planned'> Planned</label>",
-    "<label style='margin-right: 10px;'><input type='radio' name='organization' value='mixed'> Mixed</label>",
-    "<label><input type='radio' name='organization' value='unplanned'> Unplanned</label>",
-    "</div>",
+    "<div style='margin-bottom: 10px;'>",
+    "<label style='display: block; font-weight: bold; cursor: pointer;'>",
+    "<input type='radio' name='classification' value='Informal'> <span style='color: #FF4136;'>Informal Settlement</span>",
+    "</label>",
+    "<ul style='margin-top: 5px; margin-bottom: 10px; padding-left: 20px; color: #666;'>",
+    "<li>Unplanned layout with limited road access</li>",
+    "<li>Irregular building patterns</li>",
+    "<li>High density or overcrowded housing</li>",
+    "</ul>",
     "</div>",
     
-    "<div class='checklist-item' style='margin-bottom: 8px;'>",
-    "<label style='display: block; font-weight: bold; margin-bottom: 4px;'>4. Special Conditions:</label>",
-    "<div style='display: flex; flex-wrap: wrap;'>",
-    "<label style='margin-right: 10px; flex: 0 0 45%;'><input type='checkbox' name='special' value='water'> Water Body</label>",
-    "<label style='margin-right: 10px; flex: 0 0 45%;'><input type='checkbox' name='special' value='forest'> Forest/Vegetation</label>",
-    "<label style='margin-right: 10px; flex: 0 0 45%;'><input type='checkbox' name='special' value='industrial'> Industrial</label>",
-    "<label style='flex: 0 0 45%;'><input type='checkbox' name='special' value='hazard'> Hazardous Area</label>",
-    "</div>",
+    "<div style='margin-bottom: 10px;'>",
+    "<label style='display: block; font-weight: bold; cursor: pointer;'>",
+    "<input type='radio' name='classification' value='No Buildings/Avoid Area'> <span style='color: #2ECC40;'>No Buildings/Avoid Area</span>",
+    "</label>",
+    "<ul style='margin-top: 5px; margin-bottom: 10px; padding-left: 20px; color: #666;'>",
+    "<li>Water bodies, forests, or vegetation</li>",
+    "<li>Industrial or hazardous areas</li>",
+    "<li>Areas without residential structures</li>",
+    "</ul>",
     "</div>",
     "</div>",
     
@@ -929,32 +925,16 @@ create_classification_popup <- function(ward_name, grid_id, current_class = "Unc
     "</div>",
     
     "<div style='display: flex; justify-content: space-between;'>",
-    "<button type='button' class='btn btn-sm btn-primary' onclick='window.determineClassification(\"", 
-    ward_name, "\", ", grid_id, ", \"", popup_id, "\")' style='flex: 1; margin-right: 5px;'>",
-    "Determine Classification</button>",
-    
-    "<button type='button' class='btn btn-sm btn-success' onclick='window.setCustomClassification(\"", 
-    ward_name, "\", ", grid_id, ", this.form)' style='flex: 1; margin-left: 5px;'>",
-    "Manually Set Classification</button>",
-    "</div>",
-    
-    "<div id='manual-classification-", popup_id, "' style='display: none; margin-top: 10px;'>",
-    "<label style='display: block; font-weight: bold; margin-bottom: 4px;'>Manual Classification:</label>",
-    "<select id='manual-class-", popup_id, "' style='width: 100%; padding: 5px;'>",
-    "<option value='Formal'", ifelse(current_class == "Formal", " selected", ""), ">Formal Settlement</option>",
-    "<option value='Informal'", ifelse(current_class == "Informal", " selected", ""), ">Informal Settlement</option>",
-    "<option value='No Buildings/Avoid Area'", ifelse(current_class == "No Buildings/Avoid Area", " selected", ""), ">No Buildings/Avoid Area</option>",
-    "</select>",
-    
-    "<button type='button' class='btn btn-sm btn-success' onclick='window.manualClassify(\"", 
-    ward_name, "\", ", grid_id, ", document.getElementById(\"manual-class-", popup_id, "\").value)' ",
-    "style='width: 100%; margin-top: 5px;'>Save Manual Classification</button>",
+    "<button type='button' class='btn btn-sm btn-primary save-classification' onclick='window.saveClassification(\"", 
+    ward_name, "\", ", grid_id, ", document.querySelector(\"input[name=classification]:checked\").value)' style='width: 100%;'>",
+    "SAVE CLASSIFICATION</button>",
     "</div>",
     
     "<script>",
-    "  document.querySelector('button:contains(\"Manually Set Classification\")').addEventListener('click', function() {",
-    "    document.getElementById('manual-classification-", popup_id, "').style.display = 'block';",
-    "  });",
+    "  // Set the current classification if it exists",
+    "  if ('", current_class, "' !== 'Unclassified') {",
+    "    document.querySelector('input[name=classification][value=\"", current_class, "\"]').checked = true;",
+    "  }",
     "</script>",
     "</div>"
   )
@@ -1049,7 +1029,7 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
         }
       }
       
-      # Create color palette for classifications - UPDATED COLORS TO MATCH LEGEND EXACTLY
+      # Create color palette for classifications with appropriate transparency
       classification_colors <- c(
         "Formal" = "#0074D9",           # Blue
         "Informal" = "#FF4136",         # Red
@@ -1057,14 +1037,12 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
         "Unclassified" = "#AAAAAA"      # Gray
       )
       
-      # UPDATED: Increased opacity settings for better visibility
-      unclassified_opacity <- 0.1   # Slightly more visible for unclassified cells
-      classified_opacity <- 0.7      # More opaque for classified cells (increased from 0.6)
+      # UPDATED: Opacity settings for better visibility
+      classified_opacity <- 0.65      # More transparent to see the satellite imagery
+      unclassified_opacity <- 0.1     # Very transparent for unclassified cells
       
       # Split grid data for better visualization
       unclassified_cells <- grid_wgs84[grid_wgs84$Classification == "Unclassified", ]
-      
-      # IMPROVED: Directly filter for each classification type
       formal_cells <- grid_wgs84[grid_wgs84$Classification == "Formal", ]
       informal_cells <- grid_wgs84[grid_wgs84$Classification == "Informal", ]
       avoid_cells <- grid_wgs84[grid_wgs84$Classification == "No Buildings/Avoid Area", ]
@@ -1075,7 +1053,7 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
           addPolygons(data = unclassified_cells,
                       color = "white",
                       weight = 1,
-                      opacity = 0.8,     # Increased opacity of grid lines
+                      opacity = 0.8,
                       fillColor = classification_colors["Unclassified"],
                       fillOpacity = unclassified_opacity,
                       layerId = ~paste(WardName, GridID, "unclassified", sep = "_"),
@@ -1146,70 +1124,7 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
     htmlwidgets::onRender(paste0("
       function(el, x) {
         // Define the classification functions globally so they can be called from popups
-        window.determineClassification = function(wardName, gridId, popupId) {
-          // Get form elements
-          const checklist = document.getElementById('checklist-' + popupId);
-          const buildingDensity = checklist.querySelector('input[name=\"buildings\"]:checked')?.value || '';
-          const roadAccess = checklist.querySelector('input[name=\"roads\"]:checked')?.value || '';
-          const organization = checklist.querySelector('input[name=\"organization\"]:checked')?.value || '';
-          
-          // Get special conditions
-          const specialConditions = [];
-          checklist.querySelectorAll('input[name=\"special\"]:checked').forEach(cb => {
-            specialConditions.push(cb.value);
-          });
-          
-          console.log('Classification inputs:', {
-            buildingDensity,
-            roadAccess,
-            organization,
-            specialConditions
-          });
-          
-          // FIXED CLASSIFICATION LOGIC
-          let classification = 'Unclassified';
-          
-          // First check for special conditions that would make it No Buildings/Avoid Area
-          if (buildingDensity === 'none' || 
-              specialConditions.includes('water') || 
-              specialConditions.includes('hazard')) {
-            classification = 'No Buildings/Avoid Area';
-          }
-          // For all other density levels, check road access and organization
-          else if (buildingDensity === 'high' || buildingDensity === 'medium' || buildingDensity === 'low') {
-            // For Formal classification, must have planned organization AND good road access
-            if (organization === 'planned' && roadAccess === 'good') {
-              classification = 'Formal';
-            } 
-            // Otherwise it's Informal
-            else {
-              classification = 'Informal';
-            }
-          }
-          
-          console.log('Determined classification:', classification);
-          
-          // Update the classification result display
-          const resultElement = document.getElementById('classification-result-' + popupId);
-          if (resultElement) {
-            resultElement.innerHTML = `
-              <h5 style='margin-top: 0; margin-bottom: 5px;'>Recommended Classification:</h5>
-              <p style='font-weight: bold; margin: 0;'>${classification}</p>
-            `;
-          }
-          
-          // Save the classification automatically
-          window.manualClassify(wardName, gridId, classification);
-        };
-        
-        window.setCustomClassification = function(wardName, gridId, form) {
-          const manualClassificationDiv = document.getElementById('manual-classification-popup_' + wardName + '_' + gridId);
-          if (manualClassificationDiv) {
-            manualClassificationDiv.style.display = manualClassificationDiv.style.display === 'none' ? 'block' : 'none';
-          }
-        };
-        
-        window.manualClassify = function(wardName, gridId, classification) {
+        window.saveClassification = function(wardName, gridId, classification) {
           console.log('Saving classification:', {
             wardName,
             gridId,
@@ -1252,33 +1167,6 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
             }, 1500);
           }
         };
-        
-        // ADDED: Function to prepare map for download
-        window.prepareMapForDownload = function() {
-          // Hide UI controls for cleaner screenshot
-          document.querySelectorAll('.leaflet-control-container .leaflet-top').forEach(el => {
-            el.style.display = 'none';
-          });
-          
-          // Add map title
-          const title = document.createElement('div');
-          title.id = 'map-title-for-export';
-          title.style.position = 'absolute';
-          title.style.top = '10px';
-          title.style.left = '50%';
-          title.style.transform = 'translateX(-50%)';
-          title.style.background = 'rgba(255,255,255,0.8)';
-          title.style.padding = '5px 15px';
-          title.style.borderRadius = '4px';
-          title.style.zIndex = '1000';
-          title.style.fontWeight = 'bold';
-          title.innerHTML = '", ward_name, " Ward Classification Map';
-          
-          document.querySelector('.leaflet-container').appendChild(title);
-          
-          // Signal to Shiny that map is ready for download
-          Shiny.setInputValue('map_ready_for_download', true);
-        };
       }
     "))
   
@@ -1288,7 +1176,7 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
 # New function to create a map for downloading
 create_downloadable_map <- function(ward_name, shp_data, grid_annotations, 
                                     enable_grid = TRUE, grid_cell_size = 500) {
-  # Start with the regular map
+  # Create a modified version of the map for downloading
   map <- process_and_view_shapefile_and_csv_enhanced(ward_name, shp_data, grid_annotations, 
                                                      enable_grid, grid_cell_size)
   
@@ -1957,23 +1845,51 @@ calculate_prioritized_net_distribution <- function(ward_data, total_nets, avg_ho
     wards$NetsAllocated <- 0
     wards$CoveragePercent <- 0
     
-    for (i in 1:nrow(wards)) {
-      nets_needed <- wards$NetsNeeded[i]
+    # First, allocate at least some nets to each ward if possible
+    if (remaining_nets > 0 && nrow(wards) > 0) {
+      # Calculate nets needed for each ward
+      total_nets_needed <- sum(wards$NetsNeeded)
       
-      if (remaining_nets >= nets_needed) {
-        # Full coverage
-        wards$NetsAllocated[i] <- nets_needed
-        wards$CoveragePercent[i] <- 100
-        remaining_nets <- remaining_nets - nets_needed
-      } else if (remaining_nets > 0) {
-        # Partial coverage
-        wards$NetsAllocated[i] <- remaining_nets
-        wards$CoveragePercent[i] <- round(remaining_nets / nets_needed * 100, 1)
-        remaining_nets <- 0
+      if (remaining_nets >= total_nets_needed) {
+        # If we have enough nets for full coverage
+        wards$NetsAllocated <- wards$NetsNeeded
+        wards$CoveragePercent <- 100
+        remaining_nets <- remaining_nets - total_nets_needed
       } else {
-        # No nets left
-        wards$NetsAllocated[i] <- 0
-        wards$CoveragePercent[i] <- 0
+        # Distribute nets proportionally based on need
+        for (i in 1:nrow(wards)) {
+          # Calculate fair share based on percentage of total need
+          fair_share <- round(remaining_nets * (wards$NetsNeeded[i] / total_nets_needed))
+          
+          # Ensure we don't allocate more than needed or available
+          allocated <- min(fair_share, wards$NetsNeeded[i], remaining_nets)
+          
+          wards$NetsAllocated[i] <- allocated
+          wards$CoveragePercent[i] <- round(allocated / wards$NetsNeeded[i] * 100, 1)
+          remaining_nets <- remaining_nets - allocated
+        }
+        
+        # If we still have nets left, distribute them to maximize coverage
+        if (remaining_nets > 0) {
+          # Sort by how close they are to full coverage
+          coverage_gap <- data.frame(
+            index = 1:nrow(wards),
+            gap = wards$NetsNeeded - wards$NetsAllocated
+          )
+          coverage_gap <- coverage_gap[coverage_gap$gap > 0, ]
+          coverage_gap <- coverage_gap[order(coverage_gap$gap), ]
+          
+          for (i in 1:nrow(coverage_gap)) {
+            if (remaining_nets <= 0) break
+            
+            idx <- coverage_gap$index[i]
+            nets_to_add <- min(coverage_gap$gap[i], remaining_nets)
+            
+            wards$NetsAllocated[idx] <- wards$NetsAllocated[idx] + nets_to_add
+            wards$CoveragePercent[idx] <- round(wards$NetsAllocated[idx] / wards$NetsNeeded[idx] * 100, 1)
+            remaining_nets <- remaining_nets - nets_to_add
+          }
+        }
       }
     }
     

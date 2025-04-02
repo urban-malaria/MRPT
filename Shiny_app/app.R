@@ -240,6 +240,21 @@ create_custom_css <- function() {
         background-color: #fff3e0;
         border-left: 4px solid #ff9800;
       }
+      
+      /* Classification badge colors */
+      .badge-formal {
+        background-color: #0074D9;
+      }
+      .badge-informal {
+        background-color: #FF4136;
+      }
+      .badge-avoid {
+        background-color: #2ECC40;
+      }
+      .badge-unclassified {
+        background-color: #AAAAAA;
+        color: #333;
+      }
     "))
   )
 }
@@ -541,12 +556,14 @@ box_whisker_tab <- function() {
                         p("Use this map to identify priority areas for intervention. Wards with higher ranks (darker colors) may require more immediate attention and resources in malaria prevention efforts.")
                       )
                     ),
+                    # In the box_whisker_tab function, update the explanation panel text:
                     conditionalPanel(
                       condition = "input.show_map == true && input.show_threshold_map == true",
                       wellPanel(
                         style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 500px; overflow-y: auto;",
                         h4("Urban Extent Filtered Map"),
-                        p(HTML("This map shows wards filtered by an urban extent threshold of <strong>30%</strong>.")),
+                        # Use uiOutput instead of hardcoded HTML
+                        uiOutput("threshold_explanation_text"),
                         p("Key features:"),
                         tags$ul(
                           tags$li("Colored wards meet the urban threshold and are prioritized for net distribution."),
@@ -623,9 +640,9 @@ manual_labeling_tab <- function() {
                  column(4,
                         div(class = "urban-threshold-box",
                             h4("Urban Extent Threshold", style = "margin-top: 0;"),
-                            p("Using 30% urban extent threshold for bed net distribution planning:"),
+                            # Use uiOutput to dynamically render this text with current threshold
+                            uiOutput("dynamic_threshold_text"),
                             
-                            # Fixed threshold information
                             div(style = "background-color: #e9f0f6; padding: 15px; border-radius: 5px; margin-top: 10px;",
                                 h5("Statistics", style = "margin-top: 0; color: #3949AB;"),
                                 uiOutput("manual_deprioritization_stats")
@@ -717,7 +734,7 @@ manual_labeling_tab <- function() {
                  column(8,
                         div(id = "status_box", class = "reprioritized-box",
                             h4("Re-prioritized Area Analysis", style = "margin-top: 0;"),
-                            p(id = "status_text", "This tool allows you to examine re-prioritized wards (that meets the 30% urban threshold) in detail. Manual classification helps identify specific areas that may need bed nets despite the overall ward status.")
+                            uiOutput("dynamic_status_text")
                         ),
                         div(style = "position: relative;",
                             div(style = "position: absolute; top: 10px; right: 10px; z-index: 1000;",
@@ -726,14 +743,7 @@ manual_labeling_tab <- function() {
                             ),
                             div(id = "grid_help_content", style = "display: none; position: absolute; top: 50px; right: 10px; z-index: 1000; background-color: white; border-radius: 8px; padding: 15px; width: 300px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);",
                                 h4("How to Use the Grid", style = "margin-top: 0;"),
-                                tags$ol(
-                                  tags$li("Select a ward from the dropdown (only wards above 30% urban threshold are shown)"),
-                                  tags$li("Click 'GENERATE GRID & PLOT MAP'"),
-                                  tags$li("Click on any grid cell to open classification popup"),
-                                  tags$li("Choose a classification (Formal, Informal, or No Buildings/Avoid)"),
-                                  tags$li("Classified cells will appear colored on the map"),
-                                  tags$li("Click 'DOWNLOAD CLASSIFIED MAP' to export your work")
-                                ),
+                                uiOutput("dynamic_grid_help_content"),
                                 actionButton("close_help", "Close", style = "width: 100%;")
                             ),
                             leafletOutput("ward_map", height = 700)
@@ -755,7 +765,7 @@ net_distribution_tab <- function() {
                         div(class = "dashboard-card",
                             h2(icon("mosquito-net"), "Net Distribution Planning", 
                                style = "color: #5D4E6D; margin-top: 0;"),
-                            p("Plan optimal distribution of bed nets based on the 30% urban extent threshold and ward vulnerability rankings.", 
+                            p("Plan optimal distribution of bed nets based on the urban extent threshold and ward vulnerability rankings.", 
                               style = "font-size: 16px; color: #666;")
                         ),
                         uiOutput("population_data_source")
@@ -783,17 +793,12 @@ net_distribution_tab <- function() {
                             # Distribution strategy selection
                             h4("Distribution Strategy", style = "color: #5D4E6D;"),
                             
-                            # Using a two-phase approach explanation
+                            # Using a two-phase approach explanation with DYNAMIC threshold
                             div(class = "distribution-phases",
                                 h5("Two-Phase Distribution Approach"),
-                                div(class = "phase phase-1",
-                                    h6("Phase 1: Prioritized Areas", style = "margin-top: 0;"),
-                                    p("Nets are first distributed to the most vulnerable wards below the 30% urban threshold, prioritized by vulnerability rank.")
-                                ),
-                                div(class = "phase phase-2",
-                                    h6("Phase 2: Re-prioritized Areas", style = "margin-top: 0;"),
-                                    p("If nets remain after Phase 1, they are distributed to wards above 30% threshold, with manually classified areas receiving special consideration.")
-                                )
+                                # Dynamic phase descriptions
+                                uiOutput("phase1_description"),
+                                uiOutput("phase2_description")
                             ),
                             
                             hr(style = "margin: 20px 0; border-color: #eee;"),
@@ -845,14 +850,14 @@ net_distribution_tab <- function() {
                                            uiOutput("population_coverage_bar")
                                        ),
                                        
-                                       # Distribution summary info
+                                       # Distribution summary info - now DYNAMIC
                                        uiOutput("distribution_summary"),
                                        
                                        # Map visualization
                                        div(class = "map-container",
                                            h4("Net Distribution Map", style = "margin-top: 0; margin-bottom: 10px;"),
-                                           p("This map shows where nets will be distributed, prioritizing wards below 30% urban threshold. Gray areas are re-prioritized and will receive nets if available.", 
-                                             style = "font-style: italic; color: #666; margin-bottom: 10px;"),
+                                           # Dynamic map description
+                                           uiOutput("map_description"),
                                            leafletOutput("distribution_map", height = 400)
                                        )
                               ),
@@ -862,10 +867,8 @@ net_distribution_tab <- function() {
                                        p("This view shows the distribution of nets across wards based on vulnerability ranking.", 
                                          style = "margin-bottom: 20px;"),
                                        
-                                       div(style = "margin-bottom: 20px; padding: 10px; background-color: #f8f9fa; border-radius: 5px;",
-                                           p("Prioritized wards (below 30% urban extent threshold) receive nets first. Re-prioritized wards (above threshold) receive nets if resources remain.", 
-                                             style = "margin: 0;")
-                                       ),
+                                       # Dynamic description
+                                       uiOutput("ward_coverage_description"),
                                        
                                        DTOutput("ward_coverage_table")
                               ),
@@ -1783,6 +1786,13 @@ server <- function(input, output, session) {
     }
   })
   
+  output$threshold_explanation_text <- renderUI({
+    req(input$urban_threshold)
+    threshold <- as.numeric(input$urban_threshold)
+    p(paste0("This map shows wards filtered by an urban extent threshold of ", threshold, "%."))
+  })
+  
+  
   #============================================================================
   # Decision Tree
   #============================================================================
@@ -1941,7 +1951,7 @@ server <- function(input, output, session) {
   output$manual_deprioritization_stats <- renderUI({
     req(rv$shp_data, input$urban_threshold)
     
-    # Use the threshold from the input (defaults to 30%)
+    # Use the threshold from the input - DYNAMIC THRESHOLD
     threshold <- as.numeric(input$urban_threshold)
     
     # Force recalculation each time
@@ -1968,13 +1978,32 @@ server <- function(input, output, session) {
     )
   })
   
+  
+  
+  # dynamic urban percent selection
+  output$dynamic_threshold_text <- renderUI({
+    req(input$urban_threshold)
+    threshold <- as.numeric(input$urban_threshold)
+    
+    p(paste0("Using ", threshold, "% urban extent threshold for bed net distribution planning:"))
+  })
+  
+  output$dynamic_status_text <- renderUI({
+    req(input$urban_threshold)
+    threshold <- as.numeric(input$urban_threshold)
+    
+    p(id = "status_text", paste0("This tool allows you to examine re-prioritized wards (that meets the ", 
+                                 threshold, "% urban threshold) in detail. Manual classification helps identify specific areas that may need bed nets despite the overall ward status."))
+  })
+  
+  
   #' Create ward selection dropdown
   output$filtered_ward_select <- renderUI({
     # Require both shapefile data and ward rankings to be available
-    req(rv$shp_data, rv$ward_rankings)
+    req(rv$shp_data, rv$ward_rankings, input$urban_threshold)
     
-    # Fixed 30% threshold as specified
-    threshold <- 30
+    # Get threshold from input value
+    threshold <- as.numeric(input$urban_threshold)
     
     # Get urban percent information directly from shapefile if available
     if (!"UrbanPercent" %in% names(rv$shp_data)) {
@@ -2022,15 +2051,33 @@ server <- function(input, output, session) {
              round(filtered_wards$UrbanPercent, 1), "%)")
     )
     
-    # Create the select input
+    # Create the select input with dynamic threshold in label
     selectInput("selected_ward", paste0("Select Ward (Meets ", threshold, "% Threshold):"), 
                 choices = c("Select a ward" = "", ward_choices),
                 selected = "")
   })
   
+  
+  
+  # And add this in the server function
+  output$dynamic_grid_help_content <- renderUI({
+    req(input$urban_threshold) 
+    threshold <- as.numeric(input$urban_threshold)
+    
+    tags$ol(
+      tags$li(paste0("Select a ward from the dropdown (only wards above ", threshold, "% urban threshold are shown)")),
+      tags$li("Click 'GENERATE GRID & PLOT MAP'"),
+      tags$li("Click on any grid cell to open classification popup"),
+      tags$li("Choose a classification (Formal, Informal, or No Buildings/Avoid)"),
+      tags$li("Classified cells will appear colored on the map"),
+      tags$li("Click 'DOWNLOAD CLASSIFIED MAP' to export your work")
+    )
+  })
+  
+  
   #' Show urban info for selected ward
   output$selected_ward_urban_info <- renderUI({
-    req(input$selected_ward, rv$shp_data)
+    req(input$selected_ward, rv$shp_data, input$urban_threshold)
     
     # Get urban info for the selected ward
     ward_data <- rv$shp_data %>% filter(WardName == input$selected_ward)
@@ -2039,8 +2086,10 @@ server <- function(input, output, session) {
       return(p("No data available for this ward."))
     }
     
-    # Apply urban extent threshold filtering with fixed 30% threshold
-    threshold <- 30
+    # Get current threshold value
+    threshold <- as.numeric(input$urban_threshold)
+    
+    # Apply urban extent threshold filtering with DYNAMIC threshold
     filtered_data <- filter_by_urban_extent(ward_data, threshold)
     
     # Get urban percentage and threshold status
@@ -2152,6 +2201,7 @@ server <- function(input, output, session) {
   })
   
   #' Observer for classification from popup
+  # Observer for classification from popup
   observeEvent(input$classify_grid, {
     req(input$classify_grid, rv$gridded_wards())
     
@@ -2161,11 +2211,6 @@ server <- function(input, output, session) {
     classification <- input$classify_grid$classification
     timestamp <- input$classify_grid$timestamp
     method <- input$classify_grid$method %||% "manual"
-    
-    # Map old classifications to new classification scheme if needed
-    if (classification == "No Buildings" || classification == "Avoid Area") {
-      classification <- "No Buildings/Avoid Area"
-    }
     
     # Create a data frame with the information
     new_annotation <- data.frame(
@@ -2241,7 +2286,7 @@ server <- function(input, output, session) {
     # Create badges with explanatory text
     tagList(
       div(style = "margin-bottom: 10px;", 
-          p("Classifications help identify areas that may need nets despite the ward being above the 30% threshold:")),
+          p("Classifications help identify areas that may need nets despite the ward being above the threshold:")),
       div(style = "display: flex; flex-wrap: wrap; gap: 5px;",
           if (formal_count > 0) div(class = "classification-badge badge-formal", paste("Formal:", formal_count)),
           if (informal_count > 0) div(class = "classification-badge badge-informal", paste("Informal:", informal_count)),
@@ -2474,11 +2519,6 @@ server <- function(input, output, session) {
     classification <- input$classify_grid$classification
     timestamp <- input$classify_grid$timestamp
     method <- input$classify_grid$method %||% "manual"
-    
-    # Map old classifications to new classification scheme if needed
-    if (classification == "No Buildings" || classification == "Avoid Area") {
-      classification <- "No Buildings/Avoid Area"
-    }
     
     # Create a data frame with the information
     new_annotation <- data.frame(
@@ -2945,13 +2985,11 @@ server <- function(input, output, session) {
     div(
       style = "background-color: #f8f9fa; border-radius: 8px; padding: 15px; margin: 15px 0;",
       h4("Distribution Strategy Summary", style = "margin-top: 0; color: #5D4E6D;"),
-      
       div(style = "display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 10px;",
-          # Prioritized wards info
           div(style = "flex: 1; min-width: 200px; background-color: #e8f5e9; padding: 10px; border-radius: 5px;",
-              h5(style = "margin-top: 0;", "Prioritized Wards (<30% urban)"),
+              h5(style = "margin-top: 0;", paste0("Prioritized Wards (<", input$urban_threshold, "% urban)")),
               p(style = "margin-bottom: 5px;", 
-                HTML(paste0("<strong>", prioritized_count, "</strong> wards below 30% urban threshold"))),
+                HTML(paste0("<strong>", prioritized_count, "</strong> wards below selected urban threshold"))),
               p(style = "margin-bottom: 0;", 
                 HTML(paste0("<strong>", results$summary$PrioritizedNets, "</strong> nets allocated")))
           ),
@@ -2969,9 +3007,9 @@ server <- function(input, output, session) {
           
           # Re-prioritized wards info
           div(style = "flex: 1; min-width: 200px; background-color: #ffebee; padding: 10px; border-radius: 5px;",
-              h5(style = "margin-top: 0;", "Re-prioritized Wards (>30% urban)"),
+              h5(style = "margin-top: 0;", paste0("Re-prioritized Wards (>", input$urban_threshold, "% urban)")),
               p(style = "margin-bottom: 5px;", 
-                HTML(paste0("<strong>", reprioritized_count, "</strong> wards above 30% urban threshold"))),
+                HTML(paste0("<strong>", reprioritized_count, "</strong> wards above selected urban threshold"))),
               p(style = "margin-bottom: 0;", 
                 HTML(paste0("<strong>", results$summary$ReprioritizedNets, "</strong> nets allocated")))
           )
@@ -3027,7 +3065,13 @@ server <- function(input, output, session) {
         else if (coverage < 100) return("#FFE082")
         else return("#FFD700")  # 100% coverage - gold
       } else {
-        return("#E0E0E0")  # Re-prioritized areas in gray
+        # For Re-prioritized wards
+        if (coverage <= 0) return("#E0E0E0")  # Gray if no coverage
+        else if (coverage < 25) return("#FFCDD2")  # Very light red
+        else if (coverage < 50) return("#EF9A9A")  # Light red
+        else if (coverage < 75) return("#E57373")  # Medium red
+        else if (coverage < 100) return("#EF5350")  # Darker red
+        else return("#C62828")  # Very dark red for 100% coverage
       }
     }
     
@@ -3296,6 +3340,40 @@ server <- function(input, output, session) {
       )
     }
   })
+  
+  # Add these to the server function
+  output$phase1_description <- renderUI({
+    req(input$urban_threshold)
+    threshold <- as.numeric(input$urban_threshold)
+    
+    div(class = "phase phase-1",
+        h6("Phase 1: Prioritized Areas", style = "margin-top: 0;"),
+        p(paste0("Nets are first distributed to the most vulnerable wards below the ", 
+                 threshold, "% urban threshold, prioritized by vulnerability rank."))
+    )
+  })
+  
+  output$phase2_description <- renderUI({
+    req(input$urban_threshold)
+    threshold <- as.numeric(input$urban_threshold)
+    
+    div(class = "phase phase-2",
+        h6("Phase 2: Re-prioritized Areas", style = "margin-top: 0;"),
+        p(paste0("If nets remain after Phase 1, they are distributed to wards above ", 
+                 threshold, "% threshold, with manually classified areas receiving special consideration."))
+    )
+  })
+  
+  # Then add this to the server:
+  output$map_description <- renderUI({
+    req(input$urban_threshold)
+    threshold <- as.numeric(input$urban_threshold)
+    
+    p(paste0("This map shows where nets will be distributed, prioritizing wards below ", 
+             threshold, "% urban threshold. Gray areas are re-prioritized and will receive nets if available."), 
+      style = "font-style: italic; color: #666; margin-bottom: 10px;")
+  })
+  
   
   #============================================================================
   # Synchronization Between Tabs
