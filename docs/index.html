@@ -104,7 +104,7 @@ ul.task-list li input[type="checkbox"] {
 <p>By facilitating precise targeting of interventions, the MRPT helps maximize the impact of limited financial resources and supports more informed and standardized decision-making. User involvement throughout the development process has ensured the tool’s usability, reliability, and methodological rigor. This continuous stakeholder engagement has not only refined the MRPT but also reinforced its role as a vital instrument in reducing malaria in urban Nigeria through optimized resource distribution and strategic intervention prioritization.</p>
 <section id="sec-purpose-of-this-guide" class="level3">
 <h3 class="anchored" data-anchor-id="sec-purpose-of-this-guide"><strong>Purpose of This Guide</strong></h3>
-<p>This guide provides a <strong>step-by-step walkthrough</strong> for using the MRMT, from <strong>data preparation</strong> to <strong>final analysis and interpretation</strong>. By following this manual, users will gain a comprehensive understanding of how to:</p>
+<p>This guide provides a <strong>step-by-step walk through</strong> for using the MRMT, from <strong>data preparation</strong> to <strong>final analysis and interpretation</strong>. By following this manual, users will gain a comprehensive understanding of how to:</p>
 <ul>
 <li><p><strong>Upload, clean, and process data</strong> and <strong>shapefiles</strong> required for malaria risk assessment.</p></li>
 <li><p><strong>Customize settings</strong> to adjust key malaria risk factors based on available information.</p></li>
@@ -175,7 +175,7 @@ ul.task-list li input[type="checkbox"] {
 <p>Once the ward names have been corrected, you can select the variable that you interested in visualizing. Some variables have NAs and this is addressed using several pathways see next section.</p>
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="images/Select_variables-02.png" class="img-fluid figure-img"></p>
+<p><img src="images/Artboard_missng.png" class="img-fluid figure-img"></p>
 <figcaption>Selected variable (Enhanced Vegetation Index) to view in this instance.</figcaption>
 </figure>
 </div>
@@ -198,7 +198,7 @@ ul.task-list li input[type="checkbox"] {
 <p>After have selected the smoothing method fo choice click apply button and two maps will appear showcasing the map prior to smoothing and the map after smoothing (missing values) as shown in figure 4). You</p>
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="images/smoothed_map.png" class="img-fluid figure-img"></p>
+<p><img src="images/Artboard%201-01.png" class="img-fluid figure-img"></p>
 <figcaption>Missing data vs smoothed data map</figcaption>
 </figure>
 </div>
@@ -236,7 +236,7 @@ ul.task-list li input[type="checkbox"] {
 <h3 class="anchored" data-anchor-id="normalization-tab"><strong>Normalization Tab</strong></h3>
 <p>Once the relationship between each variable and the malaria burden has been selected, the values are rescaled using the <a href="https://www.oreilly.com/library/view/hands-on-machine-learning/9781788393485/fd5b8a44-e9d3-4c19-bebb-c2fa5a5ebfee.xhtml">min-max method</a>. This ensures that all variables are comparable, preventing any single variable from dominating the composite score and allowing the relative contribution of each variable to be clearly identified.</p>
 <p><img src="images/nomilization.png" class="img-fluid"></p>
-<p><img src="images/normilization_1.png" class="img-fluid"></p>
+<p><img src="images/normilization%20.png" class="img-fluid"></p>
 <p>We recommend an in-depth quality assurance review of the available data and local knowledge, the next step is to select variables that accurately reflect the situation on the ground. Users should consider the following questions:</p>
 <ul>
 <li><p><strong>Data Validation:</strong><br>
@@ -245,7 +245,7 @@ The users are advised to ask themselves several questions which include - how do
 What is the extent of missing values (NAs) in your data? Is it reasonable to apply any of the spatial smoothing technique? Can you trust the final output if over 40% of the wards have missing values?</p></li>
 </ul>
 <p>Once you have addressed these questions, select the quality-assured variables that will contribute to the composite score. The tool will calculate several composite score permutations, ranging from combinations of two variables up to the total number of selected variables. For example, if you choose three variables, you should expect to see four composite maps. <strong>Note:</strong> At least two variables must be selected to generate a composite score.</p>
-<p><img src="images/composite_scores.png" class="img-fluid"></p>
+<p><img src="images/riskmaps.png" class="img-fluid"></p>
 </section>
 </section>
 <section id="ranking-of-wards" class="level2">
@@ -253,13 +253,13 @@ What is the extent of missing values (NAs) in your data? Is it reasonable to app
 <p>A summary of all composite score maps is presented as a box and whisker plot, offering a statistical overview of vulnerability scores (or ranks) across wards. In this visualization, each horizontal bar represents a ward: the box shows the middle 50% of scores, and the whiskers extend to the full range. This format helps identify wards that consistently exhibit high vulnerability across various variable combinations. Additionally, users have the option to view the data as a map that displays the median score for each ward, derived from the different composite scores.</p>
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="images/box_whisker.png" class="img-fluid figure-img"></p>
+<p><img src="images/boxandwhisker.png" class="img-fluid figure-img"></p>
 <figcaption>Option one - Box and whisker plot showcasing the distribution of the ranks for each ward based of all the composite scores generated.</figcaption>
 </figure>
 </div>
 <div class="quarto-figure quarto-figure-center">
 <figure class="figure">
-<p><img src="images/vulnerability_map%20(2).png" class="img-fluid figure-img"></p>
+<p><img src="images/vulnerabilitymap-01.png" class="img-fluid figure-img"></p>
 <figcaption>Option two - the vulnerability map based on the median ranks of each ward.</figcaption>
 </figure>
 </div>

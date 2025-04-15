@@ -13,9 +13,9 @@ library(rmarkdown)
 library(quarto)
 
 # Define paths
-manual_file <- "docs/user_manual.qmd"
-html_output <- "docs/user_manual.html"
-pdf_output <- "docs/user_manual.pdf"
+manual_file <- "../docs/index.qmd"
+html_output <- "../docs/index.html"
+pdf_output <- "../docs/index.pdf"
 
 # Ensure Quarto is installed
 if (Sys.which("quarto") == "") {
@@ -42,8 +42,7 @@ html_content <- gsub("</body>", paste0(pdf_link, "</body>"), html_content)
 writeLines(html_content, html_output)
 
 # Push changes to GitHub
-system("git mv /docs/user_manual.html docs/index.html -f")
-system("git add /docs/index.html docs/user_manual.pdf -f")
+system("git add ../docs/index.html ../docs/index.pdf -f")
 system("git commit -m 'Updated user manual' ")
 system("git push origin main")
 

@@ -1,4 +1,4 @@
-source("scripts/load_paths.R")
+source("analysis_scripts/scripts/load_paths.R")
 
 
 responses <- read.csv( "data/openeded.csv")
@@ -13,15 +13,34 @@ data <- data %>%
   # Get detailed sentiment data
   # Average polarity for each response
   mutate(Sentiment_Details = map(Response, ~ sentimentr::sentiment(.x)), 
+        Sentiment_Details_s = unlist(map(Response, ~ get_sentiment(.x))), 
          Polarity = map_dbl(Sentiment_Details, ~ mean(.x$sentiment))) %>%  
   mutate(Sentiment = case_when(
     Polarity > 0 ~ "Positive",
     Polarity < 0 ~ "Negative",
     TRUE ~ "Neutral"
+  ), 
+  Syuzhet = case_when(
+    Sentiment_Details_s > 0 ~ "Positive",
+    Sentiment_Details_s < 0 ~ "Negative",
+    TRUE ~ "Neutral"
   ))
 
 
+
+newdata <- reshape2::melt(data, id.vars = (""))
+
+
 ggplot(data, aes(x = Sentiment, fill = Sentiment)) +
+  # Sentiment distribution plot
+  geom_bar() +
+  labs(title = "Sentiment Distribution of Survey Responses",
+       x = "Sentiment", y = "Count") +
+  theme_manuscript()
+
+
+
+ggplot(data, aes(x = Syuzhet, fill = Syuzhet)) +
   # Sentiment distribution plot
   geom_bar() +
   labs(title = "Sentiment Distribution of Survey Responses",

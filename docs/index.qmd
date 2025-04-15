@@ -29,7 +29,7 @@ By facilitating precise targeting of interventions, the MRPT helps maximize the 
 
 ### **Purpose of This Guide** {#sec-purpose-of-this-guide}
 
-This guide provides a **step-by-step walkthrough** for using the MRMT, from **data preparation** to **final analysis and interpretation**. By following this manual, users will gain a comprehensive understanding of how to:
+This guide provides a **step-by-step walk through** for using the MRMT, from **data preparation** to **final analysis and interpretation**. By following this manual, users will gain a comprehensive understanding of how to:
 
 -   **Upload, clean, and process data** and **shapefiles** required for malaria risk assessment.
 
@@ -63,7 +63,7 @@ We have created a desktop version of the MRPT that can run without internet conn
 
 #### Installation Steps:
 
--   Download and run MRPT_Setup.exe as administrator.
+-   Download and run [MRPT_Setup.exe](https://github.com/urban-malaria/MRMT/releases/tag/v1.0) as administrator.
 
 -   Follow all the installation prompts. for some users the firewall or antivirus may block the installition process so you will have to bypass this by temporarily disabling them.
 
@@ -97,7 +97,7 @@ The tool accepts .CSV files containing ward names and various risk factors, such
 
 Once the ward names have been corrected, you can select the variable that you interested in visualizing. Some variables have NAs and this is addressed using several pathways see next section.
 
-![Selected variable (Enhanced Vegetation Index) to view in this instance.](images/Select_variables-02.png)
+![Selected variable (Enhanced Vegetation Index) to view in this instance.](images/Artboard_missng.png)
 
 ### Handling missing values
 
@@ -111,11 +111,11 @@ When missing values are detected (*see - [figure 3](#missing_values)*), the tool
 
 Scroll down the "INPUT VARIABLES" and click on "CLICK TO FILL MISSING VALUES" and a drop down menu will appear that allows you to specify one of the three smoothing approaches
 
-![Dropdown menu with the choice of smoothing approaches.](images/smoothing.png)
+![Drop-down menu with the choice of smoothing approaches.](images/smoothing.png)
 
 After have selected the smoothing method fo choice click apply button and two maps will appear showcasing the map prior to smoothing and the map after smoothing (missing values) as shown in figure 4). You
 
-![Missing data vs smoothed data map](images/smoothed_map.png)
+![Missing data vs smoothed data map](images/Artboard 1-01.png)
 
 The left map displays the original data with missing values, while the right map shows the cleaned dataset. This visual comparison helps you verify that the cleaning process produced reasonable results. The color gradient indicates the variable's magnitude across different wards, with tooltips providing detailed information for each area.
 
@@ -147,7 +147,7 @@ Once the relationship between each variable and the malaria burden has been sele
 
 ![](images/nomilization.png)
 
-![](images/normilization_1.png)
+![](images/normilization .png)
 
 We recommend an in-depth quality assurance review of the available data and local knowledge, the next step is to select variables that accurately reflect the situation on the ground. Users should consider the following questions:
 
@@ -159,15 +159,15 @@ We recommend an in-depth quality assurance review of the available data and loca
 
 Once you have addressed these questions, select the quality-assured variables that will contribute to the composite score. The tool will calculate several composite score permutations, ranging from combinations of two variables up to the total number of selected variables. For example, if you choose three variables, you should expect to see four composite maps. **Note:** At least two variables must be selected to generate a composite score.
 
-![](images/composite_scores.png)
+![](images/riskmaps.png)
 
 ## Ranking of Wards
 
 A summary of all composite score maps is presented as a box and whisker plot, offering a statistical overview of vulnerability scores (or ranks) across wards. In this visualization, each horizontal bar represents a ward: the box shows the middle 50% of scores, and the whiskers extend to the full range. This format helps identify wards that consistently exhibit high vulnerability across various variable combinations. Additionally, users have the option to view the data as a map that displays the median score for each ward, derived from the different composite scores.
 
-![Option one - Box and whisker plot showcasing the distribution of the ranks for each ward based of all the composite scores generated.](images/box_whisker.png)
+![Option one - Box and whisker plot showcasing the distribution of the ranks for each ward based of all the composite scores generated.](images/boxandwhisker.png)
 
-![Option two - the vulnerability map based on the median ranks of each ward.](images/vulnerability_map%20(2).png)
+![Option two - the vulnerability map based on the median ranks of each ward.](images/vulnerabilitymap-01.png)
 
 The user can toggle between the two options by clicking the "View Map" button. The ward vulnerability map translates statistical rankings into a geographic display, using a color gradient that ranges from yellow (indicating the lowest vulnerability) to dark purple (indicating the highest vulnerability). This visual representation helps to identify spatial patterns in malaria risk, making it particularly useful for understanding geographic clustering of risk and for planning targeted interventions.
 
@@ -177,7 +177,7 @@ The user can toggle between the two options by clicking the "View Map" button. T
 
 The decision tree visualizes your analysis process, from initial variable selection through to final recommendations. It shows which variables were included or excluded, how they were processed, and how they contributed to the final risk assessment. You can download this visualization in either PNG or PDF format for documentation and presentation purposes.
 
-## **Manual Labelling Tab**
+## **Manual Labeling/Micro-planning Tab**
 
 The manual labelling feature provides street-level detail for individual wards. This view shows settlement types (formal, informal, slum, and nonresidential areas) and local infrastructure. This detailed view is particularly valuable for planning specific interventions and understanding local context.
 
@@ -185,7 +185,7 @@ The manual labelling feature provides street-level detail for individual wards. 
 
 Notice that the manual labelling is only useful to the user if they have taken a moment to use [Google Earth Engine](https://earthengine.google.com/) or [Google Earth Pro](https://earth.google.com/web/@0,-2.135,0a,22251752.77375655d,35y,0h,0t,0r/data=CgRCAggBQgIIAEoNCP___________wEQAA) to understand the ward identified for prioritization. This entails downloading the gridded shapefiles for each of the wards in the top 5, load them on google [Google Earth Pro](https://earth.google.com/web/@0,-2.135,0a,22251752.77375655d,35y,0h,0t,0r/data=CgRCAggBQgIIAEoNCP___________wEQAA) and then for each tile use a predefined settlement type classification checklist to label the settlements into slums, informal and informal settlements and a good substitute when field visits are constrained by funding and time.
 
-#### Other Formats  
+#### Other Formats
 
 Download the User Manual ([PDF](https://github.com/urban-malaria/MRMT/blob/main/docs/index.pdf))
 
