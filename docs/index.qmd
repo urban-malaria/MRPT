@@ -83,9 +83,9 @@ Once the pop-up information Tab disappears the landing page can clearly be seen 
 
 ![Homepage of the MRPT with information about each tab, instructions to get dummy data and information on lab and developers. It also shows a schematic of the collaborative process used in the app development.](images/landingpage.png)
 
-## Input variables
+## Raw data cleaning, visualization and smoothing module 
 
-### Upload data
+### Upload data/input variables 
 
 The **input variable** tab (see Figure 1) enables you to upload both your shapefile and dataset. The zipped shapefile folder must contain a 1.) geometry file (*.shp*) - stores the spatial features (points, lines, and polygons), 2.) shape index file (*.shx*) - provides an index linking geometry and links the geometry to the attributes, and 3.) attribute table (*.dbf*) - stores tabular data (for example names IDs, other attrubutes for each shape). The dataset should be a .csv file and contain all the variables you want to explore. (*Please refer to [purpose of this guide](#sec-purpose-of-this-guide)* and *to zip files please follow this [link](https://support.microsoft.com/en-us/windows/zip-and-unzip-files-8d28fa72-f2f9-712f-67df-f80cf89fd4e5)*). Ensure you know where your data files are saved, navigate to the appropriate folder, and upload the files.
 
@@ -115,7 +115,7 @@ Scroll down the "INPUT VARIABLES" and click on "CLICK TO FILL MISSING VALUES" an
 
 After have selected the smoothing method fo choice click apply button and two maps will appear showcasing the map prior to smoothing and the map after smoothing (missing values) as shown in figure 4). You
 
-![Missing data vs smoothed data map](images/Artboard 1-01.png)
+![Missing data vs smoothed data map](images/Artboard%201-01.png)
 
 The left map displays the original data with missing values, while the right map shows the cleaned dataset. This visual comparison helps you verify that the cleaning process produced reasonable results. The color gradient indicates the variable's magnitude across different wards, with tooltips providing detailed information for each area.
 
@@ -141,13 +141,13 @@ Malaria burden is shaped by a complex interplay of **environmental, socio-econom
 
 -   **Education & Awareness**: Communities with **low malaria literacy** may have **poor adherence to preventive measures**, such as ITN use or early treatment-seeking behavior. **Health education campaigns** play a crucial role in shaping community practices.
 
-### **Normalization Tab**
+## **Normalization Tab**
 
 Once the relationship between each variable and the malaria burden has been selected, the values are rescaled using the [min-max method](https://www.oreilly.com/library/view/hands-on-machine-learning/9781788393485/fd5b8a44-e9d3-4c19-bebb-c2fa5a5ebfee.xhtml). This ensures that all variables are comparable, preventing any single variable from dominating the composite score and allowing the relative contribution of each variable to be clearly identified.
 
 ![](images/nomilization.png)
 
-![](images/normilization .png)
+![](images/normilization%20.png)
 
 We recommend an in-depth quality assurance review of the available data and local knowledge, the next step is to select variables that accurately reflect the situation on the ground. Users should consider the following questions:
 
@@ -156,6 +156,8 @@ We recommend an in-depth quality assurance review of the available data and loca
 
 -   **Data Completeness:**\
     What is the extent of missing values (NAs) in your data? Is it reasonable to apply any of the spatial smoothing technique? Can you trust the final output if over 40% of the wards have missing values?
+
+## The composite score maps 
 
 Once you have addressed these questions, select the quality-assured variables that will contribute to the composite score. The tool will calculate several composite score permutations, ranging from combinations of two variables up to the total number of selected variables. For example, if you choose three variables, you should expect to see four composite maps. **Note:** At least two variables must be selected to generate a composite score.
 
@@ -177,17 +179,117 @@ The user can toggle between the two options by clicking the "View Map" button. T
 
 The decision tree visualizes your analysis process, from initial variable selection through to final recommendations. It shows which variables were included or excluded, how they were processed, and how they contributed to the final risk assessment. You can download this visualization in either PNG or PDF format for documentation and presentation purposes.
 
-## **Manual Labeling/Micro-planning Tab**
+## **Manual Labeling/Micro-planning** 
 
-The manual labelling feature provides street-level detail for individual wards. This view shows settlement types (formal, informal, slum, and nonresidential areas) and local infrastructure. This detailed view is particularly valuable for planning specific interventions and understanding local context.
+The **manual labeling** feature provides street-level detail, satellite imagery, and CartoDBlight basemaps for individual wards. The figure below illustrates the manual labeling process for a ward named **Ekurede**. First, users select the desired ward and define the size of the grid—these are arbitrary boundaries used to segment the ward for easier classification. For each grid cell, users can zoom in and assess the dominant features visible in the imagery. Based on these observations, the most appropriate label is assigned: **formal**, **informal**, or **no buildings/avoid area**, as shown in the example.
 
-![](images/esisi_classification.png)
+![](images/tab_manual_labell.png)
+
+A closer look at the left panel is shown below. It features two dropdown menus and several tabs that allow you to select the ward of interest, define the tile size for labeling, and generate the tiled area of the selected ward. Once these steps are completed, you proceed to the labeling stage, as illustrated in the previous figure. This tab also provides options to clear your annotations, download the tiled (gridded) shapefile, and download the annotated shapefile.
+
+![](images/closer_look-02.png)
+
+After that you will get a completed map that has the ward of interest labelled, in case Ekurede, characterized by the dominant features in that ward as shown below.
+
+![](images/Manual_label.png)
 
 Notice that the manual labelling is only useful to the user if they have taken a moment to use [Google Earth Engine](https://earthengine.google.com/) or [Google Earth Pro](https://earth.google.com/web/@0,-2.135,0a,22251752.77375655d,35y,0h,0t,0r/data=CgRCAggBQgIIAEoNCP___________wEQAA) to understand the ward identified for prioritization. This entails downloading the gridded shapefiles for each of the wards in the top 5, load them on google [Google Earth Pro](https://earth.google.com/web/@0,-2.135,0a,22251752.77375655d,35y,0h,0t,0r/data=CgRCAggBQgIIAEoNCP___________wEQAA) and then for each tile use a predefined settlement type classification checklist to label the settlements into slums, informal and informal settlements and a good substitute when field visits are constrained by funding and time.
 
-#### Other Formats
+## **Implementation dashboard/Net distribution** 
 
-Download the User Manual ([PDF](https://github.com/urban-malaria/MRMT/blob/main/docs/index.pdf))
+The Net Distribution Planning module within the Malaria Reprioritization Tool (MRPT) is designed to support data-driven allocation of bed nets across urban settings. Leveraging settlement classifications, population data, and ward-level vulnerability rankings, the tool enables users to develop efficient, equitable, and transparent distribution plans.
+
+This module simplifies the planning process by requiring only two key inputs - the total number of nets available and the average household size in the ward. It then uses a structured two-phase strategy to allocate nets: prioritizing the most vulnerable wards first, and redistributing any remaining nets to other areas based on defined thresholds and special considerations.
+
+By integrating advanced features such as dynamic mapping, population coverage summaries, and downloadable output files, the MRPT provides actionable intelligence to support malaria control programs, especially in resource-constrained or crisis-prone environments.
+
+**Instructions for Using the Net Distribution Planning Module in MRPT**
+
+**Step 1: Input Basic Distribution Information**
+
+1.   Navigate to the Net Distribution tab at the top menu.
+
+2.   Under Distribution Settings:
+
+    -   Enter the total number of bed nets available.
+
+    -   Specify the average household size for the target area.
+
+    *(Standard assumption: 1 net per 2 people, with at least 1 net per household.)*
+
+**Step 2: Understand the Distribution Strategy**
+
+The tool uses a Two-Phase Distribution Approach:
+
+-   Phase 1: Prioritized Wards - Wards below the defined urban extent threshold (e.g., \<30% urban) are prioritized. Nets are allocated to these wards based on vulnerability rankings.
+
+-   Phase 2: Re-prioritized Wards If nets remain after Phase 1, they are allocated to wards above the threshold that have been manually flagged for special consideration.
+
+*A map and summary table will show you how nets are distributed across wards and highlight coverage levels (see below).*
+
+![](images/dashboard_c.png)
+
+Upclose visual of the dashboard
+
+![](images/dashbord_b.png)
+
+The related table showing the ward coverages.
+
+![](images/dashboard_a.png)
+
+**Step 3: View Population Data & Coverage Stats**
+
+-   The Population Coverage section displays:
+
+    -   Total target population
+
+    -   Households covered
+
+    -   Nets distributed vs. needed
+
+    -   Coverage percentage (e.g., 3.1%)
+
+-   It will also show how many additional nets are required to achieve full coverage.
+
+**Step 4: Review Ward-Level Allocation**
+
+-    Click on the Ward Coverage tab to view:
+
+    -   Priority level
+
+    -   Urban percentage
+
+    -   Vulnerability rank
+
+    -   Population, nets needed, nets allocated, and resulting coverage %
+
+-   A color-coded table helps identify areas with the lowest coverage.
+
+**Step 5: Analyze the Distribution Map**
+
+-   The Net Distribution Map displays:
+
+    -   Which wards received nets
+
+    -   Prioritized vs. re-prioritized vs. de-prioritized wards
+
+    -   Coverage level legend (ranging from full to low coverage)
+
+**Step 6: Download Actionable Outputs**
+
+After reviewing the plan:
+
+-    Click “Calculate Distribution” to run the net allocation algorithm.
+
+Then click “Download Distribution Plan” to export:
+
+-   Net allocation tables
+
+-   Classification maps
+
+-   Detailed ward-level statistics
+
+These outputs can be directly used by program managers to guide and implement bed net distribution campaigns.
 
 ## **Final Note to users**
 
@@ -201,4 +303,4 @@ Keep detailed records of your variable selections and decision rationale. The to
 
 Remember to validate results against local knowledge and existing malaria data. Regular updates to the analysis can help track changes over time and assess the impact of interventions.
 
-For additional support or questions, contact: [lmhlanga\@luc.edu](mailto:lmhlanga@luc.edu) or [bboateng1\@luc.edu](mailto:bboateng1@luc.edu) (co -developers) and [**iozodiegwu\@luc.edu**](mailto:iozodiegwu@luc.edu)**(Principal Investigator**).
+Other Formats - Download the User Manual ([PDF](https://github.com/urban-malaria/MRMT/blob/main/docs/index.pdf)). For additional support or questions, contact: [lmhlanga\@luc.edu](mailto:lmhlanga@luc.edu) or [bboateng1\@luc.edu](mailto:bboateng1@luc.edu) (co -developers) and [**iozodiegwu\@luc.edu**](mailto:iozodiegwu@luc.edu)**(Principal Investigator**).
