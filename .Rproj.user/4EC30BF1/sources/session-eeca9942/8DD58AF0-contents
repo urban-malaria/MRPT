@@ -1,0 +1,4 @@
+View(sf::st_read("C:/Users/laure/Downloads/Ibadan_4/Ibadan_4.shp"))
+
+
+View(read.csv("C:/Users/laure/Downloads/ibadan_field_variables.csv"))
