@@ -27,6 +27,95 @@ library(leaflet.extras)
 # DATA HANDLING AND MANIPULATION
 # ==============================================================================
 
+#' Process CSV file with duplicate checking and handling
+#' 
+#' @param file_path Path to CSV file
+#' @return Dataframe with unique ward identifiers
+process_csv_with_duplicate_handling <- function(file_path) {
+  # Read file based on extension
+  csv_data <- if (tolower(tools::file_ext(file_path)) %in% c("xlsx", "xls")) {
+    readxl::read_excel(file_path)
+  } else {
+    read.csv(file_path)
+  }
+  
+  # Process the data
+  csv_data <- rename_columns(as.data.frame(csv_data))
+  
+  # Check for duplicate ward names
+  if (any(duplicated(csv_data$WardName))) {
+    # Create a unique ID column if WardCode is available
+    if ("WardCode" %in% names(csv_data)) {
+      csv_data$OriginalWardName <- csv_data$WardName  # Store original names
+      csv_data$WardName <- paste(csv_data$WardCode, csv_data$WardName, sep = "_")
+    } else {
+      # If no WardCode, create numbered suffixes for duplicates
+      dup_wards <- csv_data$WardName[duplicated(csv_data$WardName)]
+      
+      for (ward in unique(dup_wards)) {
+        indices <- which(csv_data$WardName == ward)
+        csv_data$OriginalWardName <- csv_data$WardName  # Store original names
+        csv_data$WardName[indices] <- paste0(csv_data$WardName[indices], "_", seq_along(indices))
+      }
+    }
+  }
+  
+  return(csv_data)
+}
+
+#' Process shapefile with duplicate checking and handling
+#' 
+#' @param file_path Path to shapefile
+#' @param csv_data Processed CSV data with unique ward identifiers
+#' @return SF object with unique ward identifiers
+process_shapefile_with_duplicate_handling <- function(file_path, csv_data) {
+  shp_data <- st_read(file_path, quiet = TRUE)
+  
+  # Check for "Ward" column and rename to "WardName" if needed
+  if ("Ward" %in% names(shp_data) && !"WardName" %in% names(shp_data)) {
+    shp_data <- shp_data %>% rename(WardName = Ward)
+  }
+  
+  # Check for duplicate ward names
+  if (any(duplicated(shp_data$WardName))) {
+    # Create a unique ID column if WardCode is available
+    if ("WardCode" %in% names(shp_data)) {
+      shp_data$OriginalWardName <- shp_data$WardName  # Store original names
+      shp_data$WardName <- paste(shp_data$WardCode, shp_data$WardName, sep = "_")
+    } else {
+      # If no WardCode, create numbered suffixes for duplicates
+      dup_wards <- shp_data$WardName[duplicated(shp_data$WardName)]
+      
+      for (ward in unique(dup_wards)) {
+        indices <- which(shp_data$WardName == ward)
+        shp_data$OriginalWardName <- shp_data$WardName  # Store original names
+        shp_data$WardName[indices] <- paste0(shp_data$WardName[indices], "_", seq_along(indices))
+      }
+    }
+  } else if ("OriginalWardName" %in% names(csv_data)) {
+    # If CSV data had duplicates but shapefile doesn't, align shapefile with CSV
+    shp_data$OriginalWardName <- shp_data$WardName
+    
+    # Create a mapping table from original to new ward names
+    ward_mapping <- csv_data %>%
+      select(OriginalWardName, WardName) %>%
+      distinct()
+    
+    # Match shapefile names with CSV processed names
+    for (i in 1:nrow(ward_mapping)) {
+      orig_name <- ward_mapping$OriginalWardName[i]
+      new_name <- ward_mapping$WardName[i]
+      
+      # Update shapefile names to match CSV
+      shp_data$WardName[shp_data$WardName == orig_name] <- new_name
+    }
+  }
+  
+  return(shp_data)
+}
+
+
+
 #' Rename columns in a dataframe for consistency
 #'
 #' @param df Dataframe to process
@@ -90,7 +179,7 @@ check_missing_values <- function(data) {
 }
 
 #' Check for ward name mismatches between CSV and shapefile data
-#'
+#' 
 #' @param csv_data CSV data containing ward names
 #' @param shp_data Shapefile data containing ward names
 #' @return Dataframe of mismatched ward names or NULL if no mismatches
@@ -98,14 +187,34 @@ check_wardname_mismatches <- function(csv_data, shp_data) {
   csv_wardnames <- csv_data$WardName
   shp_wardnames <- shp_data$WardName
   
+  # Determine if we're using processed names with originals stored
+  using_processed_names <- "OriginalWardName" %in% names(csv_data) && 
+    "OriginalWardName" %in% names(shp_data)
+  
   mismatched_wards <- setdiff(csv_wardnames, shp_wardnames)
   
   if (length(mismatched_wards) > 0) {
-    mismatches <- data.frame(
-      CSV_WardName = mismatched_wards,
-      Shapefile_Options = I(replicate(length(mismatched_wards), list(shp_wardnames))),
-      stringsAsFactors = FALSE
-    )
+    if (using_processed_names) {
+      # If using processed names, include both original and processed in options
+      mismatches <- data.frame(
+        CSV_WardName = mismatched_wards,
+        CSV_OriginalName = sapply(mismatched_wards, function(w) {
+          orig <- csv_data$OriginalWardName[csv_data$WardName == w]
+          if (length(orig) > 0) orig[1] else w
+        }),
+        Shapefile_Options = I(replicate(length(mismatched_wards), list(shp_wardnames))),
+        Original_Shapefile_Options = I(replicate(length(mismatched_wards), 
+                                                 list(unique(shp_data$OriginalWardName)))),
+        stringsAsFactors = FALSE
+      )
+    } else {
+      # Standard behavior if not using processed names
+      mismatches <- data.frame(
+        CSV_WardName = mismatched_wards,
+        Shapefile_Options = I(replicate(length(mismatched_wards), list(shp_wardnames))),
+        stringsAsFactors = FALSE
+      )
+    }
     return(mismatches)
   } else {
     return(NULL)
@@ -595,45 +704,116 @@ plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_p
   return(plot_list)
 }
 
-#' Create box plot of ward rankings
+#' Create box plot of ward rankings with pagination support
 #'
 #' @param plottingdata Plotting data from process_model_score
-#' @return List with plotly object and ward rankings
-box_plot_function <- function(plottingdata) {
+#' @param wards_per_page Number of wards to display per page (default 20)
+#' @return List with plotly object, ward rankings, and pagination info
+box_plot_function <- function(plottingdata, wards_per_page = 20) {
   df_long <- plottingdata %>%
     select(WardName, variable, rank)
   
+  # Calculate ward rankings
   ward_rankings <- df_long %>%
     group_by(WardName) %>%
     summarize(median_rank = median(rank)) %>%
     arrange(median_rank) %>%
     mutate(overall_rank = row_number())
   
+  # Join with original data
   df_long <- df_long %>%
     left_join(ward_rankings, by = "WardName")
   
+  # Reorder WardName by overall_rank
   df_long$WardName <- factor(df_long$WardName, levels = ward_rankings$WardName)
   
-  p <- ggplot(df_long, aes(x = WardName, y = rank)) +
-    geom_boxplot(fill = "#69b3a2", color = "#3c5e8b", alpha = 0.7) +
-    coord_flip() +
-    labs(title = "Ward Rankings Distribution", x = "", y = "Rank") +
-    theme_minimal() +
-    theme(
-      axis.text.y = element_text(size = 8),
-      axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
-      plot.title = element_text(size = 14, hjust = 0.5, face = "bold")
+  # Calculate number of pages needed
+  total_wards <- length(unique(df_long$WardName))
+  total_pages <- ceiling(total_wards / wards_per_page)
+  
+  # Add a cleaner display name for each ward
+  # This trims long prefixes like NISNAS01_ etc.
+  ward_rankings <- ward_rankings %>%
+    mutate(
+      DisplayName = sapply(WardName, function(w) {
+        # Remove prefix pattern (e.g., NISNAS01_)
+        clean_name <- gsub("^([A-Z]+[0-9]+_)", "", w)
+        # Truncate extremely long names
+        if(nchar(clean_name) > 25) {
+          return(paste0(substr(clean_name, 1, 22), "..."))
+        } else {
+          return(clean_name)
+        }
+      })
     )
   
-  plot <- ggplotly(p, height = 750) %>%
-    layout(
-      yaxis = list(fixedrange = FALSE),
-      xaxis = list(fixedrange = TRUE)
-    ) %>%
-    config(scrollZoom = TRUE)
+  # Add display names to the plotting data
+  display_map <- setNames(ward_rankings$DisplayName, as.character(ward_rankings$WardName))
+  df_long$DisplayName <- display_map[as.character(df_long$WardName)]
   
-  return(list(plot = plot, ward_rankings = ward_rankings))
+  # Function to create a plot for a specific page
+  create_page_plot <- function(page_num, df_long, ward_rankings, wards_per_page) {
+    # Calculate which wards to include
+    start_idx <- (page_num - 1) * wards_per_page + 1
+    end_idx <- min(page_num * wards_per_page, nrow(ward_rankings))
+    
+    # Get the wards for this page
+    page_wards <- ward_rankings$WardName[start_idx:end_idx]
+    
+    # Filter data for these wards
+    page_data <- df_long %>%
+      filter(WardName %in% page_wards)
+    
+    # For plotting, use the display names
+    display_names <- ward_rankings$DisplayName[start_idx:end_idx]
+    display_name_map <- setNames(display_names, as.character(page_wards))
+    
+    # Create the plot
+    p <- ggplot(page_data, aes(x = factor(WardName, levels = page_wards), y = rank)) +
+      geom_boxplot(fill = "#69b3a2", color = "#3c5e8b", alpha = 0.7) +
+      coord_flip() +
+      labs(
+        title = paste0("Ward Rankings Distribution (Page ", page_num, " of ", total_pages, ")"),
+        subtitle = paste("Showing wards ranked", start_idx, "to", end_idx, "of", total_wards),
+        x = "", 
+        y = "Rank"
+      ) +
+      # Replace ward names with display names for the axis
+      scale_x_discrete(labels = function(x) display_name_map[x]) +
+      theme_minimal() +
+      theme(
+        axis.text.y = element_text(size = 11),
+        axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+        plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray50")
+      )
+    
+    plot <- ggplotly(p, height = min(750, 300 + 20 * length(page_wards))) %>%
+      layout(
+        yaxis = list(fixedrange = FALSE),
+        xaxis = list(fixedrange = TRUE)
+      ) %>%
+      config(scrollZoom = TRUE)
+    
+    return(plot)
+  }
+  
+  # Create the plot for the first page
+  first_page_plot <- create_page_plot(1, df_long, ward_rankings, wards_per_page)
+  
+  # Return all necessary data
+  return(list(
+    plot = first_page_plot,
+    ward_rankings = ward_rankings,
+    pagination = list(
+      total_pages = total_pages,
+      wards_per_page = wards_per_page,
+      total_wards = total_wards,
+      create_page_plot = create_page_plot  # Function to create plots for other pages
+    )
+  ))
 }
+
 
 # ==============================================================================
 # DECISION TREE VISUALIZATION

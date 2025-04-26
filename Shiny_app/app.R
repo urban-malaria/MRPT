@@ -379,6 +379,8 @@ input_variables_tab <- function() {
                                          'multipart/x-zip', 'application/x-compress', 
                                          'application/x-compressed', 'application/gzip')),
                     uiOutput("reopen_mismatch_modal"),
+                    # Add the duplicate info UI
+                    #uiOutput("duplicate_info"),
                     hr(),
                     h4("Select Variable to Visualize"),
                     uiOutput("variable_select"),
@@ -510,18 +512,8 @@ box_whisker_tab <- function() {
            ),
            fluidRow(
              column(8,
-                    conditionalPanel(
-                      condition = "input.show_map == false",
-                      plotlyOutput("boxwhiskerPlots", height = "500px")
-                    ),
-                    conditionalPanel(
-                      condition = "input.show_map == true && input.show_threshold_map == false",
-                      girafeOutput("vulnerabilityMap", height = "500px")
-                    ),
-                    conditionalPanel(
-                      condition = "input.show_map == true && input.show_threshold_map == true",
-                      girafeOutput("filteredVulnerabilityMap", height = "500px")
-                    )
+                    # Use the dynamic content UI
+                    uiOutput("boxWhiskerContent")
              ),
              column(4,
                     conditionalPanel(
@@ -537,7 +529,17 @@ box_whisker_tab <- function() {
                           tags$li("The whiskers extend to show the full range of scores, excluding outliers."),
                           tags$li("Any points beyond the whiskers are considered outliers.")
                         ),
-                        p("This visualization helps identify which areas may need more attention or resources in malaria prevention efforts.")
+                        p("This visualization helps identify which areas may need more attention or resources in malaria prevention efforts."),
+                        
+                        # Add pagination explanation
+                        hr(),
+                        h5("Pagination Controls"),
+                        p("For datasets with many wards, the visualization is split into pages for better readability."),
+                        tags$ul(
+                          tags$li("Use the arrow buttons to navigate between pages"),
+                          tags$li("Adjust 'Wards per page' to show more or fewer wards at once"),
+                          tags$li("The most vulnerable wards appear on the first page")
+                        )
                       )
                     ),
                     conditionalPanel(
@@ -556,13 +558,11 @@ box_whisker_tab <- function() {
                         p("Use this map to identify priority areas for intervention. Wards with higher ranks (darker colors) may require more immediate attention and resources in malaria prevention efforts.")
                       )
                     ),
-                    # In the box_whisker_tab function, update the explanation panel text:
                     conditionalPanel(
                       condition = "input.show_map == true && input.show_threshold_map == true",
                       wellPanel(
                         style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 500px; overflow-y: auto;",
                         h4("Urban Extent Filtered Map"),
-                        # Use uiOutput instead of hardcoded HTML
                         uiOutput("threshold_explanation_text"),
                         p("Key features:"),
                         tags$ul(
@@ -991,7 +991,15 @@ initialize_reactives <- function(session) {
       variables_selected = FALSE,
       normalization_done = FALSE,
       composite_scores_calculated = FALSE
-    ))
+    )),
+    
+    # NEW: Pagination for box plot
+    boxplot_pagination = NULL,
+    current_page = 1,
+    
+    # NEW: Duplicate ward handling
+    duplicate_wards_handled = FALSE,
+    original_to_new_wardnames = NULL
   )
   
   # Add a function to check if cleaning is needed
@@ -1071,18 +1079,14 @@ server <- function(input, output, session) {
   #============================================================================
   
   #' Process CSV file upload
+  #' Process CSV file upload
   observeEvent(input$file_csv, {
     req(input$file_csv)
     
-    # Read file based on extension
-    csv_data <- if (tolower(tools::file_ext(input$file_csv$name)) %in% c("xlsx", "xls")) {
-      readxl::read_excel(input$file_csv$datapath)
-    } else {
-      read.csv(input$file_csv$datapath)
-    }
+    # Process CSV with duplicate handling
+    rv$raw_data <- process_csv_with_duplicate_handling(input$file_csv$datapath)
     
-    # Process the data
-    rv$raw_data <- rename_columns(as.data.frame(csv_data))
+    # Check for missing values
     missing_data <- check_missing_values(rv$raw_data)
     rv$na_columns <- missing_data$columns
     rv$raw_data <- missing_data$data
@@ -1096,13 +1100,26 @@ server <- function(input, output, session) {
     # Populate variable relationships for columns after WardName
     rv$variable_relationships <- setNames(rep("direct", length(columns_after_wardname)), columns_after_wardname)
     
-    # Check for missing values
+    # Store information about duplicate handling
+    if ("OriginalWardName" %in% names(rv$raw_data)) {
+      rv$duplicate_wards_handled <- TRUE
+      rv$original_to_new_wardnames <- rv$raw_data %>%
+        select(OriginalWardName, WardName) %>%
+        distinct()
+      
+      showNotification(paste("Detected and resolved", 
+                             nrow(rv$original_to_new_wardnames) - length(unique(rv$original_to_new_wardnames$OriginalWardName)), 
+                             "duplicate ward names."), 
+                       type = "warning", duration = 5)
+    } else {
+      rv$duplicate_wards_handled <- FALSE
+    }
+    
+    # Check for missing values notification
     if (rv$needs_cleaning()) {
       if (length(rv$na_columns) > 0) {
-        showNotification(paste("Warning: Missing values (NAs) found in columns:", paste(rv$na_columns, collapse = ", ")), type = "warning")
-      }
-      if (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0) {
-        showModal(wardNameMismatchModal(rv$mismatched_wards))
+        showNotification(paste("Warning: Missing values (NAs) found in columns:", paste(rv$na_columns, collapse = ", ")), 
+                         type = "warning")
       }
     } else {
       showNotification("Data is already clean. No cleaning necessary.", type = "message")
@@ -1119,13 +1136,26 @@ server <- function(input, output, session) {
     
     if (length(shapefile_files) > 0) {
       tryCatch({
-        shp_data <- st_read(shapefile_files[1], quiet = TRUE)
-        rv$shp_data <- shp_data %>% 
-          mutate(Urban = as.character(Urban))  # Ensure Urban is character type
+        # Process shapefile with duplicate handling, using CSV data if available
+        if (!is.null(rv$raw_data)) {
+          rv$shp_data <- process_shapefile_with_duplicate_handling(shapefile_files[1], rv$raw_data)
+        } else {
+          # If CSV not loaded yet, just read the shapefile normally
+          # We'll handle duplicates later when both files are available
+          rv$shp_data <- st_read(shapefile_files[1], quiet = TRUE)
+          
+          if ("Ward" %in% names(rv$shp_data) && !"WardName" %in% names(rv$shp_data)) {
+            rv$shp_data <- rv$shp_data %>% rename(WardName = Ward)
+          }
+        }
+        
+        # Ensure Urban is character type
+        rv$shp_data <- rv$shp_data %>% 
+          mutate(Urban = as.character(Urban))
         
         showNotification("Shapefile loaded successfully.", type = "message")
         
-        # Check for ward name mismatches if CSV data is already loaded
+        # If both files are loaded, check for ward name mismatches
         if (!is.null(rv$raw_data)) {
           rv$mismatched_wards <- check_wardname_mismatches(rv$raw_data, rv$shp_data)
           if (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0) {
@@ -1251,6 +1281,44 @@ server <- function(input, output, session) {
   #============================================================================
   # Data Cleaning
   #============================================================================
+  
+  
+  # Add to UI in the Input Variables tab
+  output$duplicate_info <- renderUI({
+    req(rv$duplicate_wards_handled, rv$original_to_new_wardnames)
+    
+    if (rv$duplicate_wards_handled) {
+      n_duplicates <- nrow(rv$original_to_new_wardnames) - length(unique(rv$original_to_new_wardnames$OriginalWardName))
+      
+      if (n_duplicates > 0) {
+        div(
+          style = "margin-top: 15px; padding: 10px; background-color: #fff3cd; border-radius: 5px; border-left: 5px solid #ffc107;",
+          h4("Duplicate Ward Names Detected", style = "margin-top: 0; color: #856404;"),
+          p("The tool detected and resolved duplicate ward names in your data. The following wards have been renamed to ensure uniqueness:"),
+          div(
+            style = "max-height: 200px; overflow-y: auto; margin-top: 10px; background-color: #fff; padding: 10px; border-radius: 5px; border: 1px solid #ddd;",
+            renderTable({
+              dups <- rv$original_to_new_wardnames %>%
+                group_by(OriginalWardName) %>%
+                filter(n() > 1) %>%
+                ungroup() %>%
+                select(OriginalWardName, WardName) %>%
+                rename(`Original Ward Name` = OriginalWardName, 
+                       `New Unique Identifier` = WardName)
+              dups
+            }, rownames = FALSE, width = "100%")
+          ),
+          p(style = "font-style: italic; margin-top: 10px;", 
+            "These unique identifiers will be used throughout all analysis steps.")
+        )
+      } else {
+        NULL  # If no duplicates found, don't show anything
+      }
+    } else {
+      NULL
+    }
+  })
+  
   
   #' Show data cleaning modal
   observeEvent(input$data_cleaning, {
@@ -1593,14 +1661,34 @@ server <- function(input, output, session) {
                               selected_vars = input$visualize_normalized_var)
         })
         
+        # Initialize pagination for box plot
+        box_plot_results <- box_plot_function(rv$data, wards_per_page = 20)
+        rv$ward_rankings <- box_plot_results$ward_rankings
+        rv$boxplot_pagination <- box_plot_results$pagination
+        rv$current_page <- 1
+        
         # Update boxwhiskerPlots
         incProgress(0.8, detail = "Generating box plots...")
         output$boxwhiskerPlots <- renderPlotly({
-          box_plot_results <- box_plot_function(rv$data)
-          rv$ward_rankings <- box_plot_results$ward_rankings
-          box_plot_results$plot %>% 
-            layout(xaxis = list(fixedrange = TRUE), 
-                   yaxis = list(fixedrange = TRUE))
+          req(rv$data)
+          
+          # If pagination is not initialized yet, initialize it
+          if (is.null(rv$boxplot_pagination)) {
+            box_plot_results <- box_plot_function(rv$data, wards_per_page = 20)
+            rv$ward_rankings <- box_plot_results$ward_rankings
+            rv$boxplot_pagination <- box_plot_results$pagination
+            rv$current_page <- 1
+            return(box_plot_results$plot)
+          } else {
+            # Use the current page
+            create_plot <- rv$boxplot_pagination$create_page_plot
+            return(create_plot(
+              rv$current_page, 
+              rv$data, 
+              rv$ward_rankings, 
+              rv$boxplot_pagination$wards_per_page
+            ))
+          }
         })
         
         # Step 8: Show completion notification
@@ -1792,6 +1880,120 @@ server <- function(input, output, session) {
     p(paste0("This map shows wards filtered by an urban extent threshold of ", threshold, "%."))
   })
   
+  # Add pagination event handlers
+  observeEvent(input$prev_page, {
+    if (rv$current_page > 1) {
+      rv$current_page <- rv$current_page - 1
+    }
+  })
+  
+  observeEvent(input$next_page, {
+    req(rv$boxplot_pagination)
+    if (rv$current_page < rv$boxplot_pagination$total_pages) {
+      rv$current_page <- rv$current_page + 1
+    }
+  })
+  
+  observeEvent(input$wards_per_page, {
+    req(rv$data)
+    
+    # Update wards per page and recalculate
+    box_plot_results <- box_plot_function(rv$data, as.numeric(input$wards_per_page))
+    
+    # Store the results
+    rv$ward_rankings <- box_plot_results$ward_rankings
+    rv$boxplot_pagination <- box_plot_results$pagination
+    
+    # Reset to page 1
+    rv$current_page <- 1
+  })
+  
+  # Render the pagination UI
+  output$boxPlotPagination <- renderUI({
+    req(rv$boxplot_pagination)
+    
+    pagination <- rv$boxplot_pagination
+    
+    if (pagination$total_pages <= 1) {
+      return(NULL) # No pagination needed
+    }
+    
+    div(
+      style = "display: flex; justify-content: center; margin-top: 15px;",
+      div(
+        style = "display: inline-flex; align-items: center; background-color: #f8f9fa; padding: 5px 10px; border-radius: 5px;",
+        actionButton("prev_page", "←", 
+                     style = "margin-right: 10px;",
+                     class = if (rv$current_page <= 1) "btn-secondary disabled" else "btn-primary"),
+        
+        span(paste0("Page ", rv$current_page, " of ", pagination$total_pages),
+             style = "margin: 0 15px; font-weight: bold;"),
+        
+        actionButton("next_page", "→", 
+                     style = "margin-left: 10px;",
+                     class = if (rv$current_page >= pagination$total_pages) "btn-secondary disabled" else "btn-primary"),
+        
+        div(
+          style = "margin-left: 20px; display: flex; align-items: center;",
+          span("Wards per page:", style = "margin-right: 10px;"),
+          selectInput("wards_per_page", NULL, 
+                      choices = c(10, 20, 30, 50, 100),
+                      selected = pagination$wards_per_page,
+                      width = "80px")
+        )
+      )
+    )
+  })
+  
+  # Add these observers to handle pagination controls:
+  observeEvent(input$prev_page, {
+    if (rv$current_page > 1) {
+      rv$current_page <- rv$current_page - 1
+      updateBoxPlot()
+    }
+  })
+  
+  observeEvent(input$next_page, {
+    req(rv$boxplot_pagination)
+    if (rv$current_page < rv$boxplot_pagination$total_pages) {
+      rv$current_page <- rv$current_page + 1
+      updateBoxPlot()
+    }
+  })
+  
+  observeEvent(input$wards_per_page, {
+    req(rv$data)
+    
+    # Update wards per page and recalculate
+    box_plot_results <- box_plot_function(rv$data, as.numeric(input$wards_per_page))
+    
+    # Store the results
+    rv$ward_rankings <- box_plot_results$ward_rankings
+    rv$boxplot_pagination <- box_plot_results$pagination
+    
+    # Reset to page 1
+    rv$current_page <- 1
+    
+    # Update the plot
+    updateBoxPlot()
+  })
+  
+  # Function to update the box plot based on pagination
+  updateBoxPlot <- function() {
+    req(rv$data, rv$boxplot_pagination, rv$current_page)
+    
+    # Generate the plot for the current page
+    output$boxwhiskerPlots <- renderPlotly({
+      create_plot <- rv$boxplot_pagination$create_page_plot
+      create_plot(
+        rv$current_page, 
+        rv$data, 
+        rv$ward_rankings, 
+        rv$boxplot_pagination$wards_per_page
+      )
+    })
+  }
+  
   
   #============================================================================
   # Decision Tree
@@ -1942,6 +2144,95 @@ server <- function(input, output, session) {
     }
   )
   
+  output$boxwhiskerPlots <- renderUI({
+    req(rv$data)
+    
+    result <- box_plot_function_improved(rv$data, max_display = 30, use_pagination = TRUE)
+    rv$ward_rankings <- result$ward_rankings
+    
+    if ("plot" %in% names(result)) {
+      # Single plot (smaller dataset)
+      plotlyOutput("singleBoxPlot", height = "500px")
+    } else {
+      # Paginated plots (larger dataset)
+      rv$box_plot_pages <- result$num_pages
+      rv$box_plot_render <- result$plot_function
+      
+      tagList(
+        div(style = "display: flex; justify-content: center; margin-bottom: 10px;",
+            actionButton("prev_page", "← Previous", 
+                         style = "margin-right: 10px;"),
+            div(style = "padding: 6px 12px; background: #f8f9fa; border-radius: 4px;",
+                textOutput("page_indicator")),
+            actionButton("next_page", "Next →", 
+                         style = "margin-left: 10px;")
+        ),
+        plotlyOutput("paginatedBoxPlot", height = "500px")
+      )
+    }
+  })
+  
+  # Add these render functions:
+  
+  output$singleBoxPlot <- renderPlotly({
+    req(rv$data)
+    result <- box_plot_function_improved(rv$data, max_display = 30, use_pagination = FALSE)
+    result$plot
+  })
+  
+  # Initialize current page
+  observe({
+    if (is.null(rv$current_page)) {
+      rv$current_page <- 1
+    }
+  })
+  
+  # Render current page
+  output$paginatedBoxPlot <- renderPlotly({
+    req(rv$box_plot_render, rv$current_page)
+    rv$box_plot_render(rv$current_page)
+  })
+  
+  # Update page indicator
+  output$page_indicator <- renderText({
+    req(rv$current_page, rv$box_plot_pages)
+    paste0("Page ", rv$current_page, " of ", rv$box_plot_pages)
+  })
+  
+  # Handle pagination buttons
+  observeEvent(input$prev_page, {
+    if (rv$current_page > 1) {
+      rv$current_page <- rv$current_page - 1
+    }
+  })
+  
+  observeEvent(input$next_page, {
+    if (rv$current_page < rv$box_plot_pages) {
+      rv$current_page <- rv$current_page + 1
+    }
+  })
+  
+  
+  # Render the box whisker content
+  output$boxWhiskerContent <- renderUI({
+    div(
+      conditionalPanel(
+        condition = "input.show_map == false",
+        div(
+          plotlyOutput("boxwhiskerPlots", height = "500px"),
+          uiOutput("boxPlotPagination")
+        )
+      ),
+      conditionalPanel(
+        condition = "input.show_map == true && input.show_threshold_map == false",
+        girafeOutput("vulnerabilityMap", height = "500px")
+      ),
+      conditionalPanel(
+        condition = "input.show_map == true && input.show_threshold_map == true",
+        girafeOutput("filteredVulnerabilityMap", height = "500px")
+      )
+    )
+  })
   
   #============================================================================
   # Manual Labeling
