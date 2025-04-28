@@ -1,0 +1,21 @@
+library(tidytext)
+library(sentimentr)
+library(syuzhet)
+library(textTinyR)
+library(dplyr)
+# Sample text
+text <- c("I love this product! But the service was terrible. sad happy excited bad")
+
+# Dictionary-based sentiment (syuzhet)
+syuzhet_score <- get_sentiment(text, method = "syuzhet")
+
+# Contextual sentiment (sentimentr)
+sentimentr_score <- sentiment(text) %>% 
+  mutate(class = ifelse(sentiment > 0, "positive", 
+                        ifelse(sentiment < 0, "negative", "nuetral")))
+
+# FastText embeddings-based sentiment (textTinyR)
+embedding_score <- textTinyR::fastText_predict(text)
+
+# Compare results
+data.frame(Text = text, Syuzhet = syuzhet_score, Sentimentr = sentimentr_score$sentiment)

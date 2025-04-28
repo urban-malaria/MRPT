@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="5384cd46-9955-4b24-ba25-f94470bd4de1" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/analysis_scripts/CFIR_framework.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.RData" beforeDir="false" afterPath="$PROJECT_DIR$/.RData" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rhistory" beforeDir="false" afterPath="$PROJECT_DIR$/.Rhistory" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/pcs/files-pane.pper" beforeDir="false" afterPath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/pcs/files-pane.pper" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/pcs/source-pane.pper" beforeDir="false" afterPath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/pcs/source-pane.pper" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/pcs/windowlayoutstate.pper" beforeDir="false" afterPath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/pcs/windowlayoutstate.pper" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/prop/3C6B4D18" beforeDir="false" afterPath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/prop/3C6B4D18" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/prop/CC56E2A1" beforeDir="false" afterPath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/prop/CC56E2A1" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/prop/INDEX" beforeDir="false" afterPath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/prop/INDEX" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/62884F67" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/62884F67-contents" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/783EF896" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/783EF896-contents" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/7E90ED32" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/7E90ED32-contents" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/8DD58AF0" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/8DD58AF0-contents" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/9A0B8889" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/9A0B8889-contents" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/9C5259A8" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/9C5259A8-contents" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/A7E819EF" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/A7E819EF-contents" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/A7F459F6-contents" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/B8F9B63B" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/B8F9B63B-contents" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/C88E69C4-contents" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/E337A3FB" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/E337A3FB-contents" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/4EC30BF1/sources/session-178af887/lock_file" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/shared/notebooks/77438A70-user_manual/1/4EC30BF1178af887/chunks.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/shared/notebooks/77438A70-user_manual/1/s/chunks.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/shared/notebooks/90FDC00E-index/1/s/chunks.json" beforeDir="false" afterPath="$PROJECT_DIR$/.Rproj.user/shared/notebooks/90FDC00E-index/1/s/chunks.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.Rproj.user/shared/notebooks/paths" beforeDir="false" afterPath="$PROJECT_DIR$/.Rproj.user/shared/notebooks/paths" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/analysis_scripts/scripts/02_sentiments_analysis_polarity.R" beforeDir="false" afterPath="$PROJECT_DIR$/analysis_scripts/scripts/02_sentiments_analysis_polarity.R" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/analysis_scripts/scripts/publish_manual.R" beforeDir="false" afterPath="$PROJECT_DIR$/analysis_scripts/scripts/publish_manual.R" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/index.qmd" beforeDir="false" afterPath="$PROJECT_DIR$/docs/index.qmd" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 4
+}</component>
+  <component name="ProjectId" id="2tdisX2WESh8NRUjz6SRjI0alSQ" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.CFIR_framework.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/laure/Documents/urban_malaria/MRMT&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  }
+}</component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-d6986cc7102b-822845ee3bb5-JavaScript-PY-243.23654.177" />
+        <option value="bundled-python-sdk-91d3a02ef49d-43b77aa2d136-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-243.23654.177" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="5384cd46-9955-4b24-ba25-f94470bd4de1" name="Changes" comment="" />
+      <created>1740688558797</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1740688558797</updated>
+      <workItem from="1740688559961" duration="742000" />
+      <workItem from="1740689327481" duration="5537000" />
+      <workItem from="1743446357271" duration="54000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/MRMT$CFIR_framework.coverage" NAME="CFIR_framework Coverage Results" MODIFIED="1740688735001" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/analysis_scripts" />
+  </component>
+</project>
