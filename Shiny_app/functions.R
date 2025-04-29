@@ -19,6 +19,7 @@ library(DT)
 library(htmlwidgets)
 library(webshot2)
 library(leaflet.extras)
+library(data.table)
 
 # Define NULL-default operator
 `%||%` <- function(x, y) if (is.null(x)) y else x
@@ -510,57 +511,85 @@ composite_score_models <- function(normalized_data, selected_vars, shp_data) {
   }
   
   # Generate combinations
-  model_combinations <- list()
+   # model_combinations <- list()
   if (length(norm_cols) == 2) {
     # If only two variables are selected, create just one model
     model_combinations <- list(norm_cols)
   } else {
     # For more than two variables, generate all combinations
-    for (i in 2:length(norm_cols)) {
-      model_combinations <- c(model_combinations, combn(norm_cols, i, simplify = FALSE))
-    }
+    # for (i in 2:length(norm_cols)) {
+    #   model_combinations <- c(model_combinations, combn(norm_cols, i, simplify = FALSE))
+    # }
+    
+    # removed the for loop comptationally expensive 
+    model_combinations <- do.call(c, lapply(2:length(norm_cols), function(i) combn(norm_cols, i, simplify = FALSE)))
+    
+    
   }
   
   # Calculate composite scores
-  final_data <- normalized_data %>% 
-    select(WardName) %>%
-    left_join(shp_data %>% select(WardName, Urban), by = "WardName")
+  normalized_data <- as.data.table(normalized_data)
+  shp_data <- as.data.table(shp_data)
+  # edited by @laurette substituted to a data.table call 
+  # more optimal 
+  final_data <- merge(
+    normalized_data[, .(WardName)],
+    shp_data[, .(WardName, Urban)],
+    by = "WardName",
+    all.x = TRUE
+  )
   
+  
+  
+  # for (i in seq_along(model_combinations)) {
+  #   model_name <- paste0("model_", i)
+  #   vars <- model_combinations[[i]]
+  #   
+  #   # print(paste("Processing", model_name))
+  #   # print("Variables used:")
+  #   # print(vars)
+  #   
+  #   tryCatch({
+  #     final_data <- final_data %>%
+  #       mutate(!!sym(model_name) := {
+  #         result <- rowSums(select(normalized_data, all_of(vars))) / length(vars)
+  #         attributes(result) <- NULL # Strip attributes here
+  #         print("Result summary:")
+  #         print(summary(result))
+  #         
+  #         # if (model_name == "model_4") { # 
+  #         #   print("Detailed result for model_4:")
+  #         #   print(head(result, 10))
+  #         # }
+  #         
+  #         # Flag if not urban and in top 5
+  #         final_data[[paste0(model_name, "_flagged")]] <- 
+  #           final_data$Urban == "No" & rank(result, na.last = "keep") <= 5 
+  #         
+  #         result
+  #       })
+  #   }, error = function(e) {
+  #     print(paste("Error in composite_score_models for", model_name, ":", e$message))
+  #     print("Data causing the error:")
+  #     print(str(normalized_data))
+  #     print("Variables causing the error:")
+  #     print(vars)
+  #   })
+  # }
+  
+
   for (i in seq_along(model_combinations)) {
-    model_name <- paste0("model_", i)
+    
+    #commented out by @ laurette to replace with an optimized chunck
+    
     vars <- model_combinations[[i]]
-    
-    print(paste("Processing", model_name))
-    print("Variables used:")
-    print(vars)
-    
-    tryCatch({
-      final_data <- final_data %>%
-        mutate(!!sym(model_name) := {
-          result <- rowSums(select(normalized_data, all_of(vars))) / length(vars)
-          attributes(result) <- NULL # Strip attributes here
-          print("Result summary:")
-          print(summary(result))
-          
-          if (model_name == "model_4") {
-            print("Detailed result for model_4:")
-            print(head(result, 10))
-          }
-          
-          # Flag if not urban and in top 5
-          final_data[[paste0(model_name, "_flagged")]] <- 
-            final_data$Urban == "No" & rank(result, na.last = "keep") <= 5 
-          
-          result
-        })
-    }, error = function(e) {
-      print(paste("Error in composite_score_models for", model_name, ":", e$message))
-      print("Data causing the error:")
-      print(str(normalized_data))
-      print("Variables causing the error:")
-      print(vars)
-    })
+    result <- rowSums(normalized_data[, ..vars], na.rm = TRUE) / length(vars)
+    set(final_data, j = paste0("model_", i), value = result)
+    set(final_data, j = paste0("model_", i, "_flagged"),
+        value = final_data$Urban == "No" & rank(result, na.last = "keep") <= 5)
   }
+  
+  
   
   # Prepare output
   if (ncol(final_data) <= 1) {
@@ -596,35 +625,76 @@ models_formulas <- function(model_data) {
 #'
 #' @param data_to_process Data with model scores
 #' @return Processed data for plotting
-process_model_score <- function(data_to_process){
-  # Separate Urban column
-  urban_data <- data_to_process %>% select(WardName, Urban)
+# process_model_score <- function(data_to_process){
+#   # Separate Urban column
+#   urban_data <- data_to_process %>% select(WardName, Urban)
+#   
+#   # Melt the data without Urban column
+#   melted_data <- data_to_process %>% 
+#     select(WardName, starts_with("model_")) %>%  # Select model columns and WardName
+#     reshape2::melt(id.vars = "WardName", variable.name = "variable", value.name = "value") 
+#   
+#   # Rejoin Urban data
+#   plottingdata <- melted_data %>%
+#     left_join(urban_data, by = "WardName") %>%
+#     group_by(variable) %>% 
+#     mutate(
+#       new_value = (value - min(value)) / (max(value) - min(value)),
+#       class = cut(new_value, seq(0, 1, 0.2), include.lowest = TRUE)
+#     ) %>%
+#     arrange(value) %>% 
+#     mutate(
+#       rank = row_number(),
+#       wardname_rank = paste(WardName, "(",rank,")"),
+#       flag_not_ideal = ifelse(Urban == "No" & rank <= 5, TRUE, FALSE)
+#     )
+#   
+#   print("Plotting data summary:")
+#   print(summary(plottingdata))
+#   
+#   plottingdata
+# }
+
+process_model_score_dt <- function(data_to_process) {
   
-  # Melt the data without Urban column
-  melted_data <- data_to_process %>% 
-    select(WardName, starts_with("model_")) %>%  # Select model columns and WardName
-    reshape2::melt(id.vars = "WardName", variable.name = "variable", value.name = "value") 
+  #commented out tidyverse by @ laurette to replace with an optimized chunck which uses data.table
+  dt <- as.data.table(data_to_process)
   
-  # Rejoin Urban data
-  plottingdata <- melted_data %>%
-    left_join(urban_data, by = "WardName") %>%
-    group_by(variable) %>% 
-    mutate(
-      new_value = (value - min(value)) / (max(value) - min(value)),
-      class = cut(new_value, seq(0, 1, 0.2), include.lowest = TRUE)
-    ) %>%
-    arrange(value) %>% 
-    mutate(
-      rank = row_number(),
-      wardname_rank = paste(WardName, "(",rank,")"),
-      flag_not_ideal = ifelse(Urban == "No" & rank <= 5, TRUE, FALSE)
-    )
+  # Separate urban data
+  urban_data <- dt[, .(WardName, Urban)]
   
-  print("Plotting data summary:")
-  print(summary(plottingdata))
+  # Melt model columns only
+  melted_data <- melt(
+    dt,
+    id.vars = "WardName",
+    measure.vars = patterns("^model_"),
+    variable.name = "variable",
+    value.name = "value"
+  )
   
-  plottingdata
+  # Merge Urban info back
+  melted_data <- merge(melted_data, urban_data, by = "WardName", all.x = TRUE)
+  
+  # Normalize, classify, rank
+  melted_data[, `:=`(
+    new_value = (value - min(value, na.rm = TRUE)) / (max(value, na.rm = TRUE) - min(value, na.rm = TRUE)),
+    class = cut((value - min(value, na.rm = TRUE)) / (max(value, na.rm = TRUE) - min(value, na.rm = TRUE)),
+                breaks = seq(0, 1, 0.2), include.lowest = TRUE)
+  ), by = variable]
+  
+  # Rank + flag
+  melted_data[, `:=`(
+    rank = frank(value, ties.method = "first", na.last = "keep"),
+    wardname_rank = paste0(WardName, " (", frank(value, ties.method = "first", na.last = "keep"), ")"),
+    flag_not_ideal = Urban == "No" & frank(value, ties.method = "first", na.last = "keep") <= 5
+  ), by = variable]
+  
+  message("Plotting data summary:")
+  print(summary(melted_data))
+  
+  return(melted_data[])
 }
+
 
 #' Plot model score map
 #'
@@ -633,76 +703,151 @@ process_model_score <- function(data_to_process){
 #' @param model_formulas Model formulas from models_formulas function
 #' @param maps_per_page Number of maps per page
 #' @return List of Girafe objects with interactive maps
+# plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_per_page = 4) {
+#   palette_func <- brewer.pal(5, "YlOrRd")
+#   
+#   # Create facet labels with line breaks and flag
+#   facet_labels <- setNames(
+#     sapply(seq_along(model_formulas$model), function(i) {
+#       var_names <- strsplit(model_formulas$variables[i], " \\+ ")[[1]]
+#       base_label <- paste(var_names, collapse = " +<br>")
+#       
+#       # Check if the model is flagged
+#       if (any(processed_csv$flag_not_ideal[processed_csv$variable == model_formulas$model[i]])) {
+#         base_label <- paste0(base_label, "<br><span style='color:red;'>(Not Ideal)</span>")
+#       }
+#       
+#       base_label
+#     }),
+#     model_formulas$model
+#   )
+#   
+#   # Calculate consistent plot height based on maps per page
+#   plot_height <- 10 / ceiling(sqrt(maps_per_page)) 
+#   
+#   # Split the data into pages
+#   total_models <- nrow(model_formulas)
+#   pages <- ceiling(total_models / maps_per_page)
+#   
+#   plot_list <- list()
+#   
+#   for (page in 1:pages) {
+#     start_index <- (page - 1) * maps_per_page + 1
+#     end_index <- min(page * maps_per_page, total_models)
+#     
+#     current_models <- model_formulas$model[start_index:end_index]
+#     current_data <- processed_csv %>% filter(variable %in% current_models)
+#     
+#     plot <- ggplot(data = shp_data) +
+#       geom_sf_interactive(color = "black", fill = "white") +
+#       geom_sf_interactive(data = current_data, 
+#                           aes(geometry = geometry, fill = class, tooltip = wardname_rank)) +
+#       # Add a new layer for flagged wards
+#       geom_sf_interactive(data = current_data %>% filter(flag_not_ideal), 
+#                           aes(geometry = geometry), 
+#                           fill = NA, color = "blue", size = 1) + # Add blue border
+#       facet_wrap(~variable, ncol = 2, labeller = labeller(variable = facet_labels)) +
+#       scale_fill_discrete(drop=FALSE, name="Malaria Risk Score", type = palette_func,
+#                           labels = c("Very Low", "Low", "Medium", "High", "Very High")) +
+#       labs(subtitle=paste("Page", page, "of", pages), 
+#            title = 'Composite Score Distribution by Model', 
+#            fill = "Malaria Risk Score",
+#            caption = "Blue outline indicates non-urban wards ranked in top 5 for reprioritization (not ideal)") +
+#       theme_void() +
+#       theme(
+#         strip.text = element_markdown(size = 7, face = "bold", lineheight = 1.0),
+#         strip.background = element_blank(), 
+#         legend.position = "bottom",
+#         legend.title = element_text(size = 6, face = "bold"),
+#         legend.text = element_text(size = 6),
+#         plot.title = element_text(size = 6, face = "bold", hjust = 0.5),
+#         plot.subtitle = element_text(size = 10, hjust = 0.5),
+#         # Control spacing to maintain consistent plot sizes
+#         panel.spacing = unit(1.5, "lines"), 
+#         plot.caption = element_text(size = 8, hjust = 0.5)
+#       )
+#     
+#     # Use girafe for interactivity with fixed plot height
+#     plot_list[[page]] <- girafe(ggobj = plot, height_svg = plot_height) 
+#   }
+#   
+#   return(plot_list)
+# }
+
 plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_per_page = 4) {
   palette_func <- brewer.pal(5, "YlOrRd")
   
-  # Create facet labels with line breaks and flag
+  # Pre-calculate facet labels once
   facet_labels <- setNames(
-    sapply(seq_along(model_formulas$model), function(i) {
+    vapply(seq_len(nrow(model_formulas)), function(i) {
       var_names <- strsplit(model_formulas$variables[i], " \\+ ")[[1]]
-      base_label <- paste(var_names, collapse = " +<br>")
-      
-      # Check if the model is flagged
+      label <- paste(var_names, collapse = " +<br>")
       if (any(processed_csv$flag_not_ideal[processed_csv$variable == model_formulas$model[i]])) {
-        base_label <- paste0(base_label, "<br><span style='color:red;'>(Not Ideal)</span>")
+        paste0(label, "<br><span style='color:red;'>(Not Ideal)</span>")
+      } else {
+        label
       }
-      
-      base_label
-    }),
+    }, character(1)),
     model_formulas$model
   )
   
-  # Calculate consistent plot height based on maps per page
-  plot_height <- 10 / ceiling(sqrt(maps_per_page)) 
-  
-  # Split the data into pages
+  # Determine layout
   total_models <- nrow(model_formulas)
   pages <- ceiling(total_models / maps_per_page)
+  plot_height <- 10 / ceiling(sqrt(maps_per_page)) 
   
-  plot_list <- list()
+  plot_list <- vector("list", pages)
   
-  for (page in 1:pages) {
-    start_index <- (page - 1) * maps_per_page + 1
-    end_index <- min(page * maps_per_page, total_models)
+  # Convert shp_data only once to avoid redundant calls
+  base_plot <- ggplot(data = shp_data) +
+    geom_sf_interactive(color = "black", fill = "white")
+  
+  for (page in seq_len(pages)) {
+    idx <- ((page - 1) * maps_per_page + 1):min(page * maps_per_page, total_models)
+    current_models <- model_formulas$model[idx]
+    current_data <- processed_csv[processed_csv$variable %in% current_models, , drop = FALSE]
     
-    current_models <- model_formulas$model[start_index:end_index]
-    current_data <- processed_csv %>% filter(variable %in% current_models)
-    
-    plot <- ggplot(data = shp_data) +
-      geom_sf_interactive(color = "black", fill = "white") +
-      geom_sf_interactive(data = current_data, 
-                          aes(geometry = geometry, fill = class, tooltip = wardname_rank)) +
-      # Add a new layer for flagged wards
-      geom_sf_interactive(data = current_data %>% filter(flag_not_ideal), 
-                          aes(geometry = geometry), 
-                          fill = NA, color = "blue", size = 1) + # Add blue border
+    plot <- base_plot +
+      geom_sf_interactive(
+        data = current_data,
+        aes(geometry = geometry, fill = class, tooltip = wardname_rank)
+      ) +
+      geom_sf_interactive(
+        data = current_data[current_data$flag_not_ideal, , drop = FALSE],
+        aes(geometry = geometry),
+        fill = NA, color = "blue", size = 1
+      ) +
       facet_wrap(~variable, ncol = 2, labeller = labeller(variable = facet_labels)) +
-      scale_fill_discrete(drop=FALSE, name="Malaria Risk Score", type = palette_func,
-                          labels = c("Very Low", "Low", "Medium", "High", "Very High")) +
-      labs(subtitle=paste("Page", page, "of", pages), 
-           title = 'Composite Score Distribution by Model', 
-           fill = "Malaria Risk Score",
-           caption = "Blue outline indicates non-urban wards ranked in top 5 for reprioritization (not ideal)") +
+      scale_fill_discrete(
+        drop = FALSE, name = "Malaria Risk Score", type = palette_func,
+        labels = c("Very Low", "Low", "Medium", "High", "Very High")
+      ) +
+      labs(
+        subtitle = paste("Page", page, "of", pages),
+        title = 'Composite Score Distribution by Model',
+        fill = "Malaria Risk Score",
+        caption = "Blue outline = non-urban wards in top 5 (not ideal)"
+      ) +
       theme_void() +
       theme(
-        strip.text = element_markdown(size = 7, face = "bold", lineheight = 1.0),
-        strip.background = element_blank(), 
+        strip.text = element_markdown(size = 7, face = "bold"),
+        strip.background = element_blank(),
         legend.position = "bottom",
         legend.title = element_text(size = 6, face = "bold"),
         legend.text = element_text(size = 6),
         plot.title = element_text(size = 6, face = "bold", hjust = 0.5),
         plot.subtitle = element_text(size = 10, hjust = 0.5),
-        # Control spacing to maintain consistent plot sizes
-        panel.spacing = unit(1.5, "lines"), 
+        panel.spacing = unit(1.5, "lines"),
         plot.caption = element_text(size = 8, hjust = 0.5)
       )
     
-    # Use girafe for interactivity with fixed plot height
-    plot_list[[page]] <- girafe(ggobj = plot, height_svg = plot_height) 
+    plot_list[[page]] <- girafe(ggobj = plot, height_svg = plot_height)
   }
   
-  return(plot_list)
+  plot_list
 }
+
+
 
 #' Create box plot of ward rankings with pagination support
 #'
