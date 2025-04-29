@@ -1364,15 +1364,29 @@ server <- function(input, output, session) {
     
     rv$cleaned_data <- rv$raw_data
     
+    # Pre-pull all methods at once
+    methods_selected <- setNames(
+      lapply(rv$na_columns, function(col) input[[paste0("na_handling_", col)]]),
+      rv$na_columns
+    )
+    
+    # Save all methods at once
+    rv$na_handling_methods <- methods_selected
+    
+    # Process all columns sequentially
     for (col in rv$na_columns) {
-      method <- input[[paste0("na_handling_", col)]]
-      rv$na_handling_methods[[col]] <- method
-      rv$cleaned_data <- switch(method,
-                                "spatial neighbor mean" = handle_na_neighbor_mean(rv$cleaned_data, rv$shp_data, col),
-                                "region mean" = handle_na_region_mean(rv$cleaned_data, col),
-                                "region mode" = handle_na_region_mode(rv$cleaned_data, col)
-      )
+      method <- methods_selected[[col]]
+      
+      # Update cleaned_data only once per column
+      if (method == "spatial neighbor mean") {
+        rv$cleaned_data <- handle_na_neighbor_mean(rv$cleaned_data, rv$shp_data, col)
+      } else if (method == "region mean") {
+        rv$cleaned_data <- handle_na_region_mean(rv$cleaned_data, col)
+      } else if (method == "region mode") {
+        rv$cleaned_data <- handle_na_region_mode(rv$cleaned_data, col)
+      }
     }
+    
     
     rv$cleaning_performed(TRUE)
     removeModal()
@@ -1390,24 +1404,34 @@ server <- function(input, output, session) {
   #============================================================================
   
   #' Plot data maps
-  observeEvent(c(input$plot_data, rv$cleaned_data), {
+  observeEvent(c(input$plot_data, rv$cleaned_data, input$visualize_var), {
     req(rv$raw_data, rv$shp_data, input$visualize_var)
     
-    if (!rv$cleaning_performed()) {
-      # Before cleaning: One centered plot
+    # Check if the selected variable had missing values originally
+    raw_data_has_na <- any(is.na(rv$raw_data[[input$visualize_var]]))
+    
+    # Check if cleaning was performed and no NAs exist now
+    cleaned_ready <- rv$cleaning_performed() &&
+      !any(is.na(rv$cleaned_data[[input$visualize_var]]))
+    
+    if (!raw_data_has_na) {
+      # No NAs originally → show only one plot
       output$plotLayout <- renderUI({
         column(12, align = "center", girafeOutput("singlePlot", height = "500px"))
       })
       
       output$singlePlot <- renderGirafe({
-        plot_map_00(variable_name = input$visualize_var,
-                    shp_data_reactive = rv$shp_data,
-                    dataframe_reactive = rv$raw_data,
-                    title = "Original Data",
-                    na_handling_method = NULL)
+        plot_map_00(
+          variable_name = input$visualize_var,
+          shp_data_reactive = rv$shp_data,
+          dataframe_reactive = rv$raw_data,
+          title = "Original Data (No Cleaning Needed)",
+          na_handling_method = NULL
+        )
       })
-    } else {
-      # After cleaning: Two side-by-side plots
+      
+    } else if (cleaned_ready) {
+      # Had NAs before, now cleaned → show side-by-side
       output$plotLayout <- renderUI({
         fluidRow(
           column(6, girafeOutput("rawDataPlot", height = "500px")),
@@ -1416,21 +1440,43 @@ server <- function(input, output, session) {
       })
       
       output$rawDataPlot <- renderGirafe({
-        plot_map_00(variable_name = input$visualize_var,
-                    shp_data_reactive = rv$shp_data,
-                    dataframe_reactive = rv$raw_data,
-                    title = "Raw Data",
-                    na_handling_method = NULL)
+        plot_map_00(
+          variable_name = input$visualize_var,
+          shp_data_reactive = rv$shp_data,
+          dataframe_reactive = rv$raw_data,
+          title = "Raw Data (Before Cleaning)",
+          na_handling_method = NULL
+        )
       })
       
       output$cleanedDataPlot <- renderGirafe({
-        plot_map_00(variable_name = input$visualize_var,
-                    shp_data_reactive = rv$shp_data,
-                    dataframe_reactive = rv$cleaned_data,
-                    title = "Cleaned Data",
-                    na_handling_method = rv$na_handling_methods[[input$visualize_var]] %||% "None")
+        plot_map_00(
+          variable_name = input$visualize_var,
+          shp_data_reactive = rv$shp_data,
+          dataframe_reactive = rv$cleaned_data,
+          title = "Cleaned Data (After NA Handling)",
+          na_handling_method = rv$na_handling_methods[[input$visualize_var]] %||% "None"
+        )
+      })
+      
+    } else {
+      # Had NAs, still not fully cleaned → show only raw plot
+      output$plotLayout <- renderUI({
+        column(12, align = "center", girafeOutput("singlePlot", height = "500px"))
+      })
+      
+      output$singlePlot <- renderGirafe({
+        plot_map_00(
+          variable_name = input$visualize_var,
+          shp_data_reactive = rv$shp_data,
+          dataframe_reactive = rv$raw_data,
+          title = "Original Data (Still Has Missing Values)",
+          na_handling_method = NULL
+        )
       })
     }
+  #})
+  
     
     # Update the explanation text
     output$visualizationExplanation <- renderText({
@@ -1566,6 +1612,9 @@ server <- function(input, output, session) {
                 selected = NULL, multiple = TRUE)
   })
   
+  
+
+  
   #' Calculate composite scores
   observeEvent(input$plot_button, {
     req(rv$cleaned_data, input$composite_vars)
@@ -1622,37 +1671,47 @@ server <- function(input, output, session) {
         incProgress(0.7, detail = "Updating plots and tables...")
         
         # Update mapPlot
-        output$mapPlot <- renderUI({
+        # Cache plot generation
+        plots <- reactive({
           req(rv$data, rv$output_data)
           
-          plots <- plot_model_score_map(shp_data = rv$shp_data,
-                                        processed_csv = rv$data,
-                                        model_formulas = rv$output_data,
-                                        maps_per_page = 4)
-          
-          do.call(tabsetPanel, lapply(seq_along(plots), function(i) {
-            tabPanel(paste("Page", i), girafeOutput(paste0("mapPlot_", i)))
-          }))
+          plot_model_score_map(
+            shp_data = rv$shp_data,
+            processed_csv = rv$data,
+            model_formulas = rv$output_data,
+            maps_per_page = 4
+          )
         })
         
-        # Render individual plots
-        observe({
-          req(rv$data, rv$output_data)
-          plots <- plot_model_score_map(shp_data = rv$shp_data,
-                                        processed_csv = rv$data,
-                                        model_formulas = rv$output_data,
-                                        maps_per_page = 4)
+        # Create UI for the plots
+        output$mapPlot <- renderUI({
+          req(plots())
           
-          for (i in seq_along(plots)) {
-            local({
-              local_i <- i
-              output[[paste0("mapPlot_", local_i)]] <- renderGirafe({
-                plots[[local_i]]
-              })
+          do.call(tabsetPanel, c(
+            id = "active_tab",   
+            lapply(seq_along(plots()), function(i) {
+              tabPanel(
+                paste("Page", i),
+                girafeOutput(paste0("mapPlot_", i))
+              )
+            })
+          ))
+        })
+        
+        # Dynamically render the plots
+        observe({
+          req(plots(), input$active_tab)
+          
+          current_tab_number <- as.numeric(gsub("Page ", "", input$active_tab))
+          
+          if (!is.na(current_tab_number)) {
+            output[[paste0("mapPlot_", current_tab_number)]] <- renderGirafe({
+              plots()[[current_tab_number]]
             })
           }
         })
         
+        #@laurette edited the previous set up was plotting twice 
         # Update normalizationplot
         output$normalizationplot <- renderGirafe({
           req(rv$normalized_data(), input$visualize_normalized_var)
