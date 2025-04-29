@@ -463,11 +463,11 @@ composite_score_tab <- function() {
                  tags$div(
                    style = "text-align: justify; font-size: 12px; color: #666;",
                    "The maps above show the distribution of malaria risk scores across different wards, calculated using various combinations of variables. Each map represents a different model, with the variables used listed in the title. The color scale ranges from yellow (very low risk) to dark red (very high risk). This visualization helps identify areas of high concern and compare how different combinations of factors affect the risk assessment."
-                 ),
-                 tags$br(),
-                 tableOutput("flagged_models_table"),
-                 tags$p(style = "font-style: italic; margin-top: 10px; font-size: 12px;",
-                        "Hover over the maps to see detailed information for each ward.")
+                 ) #,
+                 # tags$br(),
+                 # tableOutput("flagged_models_table"),
+                 # tags$p(style = "font-style: italic; margin-top: 10px; font-size: 12px;",
+                        # "Hover over the maps to see detailed information for each ward.")
                )
              )
            )
@@ -1765,26 +1765,26 @@ server <- function(input, output, session) {
     })
   })
   
-  #' Display table of flagged models
-  output$flagged_models_table <- renderTable({
-    req(rv$flagged_models)
-    flagged <- rv$flagged_models()
-    
-    if (is.null(flagged) || nrow(flagged) == 0) {
-      return(data.frame("Message" = "No problematic models identified."))
-    }
-    
-    # Format for display
-    flagged %>%
-      mutate(
-        Model = gsub("model_", "Model ", variable),
-        `Flagged Wards` = flagged_wards
-      ) %>%
-      select(Model, `Flagged Wards`) %>%
-      mutate(
-        `Potential Issue` = "Non-urban wards in top 5 (likely not suitable for resource allocation)"
-      )
-  }, striped = TRUE, bordered = TRUE, hover = TRUE, align = 'l')
+  #' #' Display table of flagged models
+  #' output$flagged_models_table <- renderTable({
+  #'   req(rv$flagged_models)
+  #'   flagged <- rv$flagged_models()
+  #'   
+  #'   if (is.null(flagged) || nrow(flagged) == 0) {
+  #'     return(data.frame("Message" = "No problematic models identified."))
+  #'   }
+  #'   
+  #'   # Format for display
+  #'   flagged %>%
+  #'     mutate(
+  #'       Model = gsub("model_", "Model ", variable),
+  #'       `Flagged Wards` = flagged_wards
+  #'     ) %>%
+  #'     select(Model, `Flagged Wards`) %>%
+  #'     mutate(
+  #'       `Potential Issue` = "Non-urban wards in top 5 (likely not suitable for resource allocation)"
+  #'     )
+  #' }, striped = TRUE, bordered = TRUE, hover = TRUE, align = 'l')
   
   #============================================================================
   # Box and Whisker Plot / Vulnerability Map
