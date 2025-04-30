@@ -655,7 +655,7 @@ models_formulas <- function(model_data) {
 #   plottingdata
 # }
 
-process_model_score_dt <- function(data_to_process) {
+process_model_score <- function(data_to_process) {
   
   #commented out tidyverse by @ laurette to replace with an optimized chunck which uses data.table
   dt <- as.data.table(data_to_process)
