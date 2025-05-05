@@ -400,101 +400,26 @@ theme_manuscript <- function(){
 #' @param cleaned_data Dataframe with cleaned data
 #' @param variable_relationships Named list with relationships (direct/inverse)
 #' @return Dataframe with normalized variables
+#' 
 
-
-# normalize_data <- function(cleaned_data, variable_relationships) { 
-#   # reads in the variables that are in the datasets 
-#   # converts into a data.table fomart
-#   # and spits out the variables 
-#   # normalized data table attribute with values scaled 
-#   # between between 0 and 1 
-#   
-#   tryCatch({
-#     print("Input data structure (cleaned data):")
-#     print(str(cleaned_data))
-#     print("Variable relationships:")
-#     print(variable_relationships) 
-#     
-#     # Identify numeric columns for normalization
-#     numeric_cols <- names(cleaned_data)[sapply(cleaned_data, is.numeric)]
-#     numeric_cols <- intersect(numeric_cols, names(variable_relationships))
-#     
-#     print("Numeric columns to be normalized:")
-#     print(numeric_cols)
-#     
-#     if (length(numeric_cols) == 0) {
-#       stop("No numeric columns found for normalization!")
-#     }
-#     
-#     # Apply normalization to numeric columns based on relationships
-#     scoring_data <- cleaned_data %>% 
-#       mutate(across(all_of(numeric_cols), 
-#                     ~{
-#                       col_name <- cur_column()
-#                       if (variable_relationships[col_name] == "inverse") {
-#                         inverted <- 1 / (. + 1e-10)  # Add small constant to avoid division by zero
-#                         ((inverted - min(inverted, na.rm = TRUE)) / 
-#                             (max(inverted, na.rm = TRUE) - min(inverted, na.rm = TRUE)))
-#                       } else {  
-#                         (. - min(., na.rm = TRUE)) / 
-#                           (max(., na.rm = TRUE) - min(., na.rm = TRUE)) 
-#                       }
-#                     },
-#                     .names = "normalization_{tolower(.col)}"))
-#     
-#     print("Normalized data summary:")
-#     print(summary(scoring_data))
-#     
-#     return(scoring_data)
-#     
-#   }, error = function(e) {
-#     print(paste("Error in normalize_data:", e$message))
-#     print(traceback()) 
-#     return(NULL)
-#   })
-# } 
-
-
-normalize_data <- function(cleaned_data, variable_relationships) {
-  tryCatch({
-    # Ensure data.table format
-    # Don't modify input in-place
-    dt <- as.data.table(copy(cleaned_data))  
-    
-    # Filter numeric columns
-    numeric_cols <- names(dt)[sapply(dt, is.numeric)]
-    normalize_cols <- intersect(numeric_cols, names(variable_relationships))
-    
-    if (length(normalize_cols) == 0) stop("No numeric columns found for normalization.")
-    
-    # Normalize and assign
-    for (col in normalize_cols) {
-      
-      # loop introduced so we can work with the 
-      # fast data.table functionalities 
-      
-      rel <- variable_relationships[[col]]
-      x <- dt[[col]]
-      
-      norm_col <- if (rel == "inverse") {
-        x_inv <- 1 / (x + 1e-10)
-        (x_inv - min(x_inv, na.rm = TRUE)) / (max(x_inv, na.rm = TRUE) - min(x_inv, na.rm = TRUE))
-      } else {
-        (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
-      }
-      
-      set(dt, j = paste0("normalization_", tolower(col)), value = norm_col)
+normalize_data <- function(cleaned_data, variable_impacts) {
+  # reads in the variables that are in the datasets 
+  # converts into a data.table fomart
+  # and spits out the variables 
+  # normilized dataframe between between 0 and 1 
+  
+  cleaned_data <- as.data.table(cleaned_data)
+  norm_vars <- names(variable_impacts)
+  for (v in norm_vars) {
+    direction <- variable_impacts[[v]]
+    if (direction == "positive") {
+      cleaned_data[, (v) := (get(v) - min(get(v), na.rm = TRUE)) / (max(get(v), na.rm = TRUE) - min(get(v), na.rm = TRUE))]
+    } else {
+      cleaned_data[, (v) := (max(get(v), na.rm = TRUE) - get(v)) / (max(get(v), na.rm = TRUE) - min(get(v), na.rm = TRUE))]
     }
-    
-    return(dt)
-    
-  }, error = function(e) {
-    message("Error in normalize_data(): ", e$message)
-    return(NULL)
-  })
+  }
+  return(cleaned_data)
 }
-
-
 
 #' Plot normalized map
 #'
@@ -539,8 +464,6 @@ plot_normalized_map <- function(shp_data, processed_csv, selected_vars) {
 #' @param selected_vars Selected variables for composite scores
 #' @param shp_data Shapefile data
 #' @return List with model formulas and final data
-
-
 composite_score_models <- function(normalized_data, selected_vars, shp_data) {
   print("Entering composite_score_models function")
   print("Normalized data structure:")
@@ -657,8 +580,6 @@ composite_score_models <- function(normalized_data, selected_vars, shp_data) {
 #'
 #' @param model_data Model data from composite_score_models
 #' @return Dataframe with model formulas
- 
-
 models_formulas <- function(model_data) {
   model_formulas_data <- data.frame(model = character(), 
                                     variables = character(),
@@ -1965,6 +1886,8 @@ calculate_net_distribution <- function(population_data, total_nets, hh_distribut
 #' @param strategy Distribution strategy
 #' @param grid_overrides Grid overrides
 #' @return List with net distribution results
+
+
 calculate_prioritized_net_distribution <- function(ward_data, total_nets, avg_household_size, 
                                                    urban_threshold = 30, strategy = "rank",
                                                    grid_overrides = NULL) {

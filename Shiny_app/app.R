@@ -1880,14 +1880,16 @@ server <- function(input, output, session) {
           }
         })
 
-        output$normalizationplot <- renderGirafe({
-          req(input$visualize_normalized_var)
-          plot_normalized_map(
-            shp_data = rv$shp_data,
-            processed_csv = rv$normalized_data(),
-            selected_vars = input$visualize_normalized_var
-          )
-        })
+        # output$normalizationplot <- renderGirafe({
+        #   req(input$visualize_normalized_var)
+        #   plot_normalized_map(
+        #     shp_data = rv$shp_data,
+        #     processed_csv = rv$normalized_data(),
+        #     selected_vars = input$visualize_normalized_var
+        #   )
+        # })
+        # 
+
 
         output$boxwhiskerPlots <- renderPlotly({
           req(rv$boxplot_pagination)
