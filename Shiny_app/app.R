@@ -479,12 +479,17 @@ composite_score_tab <- function() {
 #' Create Box and Whisker Plot tab content
 #' 
 #' @return tabPanel content for Box and Whisker Plot tab
+#' 
+
 box_whisker_tab <- function() {
   tabPanel("Box and Whisker Plot", 
            fluidRow(
              column(12,
                     h3("Ward Vulnerability Distribution"),
-                    p("This visualization shows the distribution of vulnerability scores across wards, helping to identify areas of high and low risk."),
+                    p("This visualization shows the distribution of vulnerability scores across wards, helping to identify areas of high 
+                      and low risk. These scores are derived by calculating the median rank of each ward across all model permutations of
+                      the selected variables. Each model represents a unique combination of normalized and directionally weighted indicators
+                      associated with malaria risk, and the median rank provides a robust summary of a ward’s overall vulnerability."),
                     div(style = "margin-bottom: 20px;",
                         checkboxInput("show_map", "Show Map View", value = FALSE)
                     ),
@@ -502,85 +507,16 @@ box_whisker_tab <- function() {
                             ),
                             div(
                               numericInput("urban_threshold", "Urban Threshold (%)", 
-                                           value = 30, min = 0, max = 100, step = 5)
-                            ),
-                            div(
-                              checkboxInput("show_threshold_map", "Apply Urban Threshold", value = FALSE)
+                                           value = 0, min = 0, max = 100, step = 5)
                             )
                         )
                       )
                     )
              )
            ),
-           fluidRow( #fluidRow(
-             column( 8, plotlyOutput("boxwhiskerPlots")), 
-                    # uiOutput("boxPlotPagination", container = div, class = "text-center")),
-             column( 4, uiOutput("boxPlotPagination", container = div, class = "text-center")), 
-             br(),
-             column(4,
-                    conditionalPanel( 
-                      condition = "input.show_map == false", 
-                      wellPanel(
-                        style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 600px; overflow-y: auto;",
-                        h4("Understanding the Box and Whisker Plot"),
-                        p("This plot visualizes the distribution of median vulnerability scores across wards, ranked from most vulnerable (top) to least vulnerable (bottom)."),
-                        p("Each horizontal bar represents a ward:"),
-                        tags$ul(
-                          tags$li("The box shows the interquartile range (IQR) of vulnerability scores."),
-                          tags$li("The vertical line inside the box represents the median score."),
-                          tags$li("The whiskers extend to show the full range of scores, excluding outliers."),
-                          tags$li("Any points beyond the whiskers are considered outliers.")
-                        ),
-                        p("This visualization helps identify which areas may need more attention or resources in malaria prevention efforts."),
-                        
-                        # Add pagination explanation
-                        hr(),
-                        h5("Pagination Controls"),
-                        p("For datasets with many wards, the visualization is split into pages for better readability."),
-                        tags$ul(
-                          tags$li("Use the arrow buttons to navigate between pages"),
-                          tags$li("Adjust 'Wards per page' to show more or fewer wards at once"),
-                          tags$li("The most vulnerable wards appear on the first page")
-                        )
-                      )
-                    ),
-                    conditionalPanel(
-                      condition = "input.show_map == true && input.show_threshold_map == false",
-                      wellPanel(
-                        style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 500px; overflow-y: auto;",
-                        h4("Understanding the Vulnerability Map"),
-                        p("This map displays the overall vulnerability rank for each ward, providing a geographic perspective on malaria risk."),
-                        p("Key features:"),
-                        tags$ul(
-                          tags$li("Color intensity represents the vulnerability rank, with darker colors indicating higher vulnerability (higher rank) and lighter colors indicating lower vulnerability (lower rank)."),
-                          tags$li("The color scale ranges from light yellow (least vulnerable, lowest rank, 1) to dark purple (most vulnerable, highest rank)."),
-                          tags$li("Hover over each ward to see its name and exact rank."),
-                          tags$li("The map allows for easy identification of high-risk areas and spatial patterns in vulnerability.")
-                        ),
-                        p("Use this map to identify priority areas for intervention. Wards with higher ranks (darker colors) may require more immediate attention and resources in malaria prevention efforts.")
-                      )
-                    ),
-                    conditionalPanel(
-                      condition = "input.show_map == true && input.show_threshold_map == true",
-                      wellPanel(
-                        style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 500px; overflow-y: auto;",
-                        h4("Urban Extent Filtered Map"),
-                        uiOutput("threshold_explanation_text"),
-                        p("Key features:"),
-                        tags$ul(
-                          tags$li("Colored wards meet the urban threshold and are prioritized for net distribution."),
-                          tags$li("Gray wards are below the urban threshold and are candidates for de-prioritization."),
-                          tags$li("Color intensity of prioritized wards still represents vulnerability rank, with darker colors indicating higher vulnerability."),
-                          tags$li("Hover over wards to see detailed information, including urban percentage and rank.")
-                        ),
-                        hr(),
-                        h5("Prioritization Statistics"),
-                        tableOutput("deprioritization_stats")
-                      )
-                    )
-             )
-           )
-  )
+           fluidRow( 
+             column( 12, uiOutput("boxWhiskerContent")), 
+  ))
 }
 
 #' Create Decision Tree tab content
@@ -927,9 +863,9 @@ ui <- fluidPage(
     normalization_tab(),
     composite_score_tab(),
     box_whisker_tab(),
-    decision_tree_tab(),
     manual_labeling_tab(),
-    net_distribution_tab()
+    net_distribution_tab(),
+    decision_tree_tab()
   ),
   
   # Footer 
@@ -1024,7 +960,7 @@ initialize_reactives <- function(session) {
     if (threshold <= 0) return(NULL)
     
     # Apply urban extent threshold filtering
-    filtered_data <- filter_by_urban_extent(rv$shp_data, threshold)
+    filtered_data <- filter_by_urban_extent(rv$shp_data, rv$data, threshold)
     
     # Join with vulnerability rankings
     map_data <- left_join(filtered_data, rv$ward_rankings, by = "WardName")
@@ -1175,11 +1111,13 @@ server <- function(input, output, session) {
     }
   })
   
-  #' Generate UI for ward name mismatch modal
+
   #' 
   #' @param mismatches Data frame of mismatched ward names
   #' @return Modal dialog UI
+  
   wardNameMismatchModal <- function(mismatches) {
+    #' Generate UI for ward name mismatch modal
     req(mismatches)
     corrected_names <- rv$corrected_wardnames()
     
@@ -1259,8 +1197,9 @@ server <- function(input, output, session) {
     }
   })
   
-  #' UI for reopening ward name mismatch modal
+  
   output$reopen_mismatch_modal <- renderUI({
+    #' UI for reopening ward name mismatch modal
     req(rv$mismatched_wards)
     if (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0) {
       actionButton("reopen_mismatch", "Review Ward Name Mismatches", 
@@ -1268,14 +1207,16 @@ server <- function(input, output, session) {
     }
   })
   
-  #' Reopen ward name mismatch modal
+ 
   observeEvent(input$reopen_mismatch, {
+    #' Reopen ward name mismatch modal
     req(rv$mismatched_wards)
     showModal(wardNameMismatchModal(rv$mismatched_wards))
   })
   
-  #' Generate UI for variable selection dropdown
+ 
   output$variable_select <- renderUI({
+    #' Generate UI for variable selection dropdown
     req(rv$raw_data)
     columns_after_wardname <- get_columns_after_wardname(rv$raw_data)
     selectInput("visualize_var", "Select Variable to Visualize", 
@@ -1288,8 +1229,9 @@ server <- function(input, output, session) {
   #============================================================================
   
   
-  # Add to UI in the Input Variables tab
+
   output$duplicate_info <- renderUI({
+    # Add to UI in the Input Variables tab
     req(rv$duplicate_wards_handled, rv$original_to_new_wardnames)
     
     if (rv$duplicate_wards_handled) {
@@ -1404,23 +1346,24 @@ server <- function(input, output, session) {
     updateSelectInput(session, "visualize_var", selected = input$visualize_var)
   })
   
+  
   #============================================================================
   # Data Visualization
   #============================================================================
   
-  #' Plot data maps
+
   observeEvent(c(input$plot_data, rv$cleaned_data, input$visualize_var), {
+    # Plot data maps, Check if cleaning was performed and no NAs exist now
+    # No NAs originally → show only one plot
     req(rv$raw_data, rv$shp_data, input$visualize_var)
     
-    # Check if the selected variable had missing values originally
     raw_data_has_na <- any(is.na(rv$raw_data[[input$visualize_var]]))
     
-    # Check if cleaning was performed and no NAs exist now
     cleaned_ready <- rv$cleaning_performed() &&
       !any(is.na(rv$cleaned_data[[input$visualize_var]]))
     
     if (!raw_data_has_na) {
-      # No NAs originally → show only one plot
+      
       output$plotLayout <- renderUI({
         column(12, align = "center", girafeOutput("singlePlot", height = "500px"))
       })
@@ -1500,8 +1443,9 @@ server <- function(input, output, session) {
   # Normalization
   #============================================================================
   
-  #' Show variable relationships modal
   observeEvent(input$specify_relationships, {
+    #' Show variable relationships modal
+    
     req(rv$raw_data)
     
     data_to_use <- if(rv$cleaning_performed()) rv$cleaned_data else rv$raw_data
@@ -1527,8 +1471,9 @@ server <- function(input, output, session) {
     ))
   })
   
-  #' Generate UI for variable relationships
+
   output$variable_relationships <- renderUI({
+    #' Generate UI for variable relationships
     req(rv$cleaned_data)
     columns_after_wardname <- get_columns_after_wardname(rv$cleaned_data)
     
@@ -1545,8 +1490,9 @@ server <- function(input, output, session) {
     })
   })
   
-  #' Generate UI for normalized variable selection
+  
   output$normalized_variable_select <- renderUI({
+    #' Generate UI for normalized variable selection
     req(rv$normalized_data)
     norm_vars <- grep("^normalization_", names(rv$normalized_data()), value = TRUE)
     selectInput("visualize_normalized_var", "Select Variable to Visualize", 
@@ -1554,8 +1500,9 @@ server <- function(input, output, session) {
                 selected = norm_vars[1])
   })
   
-  #' Apply variable relationships and normalize data
+  
   observeEvent(input$apply_relationships, {
+    #' Apply variable relationships and normalize data
     req(rv$raw_data)
     
     data_to_use <- if(rv$cleaning_performed()) rv$cleaned_data else rv$raw_data
@@ -1603,6 +1550,8 @@ server <- function(input, output, session) {
                           selected_vars = input$visualize_normalized_var)
     })
   })
+  
+  
   
   #============================================================================
   # Composite Score Calculation
@@ -1739,61 +1688,35 @@ server <- function(input, output, session) {
   })
   
   
+  
+  
   #============================================================================
   # Box and Whisker Plot / Vulnerability Map
+  #  Generate vulnerability map output$filteredVulnerabilityMap 
+  #  
   #============================================================================
-  #' Generate vulnerability map
-  output$vulnerabilityMap <- renderGirafe({
-    req(rv$data, rv$ward_rankings, rv$shp_data)
-    
-    map_data <- left_join(rv$shp_data, rv$ward_rankings, by = "WardName")
-    
-    plot <- ggplot() +
-      geom_sf_interactive(data = map_data, aes(fill = overall_rank, 
-                                               tooltip = paste(WardName, "\nRank:", overall_rank))) +
-      scale_fill_viridis_c(option = "plasma", direction = -1, 
-                           name = "Vulnerability Rank",
-                           guide = guide_colorbar(
-                             title.position = "top",
-                             title.hjust = 0.5,
-                             label.theme = element_text(size = 12),
-                             barwidth = 15,
-                             barheight = 1
-                           )) +
-      theme_void() +
-      labs(title = "Ward Vulnerability Map") +
-      theme(legend.position = "bottom",
-            legend.box = "vertical",
-            legend.margin = margin(t = 10, b = 10),
-            plot.title = element_text(size = 16, face = "bold", hjust = 0.5)) +
-      annotate("text", x = -Inf, y = -Inf, label = "Low Vulnerability (Rank 1)",
-               hjust = 0, vjust = -1, size = 4, color = "darkred", fontface = "bold") +
-      annotate("text", x = Inf, y = -Inf, label = "High Vulnerability (Highest Rank)",
-               hjust = 1, vjust = -1, size = 4, color = "darkblue", fontface = "bold")
-    
-    girafe(ggobj = plot, width_svg = 10, height_svg = 8)
-  })
-  
-  #' Generate filtered vulnerability map
+
+    # 
+
   output$filteredVulnerabilityMap <- renderGirafe({
-    req(rv$data, rv$ward_rankings, rv$shp_data, input$urban_threshold)
-    
+    # Generate filtered vulnerability map
     # Get threshold from numeric input - use this value consistently
+    
+    req(rv$raw_data, rv$ward_rankings, rv$shp_data, input$urban_threshold)
+    
     threshold <- as.numeric(input$urban_threshold)
+ 
+    filtered_data <- filter_by_urban_extent(rv$shp_data, rv$raw_data, threshold)
     
-    # Apply urban extent threshold filtering
-    filtered_data <- filter_by_urban_extent(rv$shp_data, threshold)
-    
-    # Join with vulnerability rankings
     map_data <- left_join(filtered_data, rv$ward_rankings, by = "WardName")
     
-    # Create plot with non-urban areas grayed out
+   
     plot <- ggplot() +
       # First layer: All wards with gray for those below threshold
       geom_sf_interactive(data = map_data, 
                           aes(fill = ifelse(MeetsThreshold, overall_rank, NA),
                               tooltip = paste(WardName, 
-                                              "\nUrban %:", round(UrbanPercent, 1),
+                                              "\nUrban %:", round(UrbanPercentage, 1),
                                               "\nRank:", overall_rank,
                                               "\nStatus:", ifelse(MeetsThreshold, "Prioritized", "De-prioritized"))),
                           color = "black") +
@@ -1802,7 +1725,8 @@ server <- function(input, output, session) {
                           fill = "#CCCCCC", alpha = 0.7,
                           color = "black",
                           aes(tooltip = paste(WardName, 
-                                              "\nUrban %:", round(UrbanPercent, 1),
+                                              "\nUrban %:", round(UrbanPercentage
+                                                                  , 1),
                                               "\n(Below urban threshold)"))) +
       scale_fill_viridis_c(option = "plasma", direction = -1, 
                            name = "Vulnerability Rank",
@@ -1829,20 +1753,22 @@ server <- function(input, output, session) {
     girafe(ggobj = plot, width_svg = 10, height_svg = 8)
   })
   
-  #' Create a table with deprioritization statistics
+  
+ 
   output$deprioritization_stats <- renderTable({
-    req(rv$ward_rankings, rv$shp_data, input$urban_threshold)
-    
-    # Get threshold from numeric input
+    req(rv$ward_rankings, rv$shp_data, rv$raw_data, input$urban_threshold)
+    #' Create a table with deprioritization statistics
+    # Get threshold from numeric input, Apply urban extent threshold filtering
+  
     threshold <- as.numeric(input$urban_threshold)
     
-    # Apply urban extent threshold filtering
-    filtered_data <- filter_by_urban_extent(rv$shp_data, threshold)
     
-    # Join with vulnerability rankings
+    filtered_data <- filter_by_urban_extent(rv$shp_data, rv$raw_data, threshold)
+    
+   
     map_data <- left_join(filtered_data, rv$ward_rankings, by = "WardName")
     
-    # Calculate statistics
+ 
     total_wards <- nrow(map_data)
     prioritized_wards <- sum(map_data$MeetsThreshold)
     deprioritized_wards <- total_wards - prioritized_wards
@@ -1862,14 +1788,14 @@ server <- function(input, output, session) {
   
   #' Observer to update deprioritized wards list
   observe({
-    req(rv$shp_data, rv$ward_rankings, input$urban_threshold)
+    req(rv$shp_data, rv$raw_data, rv$ward_rankings, input$urban_threshold)
     
     # Get the threshold value from the numeric input
     threshold <- as.numeric(input$urban_threshold)
     
     if(threshold > 0) {
       # Filter data based on threshold
-      filtered_data <- filter_by_urban_extent(rv$shp_data, threshold)
+      filtered_data <- filter_by_urban_extent(rv$shp_data, rv$raw_data, threshold)
       
       # Combine with vulnerability rankings
       combined_data <- left_join(filtered_data, rv$ward_rankings, by = "WardName")
@@ -1877,7 +1803,7 @@ server <- function(input, output, session) {
       # Get list of de-prioritized wards (those below threshold)
       deprioritized <- combined_data %>%
         filter(!MeetsThreshold) %>%
-        select(WardName, UrbanPercent, overall_rank) %>%
+        select(WardName, UrbanPercentage, overall_rank) %>%
         arrange(desc(overall_rank))
       
       rv$deprioritized_wards(deprioritized)
@@ -1886,20 +1812,15 @@ server <- function(input, output, session) {
     }
   })
   
-  
-  
-  output$threshold_explanation_text <- renderUI({
-    req(input$urban_threshold)
-    threshold <- as.numeric(input$urban_threshold)
-    p(paste0("This map shows wards filtered by an urban extent threshold of ", threshold, "%."))
-  })
-  
+
+  #=======================================================================
+  #box plot work flow 
   #=======================================================================
   
   observeEvent(rv$data, {
     req(rv$data)
     
-    init <- prepare_pagination(rv$data, 20)
+    init <- prepare_pagination(rv$data, 10)
     rv$df_long <- init$df_long
     rv$ward_rankings <- init$ward_rankings
     rv$pagination <- init$pagination
@@ -1940,11 +1861,6 @@ server <- function(input, output, session) {
   output$boxwhiskerPlots <- renderPlotly({
     tryCatch({
       
-      # Explicit checks with messages instead of `req()`
-      if (is.null(rv$df_long)) stop("df_long is NULL")
-      if (is.null(rv$ward_rankings)) stop("ward_rankings is NULL")
-      if (is.null(rv$pagination)) stop("pagination is NULL")
-      if (is.null(rv$current_page)) stop("current_page is NULL")
       
       create_page_plot(
         page_num = rv$current_page,
@@ -1989,6 +1905,87 @@ server <- function(input, output, session) {
   })
 
   
+
+
+  output$boxWhiskerContent <- renderUI({
+    fluidRow(
+      column(
+        width = 8,
+        # Boxplot or Map on the left
+        conditionalPanel(
+          condition = "input.show_map == false",
+          plotlyOutput("boxwhiskerPlots", height = "500px")
+        ),
+        conditionalPanel(
+          condition = "input.show_map == true",
+          girafeOutput("filteredVulnerabilityMap", height = "500px")
+        ),
+        
+        # Pagination should always be shown below plots — if plotting only
+        conditionalPanel(
+          condition = "input.show_map == false",
+          uiOutput("boxPlotPagination")
+        )
+      ),
+      
+      # to be MOVED ******
+      
+      column(4,
+             conditionalPanel(
+               condition = "input.show_map == false",
+               wellPanel(
+                 style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 600px; overflow-y: auto;",
+                 h4("Understanding the Box and Whisker Plot"),
+                 p("This plot visualizes the distribution of median vulnerability scores across wards, ranked from most vulnerable (top) to least vulnerable (bottom)."),
+                 p("Each horizontal bar represents a ward:"),
+                 tags$ul(
+                   tags$li("The box shows the interquartile range (IQR) of vulnerability scores."),
+                   tags$li("The vertical line inside the box represents the median score."),
+                   tags$li("The whiskers extend to show the full range of scores, excluding outliers."),
+                   tags$li("Any points beyond the whiskers are considered outliers.")
+                 ),
+                 p("This visualization helps identify which areas may need more attention or resources in malaria prevention efforts."),
+
+                 # Add pagination explanation
+                 hr(),
+                 h5("Pagination Controls"),
+                 p("For datasets with many wards, the visualization is split into pages for better readability."),
+                 tags$ul(
+                   tags$li("Use the arrow buttons to navigate between pages"),
+                   tags$li("Adjust 'Wards per page' to show more or fewer wards at once"),
+                   tags$li("The most vulnerable wards appear on the first page")
+                 )
+               )
+             ),
+             conditionalPanel(
+               condition = "input.show_map == true", 
+               wellPanel(
+                 style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 500px; overflow-y: auto;",
+                 h4("Urban Extent Filtered Map"),
+                 uiOutput("threshold_explanation_text"),
+                 
+                 p("This map visualizes the overall vulnerability rank for each ward, offering a geographic perspective on malaria risk.
+                   When the urban threshold is set to 0%, all wards are considered.
+                   If a specific urban threshold is set (e.g., 30%), only wards meeting or exceeding that urban percentage will be included
+                   in the vulnerability display. Key features:"),
+                 tags$ul(
+                   tags$li("Colored wards meet the urban threshold and are reprioritized during net distribution."),
+                   tags$li("Gray wards fall below the urban threshold and are considered rural—typically underserved areas already receiving nets or in need due to poor infrastructure. Even if such wards have high vulnerability rankings, they are not reprioritized."),
+                   tags$li("Color intensity among reprioritized wards reflects their vulnerability rank; darker shades indicate higher vulnerability."),
+                   tags$li("Hover over each ward to view detailed information, including urban percentage and vulnerability rank.")
+                   
+                 ),
+                 hr(),
+                 h5("Prioritization Statistics"),
+                 tableOutput("deprioritization_stats")
+               )
+             )
+      )
+      )
+  })
+  
+
+  # to be continued from here all is clean above 
 #============================================================================
 # Decision Tree
 #============================================================================
@@ -2151,7 +2148,7 @@ server <- function(input, output, session) {
     threshold <- as.numeric(input$urban_threshold)
     
     # Force recalculation each time
-    filtered_data <- filter_by_urban_extent(rv$shp_data, threshold)
+    filtered_data <- filter_by_urban_extent(rv$shp_data, rv$shp_data, threshold)
     
     # Calculate statistics
     total_wards <- nrow(filtered_data)
@@ -2273,7 +2270,7 @@ server <- function(input, output, session) {
   
   #' Show urban info for selected ward
   output$selected_ward_urban_info <- renderUI({
-    req(input$selected_ward, rv$shp_data, input$urban_threshold)
+    req(input$selected_ward, rv$shp_data, rv$data, input$urban_threshold)
     
     # Get urban info for the selected ward
     ward_data <- rv$shp_data %>% filter(WardName == input$selected_ward)
@@ -2286,7 +2283,7 @@ server <- function(input, output, session) {
     threshold <- as.numeric(input$urban_threshold)
     
     # Apply urban extent threshold filtering with DYNAMIC threshold
-    filtered_data <- filter_by_urban_extent(ward_data, threshold)
+    filtered_data <- filter_by_urban_extent(ward_data, rv$data, threshold)
     
     # Get urban percentage and threshold status
     urban_percent <- filtered_data$UrbanPercent[1]
@@ -2378,7 +2375,7 @@ server <- function(input, output, session) {
         filter(WardName == input$selected_ward)
       
       threshold <- 30
-      filtered_ward <- filter_by_urban_extent(ward_data, threshold)
+      filtered_ward <- filter_by_urban_extent(ward_data, rv$data, threshold)
       is_prioritized <- filtered_ward$MeetsThreshold[1]
       
       # Render the map with our enhanced function
@@ -2687,7 +2684,7 @@ server <- function(input, output, session) {
         filter(WardName == input$selected_ward)
       
       threshold <- 30
-      filtered_ward <- filter_by_urban_extent(ward_data, threshold)
+      filtered_ward <- filter_by_urban_extent(ward_data, rv$data, threshold)
       is_prioritized <- filtered_ward$MeetsThreshold[1]
       
       # Render the map with our enhanced function
@@ -2824,7 +2821,7 @@ server <- function(input, output, session) {
     
     # Apply urban extent threshold filtering with fixed 30% threshold
     threshold <- 30
-    filtered_data <- filter_by_urban_extent(rv$shp_data, threshold)
+    filtered_data <- filter_by_urban_extent(rv$shp_data, rv$data, threshold)
     
     # Find prioritized wards (below threshold) - UPDATED TERMINOLOGY
     prioritized_wards <- filtered_data %>%

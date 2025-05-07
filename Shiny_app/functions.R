@@ -69,6 +69,8 @@ process_csv_with_duplicate_handling <- function(file_path) {
 #' @param file_path Path to shapefile
 #' @param csv_data Processed CSV data with unique ward identifiers
 #' @return SF object with unique ward identifiers
+
+
 process_shapefile_with_duplicate_handling <- function(file_path, csv_data) {
   shp_data <- st_read(file_path, quiet = TRUE)
   
@@ -120,6 +122,8 @@ process_shapefile_with_duplicate_handling <- function(file_path, csv_data) {
 #'
 #' @param df Dataframe to process
 #' @return Dataframe with renamed columns
+ 
+
 rename_columns <- function(df) {
   # First rename Ward to WardName if it exists
   if ("Ward" %in% names(df)) {
@@ -147,6 +151,8 @@ rename_columns <- function(df) {
 #' @param data Dataframe to process
 #' @param specific_columns Optional vector of specific column names to filter for
 #' @return Vector of column names
+
+
 get_columns_after_wardname <- function(data, specific_columns = NULL) {
   # Check for either Ward or WardName
   ward_col <- intersect(c("Ward", "WardName"), names(data))
@@ -173,6 +179,8 @@ get_columns_after_wardname <- function(data, specific_columns = NULL) {
 #'
 #' @param data Dataframe to check
 #' @return List with columns containing missing values and the original data
+#' 
+
 check_missing_values <- function(data) {
   missing_cols <- sapply(data, function(x) any(is.na(x)))
   cols_with_missing <- names(missing_cols[missing_cols])
@@ -184,6 +192,8 @@ check_missing_values <- function(data) {
 #' @param csv_data CSV data containing ward names
 #' @param shp_data Shapefile data containing ward names
 #' @return Dataframe of mismatched ward names or NULL if no mismatches
+
+
 check_wardname_mismatches <- function(csv_data, shp_data) {
   csv_wardnames <- csv_data$WardName
   shp_wardnames <- shp_data$WardName
@@ -232,6 +242,8 @@ check_wardname_mismatches <- function(csv_data, shp_data) {
 #' @param shp_data Shapefile data for spatial relationships
 #' @param col Column name to process, or NULL to process all columns with missing values
 #' @return Dataframe with imputed values
+
+
 handle_na_neighbor_mean <- function(data, shp_data, col = NULL) {
   if (is.null(col)) {
     cols_to_process <- names(data)[sapply(data, function(x) any(is.na(x)))]
@@ -274,6 +286,7 @@ handle_na_neighbor_mean <- function(data, shp_data, col = NULL) {
 #' @param data Dataframe containing the data
 #' @param col Column name to process, or NULL to process all columns with missing values
 #' @return Dataframe with imputed values
+
 handle_na_region_mean <- function(data, col = NULL) {
   if (is.null(col)) {
     cols_to_process <- names(data)[sapply(data, function(x) any(is.na(x)))]
@@ -293,6 +306,8 @@ handle_na_region_mean <- function(data, col = NULL) {
 #' @param data Dataframe containing the data
 #' @param col Column name to process, or NULL to process all columns with missing values
 #' @return Dataframe with imputed values
+#' 
+
 handle_na_region_mode <- function(data, col = NULL) {
   get_mode <- function(x) {
     ux <- unique(x)
@@ -324,6 +339,9 @@ handle_na_region_mode <- function(data, col = NULL) {
 #' @param title Plot title
 #' @param na_handling_method NA handling method (for display purposes)
 #' @return Girafe object with interactive map
+#' 
+
+
 plot_map_00 <- function(variable_name, 
                         shp_data_reactive, 
                         dataframe_reactive, 
@@ -363,7 +381,10 @@ plot_map_00 <- function(variable_name,
 #' Set custom theme for maps
 #'
 #' @return Theme object
+#' 
+
 map_theme <- function(){
+  
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank(),
         axis.ticks = element_blank(),
@@ -378,6 +399,8 @@ map_theme <- function(){
 #' Set manuscript theme for plots
 #'
 #' @return Theme object
+#' 
+
 theme_manuscript <- function(){
   theme_bw() + 
     theme(panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
@@ -401,58 +424,6 @@ theme_manuscript <- function(){
 #' @param variable_relationships Named list with relationships (direct/inverse)
 #' @return Dataframe with normalized variables
 
-
-# normalize_data <- function(cleaned_data, variable_relationships) { 
-#   # reads in the variables that are in the datasets 
-#   # converts into a data.table fomart
-#   # and spits out the variables 
-#   # normalized data table attribute with values scaled 
-#   # between between 0 and 1 
-#   
-#   tryCatch({
-#     print("Input data structure (cleaned data):")
-#     print(str(cleaned_data))
-#     print("Variable relationships:")
-#     print(variable_relationships) 
-#     
-#     # Identify numeric columns for normalization
-#     numeric_cols <- names(cleaned_data)[sapply(cleaned_data, is.numeric)]
-#     numeric_cols <- intersect(numeric_cols, names(variable_relationships))
-#     
-#     print("Numeric columns to be normalized:")
-#     print(numeric_cols)
-#     
-#     if (length(numeric_cols) == 0) {
-#       stop("No numeric columns found for normalization!")
-#     }
-#     
-#     # Apply normalization to numeric columns based on relationships
-#     scoring_data <- cleaned_data %>% 
-#       mutate(across(all_of(numeric_cols), 
-#                     ~{
-#                       col_name <- cur_column()
-#                       if (variable_relationships[col_name] == "inverse") {
-#                         inverted <- 1 / (. + 1e-10)  # Add small constant to avoid division by zero
-#                         ((inverted - min(inverted, na.rm = TRUE)) / 
-#                             (max(inverted, na.rm = TRUE) - min(inverted, na.rm = TRUE)))
-#                       } else {  
-#                         (. - min(., na.rm = TRUE)) / 
-#                           (max(., na.rm = TRUE) - min(., na.rm = TRUE)) 
-#                       }
-#                     },
-#                     .names = "normalization_{tolower(.col)}"))
-#     
-#     print("Normalized data summary:")
-#     print(summary(scoring_data))
-#     
-#     return(scoring_data)
-#     
-#   }, error = function(e) {
-#     print(paste("Error in normalize_data:", e$message))
-#     print(traceback()) 
-#     return(NULL)
-#   })
-# } 
 
 
 normalize_data <- function(cleaned_data, variable_relationships) {
@@ -502,6 +473,7 @@ normalize_data <- function(cleaned_data, variable_relationships) {
 #' @param processed_csv Processed CSV data with normalized variables
 #' @param selected_vars Selected variables to plot
 #' @return Girafe object with interactive map
+
 plot_normalized_map <- function(shp_data, processed_csv, selected_vars) {
   palette_func <- brewer.pal(5, "YlOrRd")
   
@@ -568,13 +540,10 @@ composite_score_models <- function(normalized_data, selected_vars, shp_data) {
     # If only two variables are selected, create just one model
     model_combinations <- list(norm_cols)
   } else {
-    # For more than two variables, generate all combinations
-    # for (i in 2:length(norm_cols)) {
-    #   model_combinations <- c(model_combinations, combn(norm_cols, i, simplify = FALSE))
-    # }
-    
-    # removed the for loop comptationally expensive 
-    model_combinations <- do.call(c, lapply(2:length(norm_cols), function(i) combn(norm_cols, i, simplify = FALSE)))
+
+    model_combinations <- do.call(c, lapply(2:length(norm_cols), 
+                                            function(i) combn(
+                                              norm_cols, i, simplify = FALSE)))
     
     
   }
@@ -582,8 +551,7 @@ composite_score_models <- function(normalized_data, selected_vars, shp_data) {
   # Calculate composite scores
   normalized_data <- as.data.table(normalized_data)
   shp_data <- as.data.table(shp_data)
-  # edited by @laurette substituted to a data.table call 
-  # more optimal 
+ 
   final_data <- merge(
     normalized_data[, .(WardName)],
     shp_data[, .(WardName, Urban)],
@@ -591,48 +559,7 @@ composite_score_models <- function(normalized_data, selected_vars, shp_data) {
     all.x = TRUE
   )
   
-  
-  
-  # for (i in seq_along(model_combinations)) {
-  #   model_name <- paste0("model_", i)
-  #   vars <- model_combinations[[i]]
-  #   
-  #   # print(paste("Processing", model_name))
-  #   # print("Variables used:")
-  #   # print(vars)
-  #   
-  #   tryCatch({
-  #     final_data <- final_data %>%
-  #       mutate(!!sym(model_name) := {
-  #         result <- rowSums(select(normalized_data, all_of(vars))) / length(vars)
-  #         attributes(result) <- NULL # Strip attributes here
-  #         print("Result summary:")
-  #         print(summary(result))
-  #         
-  #         # if (model_name == "model_4") { # 
-  #         #   print("Detailed result for model_4:")
-  #         #   print(head(result, 10))
-  #         # }
-  #         
-  #         # Flag if not urban and in top 5
-  #         final_data[[paste0(model_name, "_flagged")]] <- 
-  #           final_data$Urban == "No" & rank(result, na.last = "keep") <= 5 
-  #         
-  #         result
-  #       })
-  #   }, error = function(e) {
-  #     print(paste("Error in composite_score_models for", model_name, ":", e$message))
-  #     print("Data causing the error:")
-  #     print(str(normalized_data))
-  #     print("Variables causing the error:")
-  #     print(vars)
-  #   })
-  # }
-  
-
   for (i in seq_along(model_combinations)) {
-    
-    #commented out by @ laurette to replace with an optimized chunck
     
     vars <- model_combinations[[i]]
     result <- rowSums(normalized_data[, ..vars], na.rm = TRUE) / length(vars)
@@ -640,7 +567,6 @@ composite_score_models <- function(normalized_data, selected_vars, shp_data) {
     set(final_data, j = paste0("model_", i, "_flagged"),
         value = final_data$Urban == "No" & rank(result, na.last = "keep") <= 5)
   }
-  
   
   
   # Prepare output
@@ -653,65 +579,16 @@ composite_score_models <- function(normalized_data, selected_vars, shp_data) {
        final_data = final_data)
 }
 
-#' Generate model formulas
-#'
-#' @param model_data Model data from composite_score_models
-#' @return Dataframe with model formulas
- 
-
-# models_formulas <- function(model_data) {
-#   model_formulas_data <- data.frame(model = character(), 
-#                                     variables = character(),
-#                                     stringsAsFactors = FALSE)
-#   
-#   for (index in seq_along(model_data)) {
-#     model_formula <- data.frame(model = paste0("model_", index), 
-#                                 variables = paste(gsub("normalization_", "", model_data[[index]]), collapse = " + "),
-#                                 stringsAsFactors = FALSE)
-#     
-#     model_formulas_data <- rbind(model_formulas_data, model_formula)
-#   }
-#   
-#   return(model_formulas_data)
-# }
 
 #' Process model scores for plotting
 #'
 #' @param data_to_process Data with model scores
 #' @return Processed data for plotting
-# process_model_score <- function(data_to_process){
-#   # Separate Urban column
-#   urban_data <- data_to_process %>% select(WardName, Urban)
-#   
-#   # Melt the data without Urban column
-#   melted_data <- data_to_process %>% 
-#     select(WardName, starts_with("model_")) %>%  # Select model columns and WardName
-#     reshape2::melt(id.vars = "WardName", variable.name = "variable", value.name = "value") 
-#   
-#   # Rejoin Urban data
-#   plottingdata <- melted_data %>%
-#     left_join(urban_data, by = "WardName") %>%
-#     group_by(variable) %>% 
-#     mutate(
-#       new_value = (value - min(value)) / (max(value) - min(value)),
-#       class = cut(new_value, seq(0, 1, 0.2), include.lowest = TRUE)
-#     ) %>%
-#     arrange(value) %>% 
-#     mutate(
-#       rank = row_number(),
-#       wardname_rank = paste(WardName, "(",rank,")"),
-#       flag_not_ideal = ifelse(Urban == "No" & rank <= 5, TRUE, FALSE)
-#     )
-#   
-#   print("Plotting data summary:")
-#   print(summary(plottingdata))
-#   
-#   plottingdata
-# }
 
 process_model_score <- function(data_to_process) {
   
-  #commented out tidyverse by @ laurette to replace with an optimized chunck which uses data.table
+  # commented out tidyverse by @ laurette to 
+  # replace with an optimized chunck which uses data.table
   dt <- as.data.table(data_to_process)
   
   # Separate urban data
@@ -757,76 +634,6 @@ process_model_score <- function(data_to_process) {
 #' @param model_formulas Model formulas from models_formulas function
 #' @param maps_per_page Number of maps per page
 #' @return List of Girafe objects with interactive maps
-# plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_per_page = 4) {
-#   palette_func <- brewer.pal(5, "YlOrRd")
-#   
-#   # Create facet labels with line breaks and flag
-#   facet_labels <- setNames(
-#     sapply(seq_along(model_formulas$model), function(i) {
-#       var_names <- strsplit(model_formulas$variables[i], " \\+ ")[[1]]
-#       base_label <- paste(var_names, collapse = " +<br>")
-#       
-#       # Check if the model is flagged
-#       if (any(processed_csv$flag_not_ideal[processed_csv$variable == model_formulas$model[i]])) {
-#         base_label <- paste0(base_label, "<br><span style='color:red;'>(Not Ideal)</span>")
-#       }
-#       
-#       base_label
-#     }),
-#     model_formulas$model
-#   )
-#   
-#   # Calculate consistent plot height based on maps per page
-#   plot_height <- 10 / ceiling(sqrt(maps_per_page)) 
-#   
-#   # Split the data into pages
-#   total_models <- nrow(model_formulas)
-#   pages <- ceiling(total_models / maps_per_page)
-#   
-#   plot_list <- list()
-#   
-#   for (page in 1:pages) {
-#     start_index <- (page - 1) * maps_per_page + 1
-#     end_index <- min(page * maps_per_page, total_models)
-#     
-#     current_models <- model_formulas$model[start_index:end_index]
-#     current_data <- processed_csv %>% filter(variable %in% current_models)
-#     
-#     plot <- ggplot(data = shp_data) +
-#       geom_sf_interactive(color = "black", fill = "white") +
-#       geom_sf_interactive(data = current_data, 
-#                           aes(geometry = geometry, fill = class, tooltip = wardname_rank)) +
-#       # Add a new layer for flagged wards
-#       geom_sf_interactive(data = current_data %>% filter(flag_not_ideal), 
-#                           aes(geometry = geometry), 
-#                           fill = NA, color = "blue", size = 1) + # Add blue border
-#       facet_wrap(~variable, ncol = 2, labeller = labeller(variable = facet_labels)) +
-#       scale_fill_discrete(drop=FALSE, name="Malaria Risk Score", type = palette_func,
-#                           labels = c("Very Low", "Low", "Medium", "High", "Very High")) +
-#       labs(subtitle=paste("Page", page, "of", pages), 
-#            title = 'Composite Score Distribution by Model', 
-#            fill = "Malaria Risk Score",
-#            caption = "Blue outline indicates non-urban wards ranked in top 5 for reprioritization (not ideal)") +
-#       theme_void() +
-#       theme(
-#         strip.text = element_markdown(size = 7, face = "bold", lineheight = 1.0),
-#         strip.background = element_blank(), 
-#         legend.position = "bottom",
-#         legend.title = element_text(size = 6, face = "bold"),
-#         legend.text = element_text(size = 6),
-#         plot.title = element_text(size = 6, face = "bold", hjust = 0.5),
-#         plot.subtitle = element_text(size = 10, hjust = 0.5),
-#         # Control spacing to maintain consistent plot sizes
-#         panel.spacing = unit(1.5, "lines"), 
-#         plot.caption = element_text(size = 8, hjust = 0.5)
-#       )
-#     
-#     # Use girafe for interactivity with fixed plot height
-#     plot_list[[page]] <- girafe(ggobj = plot, height_svg = plot_height) 
-#   }
-#   
-#   return(plot_list)
-# }
 
 plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_per_page = 4) {
   palette_func <- brewer.pal(5, "YlOrRd")
@@ -932,12 +739,6 @@ create_page_plot <- function(page_num, df_long, ward_rankings, wards_per_page) {
   page_data <- df_long[WardName %in% page_wards]
   display_map <- setNames(ward_rankings$DisplayName[start:end], page_wards)
   
-  # print(paste("Creating plot for page", page_num))
-  # print(paste("Total wards:", length(unique(df_long$WardName))))
-  # print(paste("Wards per page:", wards_per_page))
-  # print(paste("Start index:", start, "End index:", end))
-  
-  
   p <- ggplot(page_data, aes(x = factor(WardName, levels = page_wards), y = rank)) +
     geom_boxplot(fill = "#69b3a2", color = "#3c5e8b", alpha = 0.7) +
     coord_flip() +
@@ -949,7 +750,7 @@ create_page_plot <- function(page_num, df_long, ward_rankings, wards_per_page) {
 
 
 # ==============================================================================
-# DECISION TREE VISUALIZATION
+# DECISION TREE VISUALIZATION 
 # ==============================================================================
 
 #' Create decision tree visualization
@@ -1084,6 +885,7 @@ decision_tree_function <- function(all_variables, selected_variables,
 #' @param polygon Polygon to subdivide into a grid
 #' @param cell_size Cell size in coordinate units
 #' @return SF object with grid cells
+
 subdivide_polygon <- function(polygon, cell_size = 500) {
   # Extract the geometry
   polygon_sf <- st_geometry(polygon)
@@ -1563,38 +1365,44 @@ get_classification_color <- function(classification) {
 #'
 #' @param shp_data Shapefile data
 #' @param threshold Urban extent threshold
+#' @param threshold Urban extent threshold
 #' @return Shapefile data with added urban extent information
 #' 
 #' 
 
 
 
-filter_by_urban_extent <- function(shp_data, threshold = 30) {
-  # Ensure Urban column exists and is numeric
-  if (!"UrbanPercent" %in% names(shp_data)) {
+filter_by_urban_extent <- function(shp_data, data, threshold = 0) {
+  # Merge UrbanPercentage from external data
+  
+  print(data)
+  shp_data <- dplyr::left_join(shp_data, data[, c("WardName", "UrbanPercentage")], by = "WardName")
+  
+  print(data)
+  
+  # Handle missing UrbanPercentage
+  if (!"UrbanPercentage" %in% names(shp_data)) {
+    
     if ("Urban" %in% names(shp_data)) {
-      # If Urban is binary (Yes/No), convert to percentage (100/0)
-      shp_data$UrbanPercent <- ifelse(shp_data$Urban == "Yes", 100, 0)
+      warning("UrbanPercentage not found in data; using Urban column from shapefile.")
+      shp_data$UrbanPercentage <- ifelse(shp_data$Urban == "Yes", 100, 0)
     } else {
-      # Create random data for demonstration if needed
-      shp_data$UrbanPercent <- runif(nrow(shp_data), min = 0, max = 100)
-      warning("No Urban or UrbanPercent column found in shapefile data, using random values for demonstration")
+      warning("No Urban or UrbanPercentage column found; assuming 100% urban.")
+      shp_data$UrbanPercentage <- 100
     }
   }
   
-  # Convert to numeric if it's not already
-  if (!is.numeric(shp_data$UrbanPercent)) {
-    shp_data$UrbanPercent <- as.numeric(as.character(shp_data$UrbanPercent))
-  }
+  # Clean and calculate threshold logic
+  shp_data$UrbanPercentage <- as.numeric(replace(shp_data$UrbanPercentage, is.na(shp_data$UrbanPercentage), 0))
+  shp_data$MeetsThreshold <- shp_data$UrbanPercentage >= threshold
   
-  # Handle NA values by setting to 0
-  shp_data$UrbanPercent[is.na(shp_data$UrbanPercent)] <- 0
-  
-  # Add a column to indicate if the ward meets the threshold
-  shp_data$MeetsThreshold <- shp_data$UrbanPercent >= threshold
+  print(shp_data)
   
   return(shp_data)
 }
+
+
+
 
 # ==============================================================================
 # POPULATION ESTIMATION
@@ -1908,6 +1716,9 @@ calculate_net_distribution <- function(population_data, total_nets, hh_distribut
 #' @param strategy Distribution strategy
 #' @param grid_overrides Grid overrides
 #' @return List with net distribution results
+#' 
+
+
 calculate_prioritized_net_distribution <- function(ward_data, total_nets, avg_household_size, 
                                                    urban_threshold = 30, strategy = "rank",
                                                    grid_overrides = NULL) {
