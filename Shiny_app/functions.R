@@ -659,21 +659,21 @@ composite_score_models <- function(normalized_data, selected_vars, shp_data) {
 #' @return Dataframe with model formulas
  
 
-models_formulas <- function(model_data) {
-  model_formulas_data <- data.frame(model = character(), 
-                                    variables = character(),
-                                    stringsAsFactors = FALSE)
-  
-  for (index in seq_along(model_data)) {
-    model_formula <- data.frame(model = paste0("model_", index), 
-                                variables = paste(gsub("normalization_", "", model_data[[index]]), collapse = " + "),
-                                stringsAsFactors = FALSE)
-    
-    model_formulas_data <- rbind(model_formulas_data, model_formula)
-  }
-  
-  return(model_formulas_data)
-}
+# models_formulas <- function(model_data) {
+#   model_formulas_data <- data.frame(model = character(), 
+#                                     variables = character(),
+#                                     stringsAsFactors = FALSE)
+#   
+#   for (index in seq_along(model_data)) {
+#     model_formula <- data.frame(model = paste0("model_", index), 
+#                                 variables = paste(gsub("normalization_", "", model_data[[index]]), collapse = " + "),
+#                                 stringsAsFactors = FALSE)
+#     
+#     model_formulas_data <- rbind(model_formulas_data, model_formula)
+#   }
+#   
+#   return(model_formulas_data)
+# }
 
 #' Process model scores for plotting
 #'
@@ -902,115 +902,49 @@ plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_p
 }
 
 
+# Pagination logic
 
-#' Create box plot of ward rankings with pagination support
-#'
-#' @param plottingdata Plotting data from process_model_score
-#' @param wards_per_page Number of wards to display per page (default 20)
-#' @return List with plotly object, ward rankings, and pagination info
-box_plot_function <- function(plottingdata, wards_per_page = 20) {
-  df_long <- plottingdata %>%
-    select(WardName, variable, rank)
+prepare_pagination <- function(df_long, wards_per_page = 20) {
   
-  # Calculate ward rankings
-  ward_rankings <- df_long %>%
-    group_by(WardName) %>%
-    summarize(median_rank = median(rank)) %>%
-    arrange(median_rank) %>%
-    mutate(overall_rank = row_number())
+  ward_rankings <- df_long[, .(median_rank = median(rank)), by = WardName][order(median_rank)][, overall_rank := .I]
+  df_long <- merge(df_long, ward_rankings, by = "WardName", all.x = TRUE)
+  df_long[, WardName := factor(WardName, levels = ward_rankings$WardName)]
+  ward_rankings[, DisplayName := ifelse(nchar(WardName) > 25, paste0(substr(WardName, 1, 22), "..."), WardName)]
+  df_long[, DisplayName := ward_rankings$DisplayName[match(WardName, ward_rankings$WardName)]]
   
-  # Join with original data
-  df_long <- df_long %>%
-    left_join(ward_rankings, by = "WardName")
-  
-  # Reorder WardName by overall_rank
-  df_long$WardName <- factor(df_long$WardName, levels = ward_rankings$WardName)
-  
-  # Calculate number of pages needed
-  total_wards <- length(unique(df_long$WardName))
-  total_pages <- ceiling(total_wards / wards_per_page)
-  
-  # Add a cleaner display name for each ward
-  # This trims long prefixes like NISNAS01_ etc.
-  ward_rankings <- ward_rankings %>%
-    mutate(
-      DisplayName = sapply(WardName, function(w) {
-        # Remove prefix pattern (e.g., NISNAS01_)
-        clean_name <- gsub("^([A-Z]+[0-9]+_)", "", w)
-        # Truncate extremely long names
-        if(nchar(clean_name) > 25) {
-          return(paste0(substr(clean_name, 1, 22), "..."))
-        } else {
-          return(clean_name)
-        }
-      })
-    )
-  
-  # Add display names to the plotting data
-  display_map <- setNames(ward_rankings$DisplayName, as.character(ward_rankings$WardName))
-  df_long$DisplayName <- display_map[as.character(df_long$WardName)]
-  
-  # Function to create a plot for a specific page
-  create_page_plot <- function(page_num, df_long, ward_rankings, wards_per_page) {
-    # Calculate which wards to include
-    start_idx <- (page_num - 1) * wards_per_page + 1
-    end_idx <- min(page_num * wards_per_page, nrow(ward_rankings))
-    
-    # Get the wards for this page
-    page_wards <- ward_rankings$WardName[start_idx:end_idx]
-    
-    # Filter data for these wards
-    page_data <- df_long %>%
-      filter(WardName %in% page_wards)
-    
-    # For plotting, use the display names
-    display_names <- ward_rankings$DisplayName[start_idx:end_idx]
-    display_name_map <- setNames(display_names, as.character(page_wards))
-    
-    # Create the plot
-    p <- ggplot(page_data, aes(x = factor(WardName, levels = page_wards), y = rank)) +
-      geom_boxplot(fill = "#69b3a2", color = "#3c5e8b", alpha = 0.7) +
-      coord_flip() +
-      labs(
-        title = paste0("Ward Rankings Distribution (Page ", page_num, " of ", total_pages, ")"),
-        subtitle = paste("Showing wards ranked", start_idx, "to", end_idx, "of", total_wards),
-        x = "", 
-        y = "Rank"
-      ) +
-      # Replace ward names with display names for the axis
-      scale_x_discrete(labels = function(x) display_name_map[x]) +
-      theme_minimal() +
-      theme(
-        axis.text.y = element_text(size = 11),
-        axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
-        plot.title = element_text(size = 14, hjust = 0.5, face = "bold"),
-        plot.subtitle = element_text(size = 12, hjust = 0.5, color = "gray50")
-      )
-    
-    plot <- ggplotly(p, height = min(750, 300 + 20 * length(page_wards))) %>%
-      layout(
-        yaxis = list(fixedrange = FALSE),
-        xaxis = list(fixedrange = TRUE)
-      ) %>%
-      config(scrollZoom = TRUE)
-    
-    return(plot)
-  }
-  
-  # Create the plot for the first page
-  first_page_plot <- create_page_plot(1, df_long, ward_rankings, wards_per_page)
-  
-  # Return all necessary data
-  return(list(
-    plot = first_page_plot,
+  list(
+    df_long = df_long,
     ward_rankings = ward_rankings,
     pagination = list(
-      total_pages = total_pages,
+      total_pages = ceiling(length(unique(df_long$WardName)) / wards_per_page),
       wards_per_page = wards_per_page,
-      total_wards = total_wards,
-      create_page_plot = create_page_plot  # Function to create plots for other pages
+      total_wards = uniqueN(df_long$WardName)
     )
-  ))
+  )
+}
+
+# Page plotter
+create_page_plot <- function(page_num, df_long, ward_rankings, wards_per_page) {
+  
+  start <- (page_num - 1) * wards_per_page + 1
+  end <- min(page_num * wards_per_page, nrow(ward_rankings))
+  page_wards <- ward_rankings$WardName[start:end]
+  page_data <- df_long[WardName %in% page_wards]
+  display_map <- setNames(ward_rankings$DisplayName[start:end], page_wards)
+  
+  # print(paste("Creating plot for page", page_num))
+  # print(paste("Total wards:", length(unique(df_long$WardName))))
+  # print(paste("Wards per page:", wards_per_page))
+  # print(paste("Start index:", start, "End index:", end))
+  
+  
+  p <- ggplot(page_data, aes(x = factor(WardName, levels = page_wards), y = rank)) +
+    geom_boxplot(fill = "#69b3a2", color = "#3c5e8b", alpha = 0.7) +
+    coord_flip() +
+    labs(title = paste("Ward Rankings - Page", page_num), x = "", y = "Rank") +
+    scale_x_discrete(labels = function(x) display_map[x]) +
+    theme_minimal()
+  ggplotly(p, height = min(750, 300 + 20 * length(page_wards)))
 }
 
 
@@ -1026,7 +960,11 @@ box_plot_function <- function(plottingdata, wards_per_page = 20) {
 #' @param progress Progress information for tree steps
 #' @param top_5_wards Top 5 wards by vulnerability ranking
 #' @return grViz object with decision tree
-decision_tree_function <- function(all_variables, selected_variables, excluded_variables, progress, top_5_wards = character(0)) {
+
+
+decision_tree_function <- function(all_variables, selected_variables,
+                                   excluded_variables, progress, 
+                                   top_5_wards = character(0)) {
   # Format variables lists with bullets
   format_var_list <- function(vars) {
     if (length(vars) == 0) return("None")
@@ -1626,6 +1564,11 @@ get_classification_color <- function(classification) {
 #' @param shp_data Shapefile data
 #' @param threshold Urban extent threshold
 #' @return Shapefile data with added urban extent information
+#' 
+#' 
+
+
+
 filter_by_urban_extent <- function(shp_data, threshold = 30) {
   # Ensure Urban column exists and is numeric
   if (!"UrbanPercent" %in% names(shp_data)) {

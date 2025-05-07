@@ -512,14 +512,14 @@ box_whisker_tab <- function() {
                     )
              )
            ),
-           fluidRow(
-             column(8,
-                    # Use the dynamic content UI
-                    uiOutput("boxWhiskerContent")
-             ),
+           fluidRow( #fluidRow(
+             column( 8, plotlyOutput("boxwhiskerPlots")), 
+                    # uiOutput("boxPlotPagination", container = div, class = "text-center")),
+             column( 4, uiOutput("boxPlotPagination", container = div, class = "text-center")), 
+             br(),
              column(4,
-                    conditionalPanel(
-                      condition = "input.show_map == false",
+                    conditionalPanel( 
+                      condition = "input.show_map == false", 
                       wellPanel(
                         style = "background-color: #f5f5f5; border: 1px solid #e3e3e3; border-radius: 4px; padding: 15px; height: 600px; overflow-y: auto;",
                         h4("Understanding the Box and Whisker Plot"),
@@ -996,8 +996,11 @@ initialize_reactives <- function(session) {
     )),
     
     # NEW: Pagination for box plot
-    boxplot_pagination = NULL,
+    
+    pagination = NULL,
     current_page = 1,
+    ward_rankings = FALSE,
+    
     
     # NEW: Duplicate ward handling
     duplicate_wards_handled = FALSE,
@@ -1615,190 +1618,37 @@ server <- function(input, output, session) {
   })
   
   
-
-  
-  #' #' Calculate composite scores
-  #' observeEvent(input$plot_button, {
-  #'   req(rv$cleaned_data, input$composite_vars)
-  #'   
-  #'   if (length(input$composite_vars) < 2) {
-  #'     showNotification("Please select at least two variables for composite score calculation.", type = "warning")
-  #'     return()
-  #'   }
-  #'   
-  #'   withProgress(message = 'Calculating composite scores', value = 0, {
-  #'     tryCatch({
-  #'       # Step 1: Get variable impacts
-  #'       incProgress(0.1, detail = "Getting variable impacts...")
-  #'       variable_impacts <- sapply(input$composite_vars, function(var) rv$variable_relationships[[var]])
-  #'       
-  #'       # Step 2: Normalize data
-  #'       incProgress(0.2, detail = "Normalizing data...")
-  #'       normalized_data <- normalize_data(rv$cleaned_data[, c("WardName", input$composite_vars)], variable_impacts)
-  #'       
-  #'       if (is.null(normalized_data)) {
-  #'         showNotification("Error in data normalization. Check the console for details.", type = "error")
-  #'         return()
-  #'       }
-  #'       
-  #'       # Step 3: Calculate composite scores
-  #'       incProgress(0.3, detail = "Calculating composite scores...")
-  #'       composite_scores <- composite_score_models(normalized_data, selected_vars = input$composite_vars, shp_data = rv$shp_data)
-  #'       
-  #'       if (is.null(composite_scores)) {
-  #'         showNotification("Error in composite score calculation. Check the console for details.", type = "error")
-  #'         return()
-  #'       }
-  #'       
-  #'       # Step 4: Process composite scores for plotting
-  #'       incProgress(0.4, detail = "Processing scores...")
-  #'       processed_scores <- process_model_score(composite_scores$final_data)
-  #'       
-  #'       rv$flagged_models(processed_scores %>% 
-  #'                           filter(flag_not_ideal) %>% 
-  #'                           group_by(variable) %>% 
-  #'                           summarise(flagged_wards = paste(WardName, collapse = ", ")))
-  #'       
-  #'       # Step 5: Join with shapefile data
-  #'       incProgress(0.5, detail = "Joining with shapefile data...")
-  #'       combined_data <- left_join(processed_scores, rv$shp_data, by = "WardName")
-  #'       rv$data <- combined_data
-  #'       
-  #'       # Step 6: Generate model formulas table
-  #'       incProgress(0.6, detail = "Generating model formulas...")
-  #'       model_formulae_table <- models_formulas(composite_scores$model_formula)
-  #'       rv$output_data <- model_formulae_table
-  #'       
-  #'       # Step 7: Update plots and tables
-  #'       incProgress(0.7, detail = "Updating plots and tables...")
-  #'       
-  #'       # Update mapPlot
-  #'       # Cache plot generation
-  #'       plots <- reactive({
-  #'         req(rv$data, rv$output_data)
-  #'         
-  #'         plot_model_score_map(
-  #'           shp_data = rv$shp_data,
-  #'           processed_csv = rv$data,
-  #'           model_formulas = rv$output_data,
-  #'           maps_per_page = 4
-  #'         )
-  #'       })
-  #'       
-  #'       # Create UI for the plots
-  #'       output$mapPlot <- renderUI({
-  #'         req(plots())
-  #'         
-  #'         do.call(tabsetPanel, c(
-  #'           id = "active_tab",   
-  #'           lapply(seq_along(plots()), function(i) {
-  #'             tabPanel(
-  #'               paste("Page", i),
-  #'               girafeOutput(paste0("mapPlot_", i))
-  #'             )
-  #'           })
-  #'         ))
-  #'       })
-  #'       
-  #'       # Dynamically render the plots
-  #'       observe({
-  #'         req(plots(), input$active_tab)
-  #'         
-  #'         current_tab_number <- as.numeric(gsub("Page ", "", input$active_tab))
-  #'         
-  #'         if (!is.na(current_tab_number)) {
-  #'           output[[paste0("mapPlot_", current_tab_number)]] <- renderGirafe({
-  #'             plots()[[current_tab_number]]
-  #'           })
-  #'         }
-  #'       })
-  #'       
-  #'       #@laurette edited the previous set up was plotting twice 
-  #'       # Update normalizationplot
-  #'       output$normalizationplot <- renderGirafe({
-  #'         # why do we need this???
-  #'         req(rv$normalized_data(), input$visualize_normalized_var)
-  #'         plot_normalized_map(shp_data = rv$shp_data, 
-  #'                             processed_csv = rv$normalized_data(), 
-  #'                             selected_vars = input$visualize_normalized_var)
-  #'       })
-  #'       
-  #'       # Initialize pagination for box plot
-  #'       box_plot_results <- box_plot_function(rv$data, wards_per_page = 20)
-  #'       rv$ward_rankings <- box_plot_results$ward_rankings
-  #'       rv$boxplot_pagination <- box_plot_results$pagination
-  #'       rv$current_page <- 1
-  #'       
-  #'       # Update boxwhiskerPlots
-  #'       incProgress(0.8, detail = "Generating box plots...")
-  #'       output$boxwhiskerPlots <- renderPlotly({
-  #'         req(rv$data)
-  #'         
-  #'         # If pagination is not initialized yet, initialize it
-  #'         if (is.null(rv$boxplot_pagination)) {
-  #'           box_plot_results <- box_plot_function(rv$data, wards_per_page = 20)
-  #'           rv$ward_rankings <- box_plot_results$ward_rankings
-  #'           rv$boxplot_pagination <- box_plot_results$pagination
-  #'           rv$current_page <- 1
-  #'           return(box_plot_results$plot)
-  #'         } else {
-  #'           # Use the current page
-  #'           create_plot <- rv$boxplot_pagination$create_page_plot
-  #'           return(create_plot(
-  #'             rv$current_page, 
-  #'             rv$data, 
-  #'             rv$ward_rankings, 
-  #'             rv$boxplot_pagination$wards_per_page
-  #'           ))
-  #'         }
-  #'       })
-  #'       
-  #'       # Step 8: Show completion notification
-  #'       incProgress(1, detail = "Completed!")
-  #'       num_models <- nrow(model_formulae_table)
-  #'       if (length(input$composite_vars) == 2) {
-  #'         showNotification("Generated 1 model combination using the two selected variables.", type = "message")
-  #'       } else {
-  #'         showNotification(paste("Generated", num_models, "model combinations."), type = "message")
-  #'       }
-  #'       
-  #'     }, error = function(e) {
-  #'       showNotification(paste("Error:", e$message), type = "error")
-  #'     })
-  #'   })
-  #' })
-  #' 
   
   observeEvent(input$plot_button, {
     req(rv$cleaned_data, input$composite_vars)
-
+    
     if (length(input$composite_vars) < 2) {
       showNotification("Please select at least two variables for composite score calculation.", type = "warning")
       return()
     }
-
+    
     # Step 1: Capture values outside of future()
     cleaned_data_copy <- as.data.table(rv$cleaned_data)
     shp_data_copy <- rv$shp_data
     selected_vars <- input$composite_vars
     variable_impacts <- sapply(selected_vars, function(var) rv$variable_relationships[[var]])
-
+    
     withProgress(message = 'Calculating composite scores...', value = 0, {
       future({
         library(data.table)
         library(grDevices)
-
+        
         start_time <- Sys.time()
         grDevices::pdf(NULL)
         on.exit(grDevices::dev.off())
-
+        
         # Normalize data
         normalized_data <- normalize_data(
           cleaned_data_copy[, .SD, .SDcols = c("WardName", selected_vars)],
           variable_impacts
         )
         if (is.null(normalized_data)) stop("Normalization failed")
-
+        
         # Composite score modeling
         composite_scores <- composite_score_models(
           normalized_data,
@@ -1806,35 +1656,35 @@ server <- function(input, output, session) {
           shp_data = shp_data_copy
         )
         if (is.null(composite_scores)) stop("Composite score calculation failed")
-
+        
         processed_scores <- process_model_score(composite_scores$final_data)
-
+        
         # Convert any non-numeric model_flag columns to numeric
         flag_cols <- grep("_flagged$", names(processed_scores), value = TRUE)
         processed_scores[, (flag_cols) := lapply(.SD, as.numeric), .SDcols = flag_cols]
-
+        
         combined_data <- merge(
           processed_scores,
           as.data.table(shp_data_copy),
           by = "WardName",
           all.x = TRUE
         )
-
+        
         model_formulae_table <- models_formulas(composite_scores$model_formula)
-
+        
         map_plots <- plot_model_score_map(
           shp_data = shp_data_copy,
           processed_csv = combined_data,
           model_formulas = model_formulae_table,
           maps_per_page = 4
         )
-
-        box_plot_results <- box_plot_function(combined_data, wards_per_page = 20)
-
+        
+        # box_plot_results <- box_plot_function(combined_data, wards_per_page = 20)
+        
         end_time <- Sys.time()    # stop timer
         runtime <- end_time - start_time
         message(paste("Composite score computation time:", runtime))
-
+        
         list(
           combined_data = combined_data,
           model_formulas = model_formulae_table,
@@ -1844,22 +1694,22 @@ server <- function(input, output, session) {
           ],
           normalized_data = normalized_data,
           map_plots = map_plots,
-          box_plot_results = box_plot_results,
+          # box_plot_results = box_plot_results,
           runtime = runtime
         )
       }, seed = TRUE) %...>% {
         res <- .
-
+        
         message(paste("Total runtime:", res$runtime))
-
+        
         rv$data <- res$combined_data
         rv$output_data <- res$model_formulas
         rv$normalized_data <- reactive({ res$normalized_data })
         rv$flagged_models <- res$flagged
-        rv$ward_rankings <- res$box_plot_results$ward_rankings
-        rv$boxplot_pagination <- res$box_plot_results$pagination
+        # rv$ward_rankings <- res$box_plot_results$ward_rankings
+        # rv$boxplot_pagination <- res$box_plot_results$pagination
         rv$current_page <- 1
-
+        
         output$mapPlot <- renderUI({
           req(res$map_plots)
           do.call(tabsetPanel, c(
@@ -1869,7 +1719,7 @@ server <- function(input, output, session) {
             })
           ))
         })
-
+        
         observe({
           req(input$active_tab, res$map_plots)
           tab_num <- as.numeric(gsub("Page ", "", input$active_tab))
@@ -1879,62 +1729,19 @@ server <- function(input, output, session) {
             })
           }
         })
-
-        # output$normalizationplot <- renderGirafe({
-        #   req(input$visualize_normalized_var)
-        #   plot_normalized_map(
-        #     shp_data = rv$shp_data,
-        #     processed_csv = rv$normalized_data(),
-        #     selected_vars = input$visualize_normalized_var
-        #   )
-        # })
-        # 
-
-
-        output$boxwhiskerPlots <- renderPlotly({
-          req(rv$boxplot_pagination)
-          rv$boxplot_pagination$create_page_plot(
-            rv$current_page,
-            rv$data,
-            rv$ward_rankings,
-            rv$boxplot_pagination$wards_per_page
-          )
-        })
-
+        
         showNotification(paste("Generated", nrow(res$model_formulas), "model combinations."), type = "message")
-
+        
       } %...!% {
         showNotification(paste("Error:", .$message), type = "error")
       }
     })
   })
-
   
-  #' #' Display table of flagged models
-  #' output$flagged_models_table <- renderTable({
-  #'   req(rv$flagged_models)
-  #'   flagged <- rv$flagged_models()
-  #'   
-  #'   if (is.null(flagged) || nrow(flagged) == 0) {
-  #'     return(data.frame("Message" = "No problematic models identified."))
-  #'   }
-  #'   
-  #'   # Format for display
-  #'   flagged %>%
-  #'     mutate(
-  #'       Model = gsub("model_", "Model ", variable),
-  #'       `Flagged Wards` = flagged_wards
-  #'     ) %>%
-  #'     select(Model, `Flagged Wards`) %>%
-  #'     mutate(
-  #'       `Potential Issue` = "Non-urban wards in top 5 (likely not suitable for resource allocation)"
-  #'     )
-  #' }, striped = TRUE, bordered = TRUE, hover = TRUE, align = 'l')
   
   #============================================================================
   # Box and Whisker Plot / Vulnerability Map
   #============================================================================
-  
   #' Generate vulnerability map
   output$vulnerabilityMap <- renderGirafe({
     req(rv$data, rv$ward_rankings, rv$shp_data)
@@ -2042,7 +1849,8 @@ server <- function(input, output, session) {
     
     # Create a statistics table
     data.frame(
-      Metric = c("Total Wards", "Deprioritized Wards", "Prioritized Wards", "Prioritization %"),
+      Metric = c("Total Wards", "Deprioritized Wards", 
+                 "Prioritized Wards", "Prioritization %"),
       Value = c(
         total_wards,
         prioritized_wards,
@@ -2078,130 +1886,112 @@ server <- function(input, output, session) {
     }
   })
   
+  
+  
   output$threshold_explanation_text <- renderUI({
     req(input$urban_threshold)
     threshold <- as.numeric(input$urban_threshold)
     p(paste0("This map shows wards filtered by an urban extent threshold of ", threshold, "%."))
   })
   
-  # Add pagination event handlers
+  #=======================================================================
+  
+  observeEvent(rv$data, {
+    req(rv$data)
+    
+    init <- prepare_pagination(rv$data, 20)
+    rv$df_long <- init$df_long
+    rv$ward_rankings <- init$ward_rankings
+    rv$pagination <- init$pagination
+    rv$current_page <- 1
+  })
+  
+  
+  observeEvent(input$wards_per_page,{
+    
+    req(rv$data)
+    
+    updated <- prepare_pagination(req(rv$data), as.numeric(input$wards_per_page))
+    rv$df_long <- updated$df_long
+    rv$ward_rankings <- updated$ward_rankings
+    rv$pagination <- updated$pagination
+    rv$current_page <- 1
+  })
+  
+  observeEvent(input$next_page, {
+    
+    req(rv$pagination$total_pages, rv$current_page)
+    
+    if (rv$current_page < rv$pagination$total_pages) {
+      rv$current_page <- rv$current_page + 1
+    }
+  })
+  
+  
   observeEvent(input$prev_page, {
+    
+    req(rv$pagination$total_pages, rv$current_page)
+    
     if (rv$current_page > 1) {
       rv$current_page <- rv$current_page - 1
     }
   })
   
-  observeEvent(input$next_page, {
-    req(rv$boxplot_pagination)
-    if (rv$current_page < rv$boxplot_pagination$total_pages) {
-      rv$current_page <- rv$current_page + 1
-    }
+  output$boxwhiskerPlots <- renderPlotly({
+    tryCatch({
+      
+      # Explicit checks with messages instead of `req()`
+      if (is.null(rv$df_long)) stop("df_long is NULL")
+      if (is.null(rv$ward_rankings)) stop("ward_rankings is NULL")
+      if (is.null(rv$pagination)) stop("pagination is NULL")
+      if (is.null(rv$current_page)) stop("current_page is NULL")
+      
+      create_page_plot(
+        page_num = rv$current_page,
+        df_long = rv$df_long,
+        ward_rankings = rv$ward_rankings,
+        wards_per_page = rv$pagination$wards_per_page
+      )
+    }, error = function(e) {
+      message("‼️ Error rendering boxwhisker plot:")
+      message(e$message)
+      return(NULL)
+    })
   })
   
-  observeEvent(input$wards_per_page, {
-    req(rv$data)
-    
-    # Update wards per page and recalculate
-    box_plot_results <- box_plot_function(rv$data, as.numeric(input$wards_per_page))
-    
-    # Store the results
-    rv$ward_rankings <- box_plot_results$ward_rankings
-    rv$boxplot_pagination <- box_plot_results$pagination
-    
-    # Reset to page 1
-    rv$current_page <- 1
-  })
+  
   
   # Render the pagination UI
+  
   output$boxPlotPagination <- renderUI({
-    req(rv$boxplot_pagination)
     
-    pagination <- rv$boxplot_pagination
+    req(rv$pagination, rv$current_page)
+    pagination <- rv$pagination
+    current <- rv$current_page
     
-    if (pagination$total_pages <= 1) {
-      return(NULL) # No pagination needed
-    }
+    if (pagination$total_pages < 1) return(NULL)
     
     div(
       style = "display: flex; justify-content: center; margin-top: 15px;",
       div(
         style = "display: inline-flex; align-items: center; background-color: #f8f9fa; padding: 5px 10px; border-radius: 5px;",
-        actionButton("prev_page", "←", 
-                     style = "margin-right: 10px;",
-                     class = if (rv$current_page <= 1) "btn-secondary disabled" else "btn-primary"),
-        
-        span(paste0("Page ", rv$current_page, " of ", pagination$total_pages),
-             style = "margin: 0 15px; font-weight: bold;"),
-        
-        actionButton("next_page", "→", 
-                     style = "margin-left: 10px;",
-                     class = if (rv$current_page >= pagination$total_pages) "btn-secondary disabled" else "btn-primary"),
-        
+        actionButton("prev_page", "←", style = "margin-right: 10px;",  class = if (current <= 1) "btn-secondary disabled" else "btn-primary"),
+        span(paste0("Page ", current, " of ", pagination$total_pages), style = "margin: 0 15px; font-weight: bold;"),
+        actionButton("next_page", "→", style = "margin-left: 10px;", class = if (current >= pagination$total_pages) "btn-secondary disabled" else "btn-primary"),
         div(
           style = "margin-left: 20px; display: flex; align-items: center;",
           span("Wards per page:", style = "margin-right: 10px;"),
-          selectInput("wards_per_page", NULL, 
-                      choices = c(10, 20, 30, 50, 100),
-                      selected = pagination$wards_per_page,
-                      width = "80px")
+          selectInput("wards_per_page", NULL, choices = c(10, 20, 30, 50, 100), 
+                      selected = pagination$wards_per_page, width = "80px")
         )
       )
     )
   })
+
   
-  # Add these observers to handle pagination controls:
-  observeEvent(input$prev_page, {
-    if (rv$current_page > 1) {
-      rv$current_page <- rv$current_page - 1
-      updateBoxPlot()
-    }
-  })
-  
-  observeEvent(input$next_page, {
-    req(rv$boxplot_pagination)
-    if (rv$current_page < rv$boxplot_pagination$total_pages) {
-      rv$current_page <- rv$current_page + 1
-      updateBoxPlot()
-    }
-  })
-  
-  observeEvent(input$wards_per_page, {
-    req(rv$data)
-    
-    # Update wards per page and recalculate
-    box_plot_results <- box_plot_function(rv$data, as.numeric(input$wards_per_page))
-    
-    # Store the results
-    rv$ward_rankings <- box_plot_results$ward_rankings
-    rv$boxplot_pagination <- box_plot_results$pagination
-    
-    # Reset to page 1
-    rv$current_page <- 1
-    
-    # Update the plot
-    updateBoxPlot()
-  })
-  
-  # Function to update the box plot based on pagination
-  updateBoxPlot <- function() {
-    req(rv$data, rv$boxplot_pagination, rv$current_page)
-    
-    # Generate the plot for the current page
-    output$boxwhiskerPlots <- renderPlotly({
-      create_plot <- rv$boxplot_pagination$create_page_plot
-      create_plot(
-        rv$current_page, 
-        rv$data, 
-        rv$ward_rankings, 
-        rv$boxplot_pagination$wards_per_page
-      )
-    })
-  }
-  
-  
-  #============================================================================
-  # Decision Tree
-  #============================================================================
+#============================================================================
+# Decision Tree
+#============================================================================
   
   #' Update decision tree progress
   observe({
@@ -2348,99 +2138,10 @@ server <- function(input, output, session) {
     }
   )
   
-  output$boxwhiskerPlots <- renderUI({
-    req(rv$data)
-    
-    result <- box_plot_function_improved(rv$data, max_display = 30, use_pagination = TRUE)
-    rv$ward_rankings <- result$ward_rankings
-    
-    if ("plot" %in% names(result)) {
-      # Single plot (smaller dataset)
-      plotlyOutput("singleBoxPlot", height = "500px")
-    } else {
-      # Paginated plots (larger dataset)
-      rv$box_plot_pages <- result$num_pages
-      rv$box_plot_render <- result$plot_function
-      
-      tagList(
-        div(style = "display: flex; justify-content: center; margin-bottom: 10px;",
-            actionButton("prev_page", "← Previous", 
-                         style = "margin-right: 10px;"),
-            div(style = "padding: 6px 12px; background: #f8f9fa; border-radius: 4px;",
-                textOutput("page_indicator")),
-            actionButton("next_page", "Next →", 
-                         style = "margin-left: 10px;")
-        ),
-        plotlyOutput("paginatedBoxPlot", height = "500px")
-      )
-    }
-  })
-  
-  # Add these render functions:
-  
-  output$singleBoxPlot <- renderPlotly({
-    req(rv$data)
-    result <- box_plot_function_improved(rv$data, max_display = 30, use_pagination = FALSE)
-    result$plot
-  })
-  
-  # Initialize current page
-  observe({
-    if (is.null(rv$current_page)) {
-      rv$current_page <- 1
-    }
-  })
-  
-  # Render current page
-  output$paginatedBoxPlot <- renderPlotly({
-    req(rv$box_plot_render, rv$current_page)
-    rv$box_plot_render(rv$current_page)
-  })
-  
-  # Update page indicator
-  output$page_indicator <- renderText({
-    req(rv$current_page, rv$box_plot_pages)
-    paste0("Page ", rv$current_page, " of ", rv$box_plot_pages)
-  })
-  
-  # Handle pagination buttons
-  observeEvent(input$prev_page, {
-    if (rv$current_page > 1) {
-      rv$current_page <- rv$current_page - 1
-    }
-  })
-  
-  observeEvent(input$next_page, {
-    if (rv$current_page < rv$box_plot_pages) {
-      rv$current_page <- rv$current_page + 1
-    }
-  })
-  
-  
-  # Render the box whisker content
-  output$boxWhiskerContent <- renderUI({
-    div(
-      conditionalPanel(
-        condition = "input.show_map == false",
-        div(
-          plotlyOutput("boxwhiskerPlots", height = "500px"),
-          uiOutput("boxPlotPagination")
-        )
-      ),
-      conditionalPanel(
-        condition = "input.show_map == true && input.show_threshold_map == false",
-        girafeOutput("vulnerabilityMap", height = "500px")
-      ),
-      conditionalPanel(
-        condition = "input.show_map == true && input.show_threshold_map == true",
-        girafeOutput("filteredVulnerabilityMap", height = "500px")
-      )
-    )
-  })
-  
-  #============================================================================
-  # Manual Labeling
-  #============================================================================
+
+#============================================================================
+# Manual Labeling
+#============================================================================
   
   #' Display manual deprioritization stats
   output$manual_deprioritization_stats <- renderUI({
