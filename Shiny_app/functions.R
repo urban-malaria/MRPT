@@ -32,34 +32,37 @@ library(data.table)
 #' 
 #' @param file_path Path to CSV file
 #' @return Dataframe with unique ward identifiers
+
 process_csv_with_duplicate_handling <- function(file_path) {
   # Read file based on extension
   csv_data <- if (tolower(tools::file_ext(file_path)) %in% c("xlsx", "xls")) {
+    
     readxl::read_excel(file_path)
   } else {
+    
     read.csv(file_path)
   }
   
   # Process the data
   csv_data <- rename_columns(as.data.frame(csv_data))
   
-  # Check for duplicate ward names
-  if (any(duplicated(csv_data$WardName))) {
-    # Create a unique ID column if WardCode is available
-    if ("WardCode" %in% names(csv_data)) {
-      csv_data$OriginalWardName <- csv_data$WardName  # Store original names
-      csv_data$WardName <- paste(csv_data$WardCode, csv_data$WardName, sep = "_")
-    } else {
-      # If no WardCode, create numbered suffixes for duplicates
-      dup_wards <- csv_data$WardName[duplicated(csv_data$WardName)]
-      
-      for (ward in unique(dup_wards)) {
-        indices <- which(csv_data$WardName == ward)
-        csv_data$OriginalWardName <- csv_data$WardName  # Store original names
-        csv_data$WardName[indices] <- paste0(csv_data$WardName[indices], "_", seq_along(indices))
-      }
-    }
-  }
+  # # Check for duplicate ward names
+  # if (any(duplicated(csv_data$WardName))) {
+  #   # Create a unique ID column if WardCode is available
+  #   if ("WardCode" %in% names(csv_data)) {
+  #     csv_data$OriginalWardName <- csv_data$WardName  # Store original names
+  #     csv_data$WardName <- paste(csv_data$WardCode, csv_data$WardName, sep = "_")
+  #   } else {
+  #     # If no WardCode, create numbered suffixes for duplicates
+  #     dup_wards <- csv_data$WardName[duplicated(csv_data$WardName)]
+  #     
+  #     for (ward in unique(dup_wards)) {
+  #       indices <- which(csv_data$WardName == ward)
+  #       csv_data$OriginalWardName <- csv_data$WardName  # Store original names
+  #       csv_data$WardName[indices] <- paste0(csv_data$WardName[indices], "_", seq_along(indices))
+  #     }
+  #   }
+  # }
   
   return(csv_data)
 }
@@ -79,39 +82,39 @@ process_shapefile_with_duplicate_handling <- function(file_path, csv_data) {
     setnames(shp_data, old = "Ward", new = "WardName")
   }
   
-  # Check for duplicate ward names
-  if (any(duplicated(shp_data$WardName))) {
-    # Create a unique ID column if WardCode is available
-    if ("WardCode" %in% names(shp_data)) {
-      shp_data$OriginalWardName <- shp_data$WardName  # Store original names
-      shp_data$WardName <- paste(shp_data$WardCode, shp_data$WardName, sep = "_")
-    } else {
-      # If no WardCode, create numbered suffixes for duplicates
-      dup_wards <- shp_data$WardName[duplicated(shp_data$WardName)]
-      
-      for (ward in unique(dup_wards)) {
-        indices <- which(shp_data$WardName == ward)
-        shp_data$OriginalWardName <- shp_data$WardName  # Store original names
-        shp_data$WardName[indices] <- paste0(shp_data$WardName[indices], "_", seq_along(indices))
-      }
-    }
-  } else if ("OriginalWardName" %in% names(csv_data)) {
-    # If CSV data had duplicates but shapefile doesn't, align shapefile with CSV
-    shp_data$OriginalWardName <- shp_data$WardName
-    
-    # Create a mapping table from original to new ward names
-    ward_mapping <- unique(csv_data[, .(OriginalWardName, WardName)])
-    
-    
-    # Match shapefile names with CSV processed names
-    for (i in 1:nrow(ward_mapping)) {
-      orig_name <- ward_mapping$OriginalWardName[i]
-      new_name <- ward_mapping$WardName[i]
-      
-      # Update shapefile names to match CSV
-      shp_data$WardName[shp_data$WardName == orig_name] <- new_name
-    }
-  }
+  # # Check for duplicate ward names
+  # if (any(duplicated(shp_data$WardName))) {
+  #   # Create a unique ID column if WardCode is available
+  #   if ("WardCode" %in% names(shp_data)) {
+  #     shp_data$OriginalWardName <- shp_data$WardName  # Store original names
+  #     shp_data$WardName <- paste(shp_data$WardCode, shp_data$WardName, sep = "_")
+  #   } else {
+  #     # If no WardCode, create numbered suffixes for duplicates
+  #     dup_wards <- shp_data$WardName[duplicated(shp_data$WardName)]
+  #     
+  #     for (ward in unique(dup_wards)) {
+  #       indices <- which(shp_data$WardName == ward)
+  #       shp_data$OriginalWardName <- shp_data$WardName  # Store original names
+  #       shp_data$WardName[indices] <- paste0(shp_data$WardName[indices], "_", seq_along(indices))
+  #     }
+  #   }
+  # } else if ("OriginalWardName" %in% names(csv_data)) {
+  #   # If CSV data had duplicates but shapefile doesn't, align shapefile with CSV
+  #   shp_data$OriginalWardName <- shp_data$WardName
+  #   
+  #   # Create a mapping table from original to new ward names
+  #   ward_mapping <- unique(csv_data[, .(OriginalWardName, WardName)])
+  #   
+  #   
+  #   # Match shapefile names with CSV processed names
+  #   for (i in 1:nrow(ward_mapping)) {
+  #     orig_name <- ward_mapping$OriginalWardName[i]
+  #     new_name <- ward_mapping$WardName[i]
+  #     
+  #     # Update shapefile names to match CSV
+  #     shp_data$WardName[shp_data$WardName == orig_name] <- new_name
+  #   }
+  # }
   
   return(shp_data)
 }
@@ -127,7 +130,7 @@ process_shapefile_with_duplicate_handling <- function(file_path, csv_data) {
 rename_columns <- function(df) {
   # First rename Ward to WardName if it exists
   if ("Ward" %in% names(df)) {
-    setnames(df, "Ward", "WardName")
+    setnames(df, "Ward", "WardName", "WardCode")
     
   }
   
@@ -155,7 +158,7 @@ rename_columns <- function(df) {
 
 get_columns_after_wardname <- function(data, specific_columns = NULL) {
   # Check for either Ward or WardName
-  ward_col <- intersect(c("Ward", "WardName"), names(data))
+  ward_col <- intersect(c("Ward", "WardName", "WardCode"), names(data))
   
   if (length(ward_col) == 0) {
     warning("Neither Ward nor WardName column found. Returning all numeric columns.")
@@ -182,8 +185,10 @@ get_columns_after_wardname <- function(data, specific_columns = NULL) {
 #' 
 
 check_missing_values <- function(data) {
+  
   missing_cols <- sapply(data, function(x) any(is.na(x)))
   cols_with_missing <- names(missing_cols[missing_cols])
+  
   return(list(columns = cols_with_missing, data = data))
 }
 
@@ -199,8 +204,8 @@ check_wardname_mismatches <- function(csv_data, shp_data) {
   shp_wardnames <- shp_data$WardName
   
   # Determine if we're using processed names with originals stored
-  using_processed_names <- "OriginalWardName" %in% names(csv_data) && 
-    "OriginalWardName" %in% names(shp_data)
+  using_processed_names <- "WardCode" %in% names(csv_data) && 
+    "WardCode" %in% names(shp_data)
   
   mismatched_wards <- setdiff(csv_wardnames, shp_wardnames)
   
@@ -210,12 +215,12 @@ check_wardname_mismatches <- function(csv_data, shp_data) {
       mismatches <- data.frame(
         CSV_WardName = mismatched_wards,
         CSV_OriginalName = sapply(mismatched_wards, function(w) {
-          orig <- csv_data$OriginalWardName[csv_data$WardName == w]
+          orig <- csv_data$WardName[csv_data$WardName == w]
           if (length(orig) > 0) orig[1] else w
         }),
         Shapefile_Options = I(replicate(length(mismatched_wards), list(shp_wardnames))),
         Original_Shapefile_Options = I(replicate(length(mismatched_wards), 
-                                                 list(unique(shp_data$OriginalWardName)))),
+                                                 list(unique(shp_data$WardName)))),
         stringsAsFactors = FALSE
       )
     } else {
@@ -348,9 +353,13 @@ plot_map_00 <- function(variable_name,
                         title, 
                         na_handling_method = NULL) {
   # Ensure the dataframe has a geometry column
+  
   if (!"geometry" %in% names(dataframe_reactive)) {
-    dataframe_reactive <- left_join(shp_data_reactive, dataframe_reactive, by = "WardName")
+   
+    
+    dataframe_reactive <- left_join(shp_data_reactive, dataframe_reactive, by = c("WardName", "WardCode"))
   }
+ 
   
   na_method_text <- if (!is.null(na_handling_method)) {
     paste("\nNA Handling: ", na_handling_method)
@@ -415,7 +424,7 @@ theme_manuscript <- function(){
 }
 
 # ==============================================================================
-# NORMALIZATION AND SCORING
+# NORMALIZATION AND RELATIONSHIP DEFINATION 
 # ==============================================================================
 
 #' Normalize data based on variable relationships
@@ -477,12 +486,13 @@ normalize_data <- function(cleaned_data, variable_relationships) {
 plot_normalized_map <- function(shp_data, processed_csv, selected_vars) {
   palette_func <- brewer.pal(5, "YlOrRd")
   
-  selected_cols <- c("WardName", selected_vars)
+  selected_cols <- c("WardName", "WardCode", selected_vars)
+  
   filtered_data <- processed_csv %>%  
     select(all_of(selected_cols)) %>% 
-    pivot_longer(cols = -WardName, names_to = "variable", values_to = "value") 
+    pivot_longer(cols = !c(WardName, WardCode), names_to = "variable", values_to = "value") 
   
-  combined_data <- left_join(filtered_data, shp_data, by = "WardName") 
+  combined_data <- left_join(filtered_data, shp_data, by = c("WardName", "WardCode")) 
   
   plot <- ggplot(data = shp_data) +
     geom_sf_interactive(color = "black", fill = "white") + 
@@ -503,6 +513,7 @@ plot_normalized_map <- function(shp_data, processed_csv, selected_vars) {
           axis.line = element_blank())
   
   girafe(ggobj = plot, width_svg = 10, height_svg = 8)
+  
 }
 
 #' Calculate composite scores for different models
@@ -551,14 +562,17 @@ composite_score_models <- function(normalized_data, selected_vars, shp_data) {
   # Calculate composite scores
   normalized_data <- as.data.table(normalized_data)
   shp_data <- as.data.table(shp_data)
+  
  
   final_data <- merge(
-    normalized_data[, .(WardName)],
-    shp_data[, .(WardName, Urban)],
-    by = "WardName",
+    normalized_data[, .(WardName, WardCode)],
+    shp_data[, .(WardName, WardCode, Urban)],
+    by = c("WardName","WardCode"),
     all.x = TRUE
   )
   
+
+
   for (i in seq_along(model_combinations)) {
     
     vars <- model_combinations[[i]]
@@ -575,6 +589,7 @@ composite_score_models <- function(normalized_data, selected_vars, shp_data) {
     return(NULL)
   }
   
+
   list(model_formula = model_combinations, 
        final_data = final_data)
 }
@@ -592,19 +607,20 @@ process_model_score <- function(data_to_process) {
   dt <- as.data.table(data_to_process)
   
   # Separate urban data
-  urban_data <- dt[, .(WardName, Urban)]
+  urban_data <- dt[, .(WardName, WardCode, Urban)]
   
   # Melt model columns only
   melted_data <- melt(
     dt,
-    id.vars = "WardName",
+    id.vars = c("WardName", "WardCode"),
     measure.vars = patterns("^model_"),
     variable.name = "variable",
     value.name = "value"
   )
+  # print(melted_data); print(urban_data)
   
   # Merge Urban info back
-  melted_data <- merge(melted_data, urban_data, by = "WardName", all.x = TRUE)
+  melted_data <- merge(melted_data, urban_data, by = c("WardName", "WardCode"), all.x = TRUE)#***
   
   # Normalize, classify, rank
   melted_data[, `:=`(
@@ -612,6 +628,8 @@ process_model_score <- function(data_to_process) {
     class = cut((value - min(value, na.rm = TRUE)) / (max(value, na.rm = TRUE) - min(value, na.rm = TRUE)),
                 breaks = seq(0, 1, 0.2), include.lowest = TRUE)
   ), by = variable]
+  
+  # print("priniting melted data", head(melted_data))
   
   # Rank + flag
   melted_data[, `:=`(
@@ -635,7 +653,8 @@ process_model_score <- function(data_to_process) {
 #' @param maps_per_page Number of maps per page
 #' @return List of Girafe objects with interactive maps
 
-plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_per_page = 4) {
+plot_model_score_map <- function(shp_data, processed_csv, 
+                                 model_formulas, maps_per_page = 4) {
   palette_func <- brewer.pal(5, "YlOrRd")
   
   # Pre-calculate facet labels once
@@ -713,9 +732,10 @@ plot_model_score_map <- function(shp_data, processed_csv, model_formulas, maps_p
 
 prepare_pagination <- function(df_long, wards_per_page = 20) {
   
-  ward_rankings <- df_long[, .(median_rank = median(rank)), by = WardName][order(median_rank)][, overall_rank := .I]
-  df_long <- merge(df_long, ward_rankings, by = "WardName", all.x = TRUE)
-  df_long[, WardName := factor(WardName, levels = ward_rankings$WardName)]
+  
+  ward_rankings <- df_long[, .(median_rank = median(rank)), by = .(WardName, WardCode)][order(median_rank)][, overall_rank := .I]
+  df_long <- merge(df_long, ward_rankings, by = c("WardName", "WardCode"), all.x = TRUE)
+  df_long[, WardCode := factor(WardCode, levels = ward_rankings$WardCode)]
   ward_rankings[, DisplayName := ifelse(nchar(WardName) > 25, paste0(substr(WardName, 1, 22), "..."), WardName)]
   df_long[, DisplayName := ward_rankings$DisplayName[match(WardName, ward_rankings$WardName)]]
   
@@ -723,9 +743,9 @@ prepare_pagination <- function(df_long, wards_per_page = 20) {
     df_long = df_long,
     ward_rankings = ward_rankings,
     pagination = list(
-      total_pages = ceiling(length(unique(df_long$WardName)) / wards_per_page),
+      total_pages = ceiling(length(unique(df_long$WardCode)) / wards_per_page),
       wards_per_page = wards_per_page,
-      total_wards = uniqueN(df_long$WardName)
+      total_wards = uniqueN(df_long$WardCode)
     )
   )
 }
@@ -881,7 +901,6 @@ decision_tree_function <- function(all_variables, selected_variables,
 # ==============================================================================
 
 #' Create grid for a ward
-#'
 #' @param polygon Polygon to subdivide into a grid
 #' @param cell_size Cell size in coordinate units
 #' @return SF object with grid cells
@@ -962,11 +981,12 @@ subdivide_polygon <- function(polygon, cell_size = 500) {
 }
 
 #' Create ward grid from shapefile data
-#'
+
 #' @param ward_name Ward name
 #' @param shapefile_data Shapefile data
 #' @param cell_size Cell size in coordinate units
 #' @return SF object with grid cells
+
 create_ward_grid <- function(ward_name, shapefile_data, cell_size = 500) {
   # Filter the shapefile to get just the selected ward
   ward_shape <- shapefile_data %>% filter(WardName == ward_name)
@@ -979,18 +999,21 @@ create_ward_grid <- function(ward_name, shapefile_data, cell_size = 500) {
   tryCatch({
     grid <- subdivide_polygon(ward_shape, cell_size)
     return(grid)
+    
   }, error = function(e) {
+  
     message("Error creating grid: ", e$message)
     return(NULL)
   })
 }
 
 #' Create HTML for grid cell classification popup
-#'
+
 #' @param ward_name Ward name
 #' @param grid_id Grid ID
 #' @param current_class Current classification
 #' @return HTML string for classification popup
+
 create_classification_popup <- function(ward_name, grid_id, current_class = "Unclassified") {
   # Create a unique ID for the popup form
   popup_id <- paste0("popup_", ward_name, "_", grid_id)
@@ -1062,17 +1085,19 @@ create_classification_popup <- function(ward_name, grid_id, current_class = "Unc
 }
 
 #' Process and view shapefile and CSV data with grid enhancements
-#'
+
 #' @param ward_name Ward name
 #' @param shp_data Shapefile data
 #' @param grid_annotations Grid annotations
 #' @param enable_grid Whether to enable grid
 #' @param grid_cell_size Grid cell size
 #' @return Leaflet map with grid
-# Modified function in functions.R
+
 process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, grid_annotations = NULL, 
                                                         enable_grid = TRUE, grid_cell_size = 500) {
+  # Modified function in functions.R
   # Filter the main shapefile to get just the selected ward
+  
   ward_shape <- shp_data %>% filter(WardName == ward_name)
   
   if (nrow(ward_shape) == 0) {
@@ -1292,9 +1317,10 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
   return(map)
 }
 
-# New function to create a map for downloading
+
 create_downloadable_map <- function(ward_name, shp_data, grid_annotations, 
                                     enable_grid = TRUE, grid_cell_size = 500) {
+  # New function to create a map for downloading
   # Create a modified version of the map for downloading
   map <- process_and_view_shapefile_and_csv_enhanced(ward_name, shp_data, grid_annotations, 
                                                      enable_grid, grid_cell_size)
@@ -1341,8 +1367,10 @@ create_downloadable_map <- function(ward_name, shp_data, grid_annotations,
   return(map)
 }
 
-# Add a helper function for retrieving classification colors
+
 get_classification_color <- function(classification) {
+  # Add a helper function for retrieving classification colors
+  
   colors <- c(
     "Formal" = "#0074D9",           # Blue
     "Informal" = "#FF4136",         # Red
@@ -1362,31 +1390,29 @@ get_classification_color <- function(classification) {
 # ==============================================================================
 
 #' Filter shapefile data based on urban extent threshold
-#'
+
 #' @param shp_data Shapefile data
 #' @param threshold Urban extent threshold
 #' @param threshold Urban extent threshold
 #' @return Shapefile data with added urban extent information
-#' 
-#' 
 
 
 
 filter_by_urban_extent <- function(shp_data, data, threshold = 0) {
   # Merge UrbanPercentage from external data
   
-  print(data)
   shp_data <- dplyr::left_join(shp_data, data[, c("WardName", "UrbanPercentage")], by = "WardName")
   
-  print(data)
   
-  # Handle missing UrbanPercentage
+  # Handle missing UrbanPercentage in uploaded .csv file 
   if (!"UrbanPercentage" %in% names(shp_data)) {
     
     if ("Urban" %in% names(shp_data)) {
       warning("UrbanPercentage not found in data; using Urban column from shapefile.")
       shp_data$UrbanPercentage <- ifelse(shp_data$Urban == "Yes", 100, 0)
+      
     } else {
+      
       warning("No Urban or UrbanPercentage column found; assuming 100% urban.")
       shp_data$UrbanPercentage <- 100
     }
@@ -1415,9 +1441,11 @@ filter_by_urban_extent <- function(shp_data, data, threshold = 0) {
 #' @param shp_data Shapefile data
 #' @param gridded_wards Gridded wards data
 #' @return List with population estimates
-# Update the ward population estimation function to use ITN data when available
+
 estimate_ward_population <- function(ward_name, grid_annotations, shp_data, gridded_wards = NULL) {
+  # Update the ward population estimation function to use ITN data when available
   # Extract the state code from the shapefile if available
+  
   state_code <- NULL
   state_name <- NULL
   

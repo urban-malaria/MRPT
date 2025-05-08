@@ -1018,10 +1018,9 @@ server <- function(input, output, session) {
   #============================================================================
   # Data Upload and Processing
   #============================================================================
-  
-  #' Process CSV file upload
-  #' Process CSV file upload
+
   observeEvent(input$file_csv, {
+    #' Process CSV file upload
     req(input$file_csv)
     
     # Process CSV with duplicate handling
@@ -1079,7 +1078,9 @@ server <- function(input, output, session) {
       tryCatch({
         # Process shapefile with duplicate handling, using CSV data if available
         if (!is.null(rv$raw_data)) {
+          
           rv$shp_data <- process_shapefile_with_duplicate_handling(shapefile_files[1], rv$raw_data)
+          
         } else {
           # If CSV not loaded yet, just read the shapefile normally
           # We'll handle duplicates later when both files are available
@@ -1098,8 +1099,11 @@ server <- function(input, output, session) {
         
         # If both files are loaded, check for ward name mismatches
         if (!is.null(rv$raw_data)) {
+          
           rv$mismatched_wards <- check_wardname_mismatches(rv$raw_data, rv$shp_data)
+          
           if (!is.null(rv$mismatched_wards) && nrow(rv$mismatched_wards) > 0) {
+            
             showModal(wardNameMismatchModal(rv$mismatched_wards))
           }
         }
@@ -1112,7 +1116,7 @@ server <- function(input, output, session) {
   })
   
 
-  #' 
+ 
   #' @param mismatches Data frame of mismatched ward names
   #' @return Modal dialog UI
   
@@ -1143,9 +1147,13 @@ server <- function(input, output, session) {
         options <- c("None", sort(mismatches$Shapefile_Options[[i]]))  # Sort options alphabetically
         
         selected_value <- if (!is.null(corrected_names) && nrow(corrected_names) > 0) {
+          
           corrected <- corrected_names$corrected[corrected_names$original == ward]
+          
           if (length(corrected) > 0) corrected else "None"
+          
         } else {
+          
           "None"
         }
         
@@ -1165,6 +1173,7 @@ server <- function(input, output, session) {
   
   #' Apply ward name corrections
   observeEvent(input$apply_corrections, {
+    
     req(rv$mismatched_wards, rv$raw_data)
     
     corrected_names <- data.frame(
@@ -1227,8 +1236,6 @@ server <- function(input, output, session) {
   #============================================================================
   # Data Cleaning
   #============================================================================
-  
-  
 
   output$duplicate_info <- renderUI({
     # Add to UI in the Input Variables tab
@@ -1246,10 +1253,10 @@ server <- function(input, output, session) {
             style = "max-height: 200px; overflow-y: auto; margin-top: 10px; background-color: #fff; padding: 10px; border-radius: 5px; border: 1px solid #ddd;",
             renderTable({
               dups <- rv$original_to_new_wardnames %>%
-                group_by(OriginalWardName) %>%
+                group_by(WardCode, WardName) %>%
                 filter(n() > 1) %>%
                 ungroup() %>%
-                select(OriginalWardName, WardName) %>%
+                select(WardCode, WardName) %>%
                 rename(`Original Ward Name` = OriginalWardName, 
                        `New Unique Identifier` = WardName)
               dups
@@ -1517,7 +1524,7 @@ server <- function(input, output, session) {
     
     # Normalize the data
     rv$normalized_data <- reactive({
-      normalize_data(data_to_use[, c("WardName", columns_after_wardname)], rv$variable_relationships) 
+      normalize_data(data_to_use[, c("WardName", "WardCode", columns_after_wardname)], rv$variable_relationships) 
     })
     
     removeModal()
@@ -1593,7 +1600,7 @@ server <- function(input, output, session) {
         
         # Normalize data
         normalized_data <- normalize_data(
-          cleaned_data_copy[, .SD, .SDcols = c("WardName", selected_vars)],
+          cleaned_data_copy[, .SD, .SDcols = c("WardName","WardCode", selected_vars)],
           variable_impacts
         )
         if (is.null(normalized_data)) stop("Normalization failed")
@@ -1615,7 +1622,7 @@ server <- function(input, output, session) {
         combined_data <- merge(
           processed_scores,
           as.data.table(shp_data_copy),
-          by = "WardName",
+          by = c("WardName","WardCode"),
           all.x = TRUE
         )
         
@@ -1633,6 +1640,8 @@ server <- function(input, output, session) {
         end_time <- Sys.time()    # stop timer
         runtime <- end_time - start_time
         message(paste("Composite score computation time:", runtime))
+        
+        # print(combined_data)
         
         list(
           combined_data = combined_data,
@@ -1688,7 +1697,7 @@ server <- function(input, output, session) {
   })
   
   
-  
+  #print("we passed this stage")
   
   #============================================================================
   # Box and Whisker Plot / Vulnerability Map
@@ -1708,7 +1717,7 @@ server <- function(input, output, session) {
  
     filtered_data <- filter_by_urban_extent(rv$shp_data, rv$raw_data, threshold)
     
-    map_data <- left_join(filtered_data, rv$ward_rankings, by = "WardName")
+    map_data <- left_join(filtered_data, rv$ward_rankings, by = c("WardName", "WardCode"))
     
    
     plot <- ggplot() +
@@ -1766,7 +1775,7 @@ server <- function(input, output, session) {
     filtered_data <- filter_by_urban_extent(rv$shp_data, rv$raw_data, threshold)
     
    
-    map_data <- left_join(filtered_data, rv$ward_rankings, by = "WardName")
+    map_data <- left_join(filtered_data, rv$ward_rankings, by = c("WardName", "WardCode"))
     
  
     total_wards <- nrow(map_data)
@@ -1798,12 +1807,12 @@ server <- function(input, output, session) {
       filtered_data <- filter_by_urban_extent(rv$shp_data, rv$raw_data, threshold)
       
       # Combine with vulnerability rankings
-      combined_data <- left_join(filtered_data, rv$ward_rankings, by = "WardName")
+      combined_data <- left_join(filtered_data, rv$ward_rankings, by = c("WardCode","WardName"))
       
       # Get list of de-prioritized wards (those below threshold)
       deprioritized <- combined_data %>%
         filter(!MeetsThreshold) %>%
-        select(WardName, UrbanPercentage, overall_rank) %>%
+        select(WardName, WardCode, UrbanPercentage, overall_rank) %>%
         arrange(desc(overall_rank))
       
       rv$deprioritized_wards(deprioritized)
