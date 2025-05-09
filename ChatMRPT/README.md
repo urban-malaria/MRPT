@@ -1,10 +1,14 @@
+<<<<<<< HEAD
 # ChatMRPT: AI-Powered Malaria Risk Prioritization Interface
 
+=======
+>>>>>>> d12d41487b0d7298cb56c40d7a38975856128563
 ## Overview
 
 ChatMRPT is an interactive chat-based interface for the Malaria Reprioritization Tool (MRPT), providing stakeholders with an intuitive way to analyze malaria risk factors and prioritize resource allocation for interventions like bed net distribution. This module combines advanced geospatial analysis with a natural language interface to make complex data analysis accessible to non-technical users.
 
 ## Folder Structure
+<<<<<<< HEAD
 
 The ChatMRPT module has the following structure:
 ```
@@ -45,6 +49,42 @@ ChatMRPT/
 ├── requirements.txt           # Python package dependencies
 └── run.py                     # Application entry point
 ```
+=======
+ChatMRPT/
+├── .env                       # Environment variables configuration
+├── init_project.py            # Project initialization script
+├── requirements.txt           # Python package dependencies
+├── run.py                     # Application entry point
+│
+├── app/                       # Main application package
+│   ├── init.py            # Flask application initialization
+│   ├── routes.py              # API endpoints and request handling
+│   │
+│   ├── models/                # Core analytical components
+│   │   ├── analysis.py        # Data analysis functions
+│   │   ├── data_handler.py    # Data loading and processing
+│   │   ├── report_generator.py # Report creation utilities
+│   │   └── visualization.py   # Visualization generation
+│   │
+│   ├── static/                # Static files
+│   │   ├── css/               # Stylesheets
+│   │   │   └── styles.css     # Main CSS styling
+│   │   ├── js/                # JavaScript files
+│   │   │   └── main.js        # Frontend interaction logic
+│   │   └── uploads/           # User uploaded files (not in git)
+│   │
+│   ├── templates/             # HTML templates
+│   │   └── index.html         # Main application interface
+│   │
+│   └── sample_data/           # Example datasets for testing
+│       ├── sample_data_template.csv       # Example CSV data
+│       └── sample_boundary_template.zip   # Example shapefile
+│
+└── instance/                  # Instance-specific files (not in git)
+├── uploads/               # User uploaded data
+└── reports/               # Generated reports
+
+>>>>>>> d12d41487b0d7298cb56c40d7a38975856128563
 ## Key Features
 
 ### Data Processing & Analysis
@@ -139,6 +179,7 @@ Multiple analytical approaches ensure robust assessment:
 - GeoPandas for spatial analysis
 - Plotly for interactive visualizations
 - Other dependencies listed in requirements.txt
+<<<<<<< HEAD
 
 ### Installation
 ```bash
@@ -177,3 +218,5 @@ Just copy and paste this entire block into your Git Bash terminal. It will:
 3. Commit and push the changes to GitHub
 
 No need to create a separate file or run Python - this is a direct terminal-only solution.
+=======
+>>>>>>> d12d41487b0d7298cb56c40d7a38975856128563
