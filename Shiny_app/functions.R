@@ -617,7 +617,7 @@ process_model_score <- function(data_to_process) {
     variable.name = "variable",
     value.name = "value"
   )
-  # print(melted_data); print(urban_data)
+  
   
   # Merge Urban info back
   melted_data <- merge(melted_data, urban_data, by = c("WardName", "WardCode"), all.x = TRUE)#***
@@ -629,7 +629,7 @@ process_model_score <- function(data_to_process) {
                 breaks = seq(0, 1, 0.2), include.lowest = TRUE)
   ), by = variable]
   
-  # print("priniting melted data", head(melted_data))
+ 
   
   # Rank + flag
   melted_data[, `:=`(
@@ -991,10 +991,13 @@ create_ward_grid <- function(ward_name, shapefile_data, cell_size = 500) {
   # Filter the shapefile to get just the selected ward
   ward_shape <- shapefile_data %>% filter(WardName == ward_name)
   
+  
+  
   if(nrow(ward_shape) == 0) {
     return(NULL)
   }
-  
+
+  print("output from create_ward_grid", ward_shape)
   # Create the grid
   tryCatch({
     grid <- subdivide_polygon(ward_shape, cell_size)
@@ -1152,6 +1155,8 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
       message("Error creating grid: ", e$message)
       NULL
     })
+    
+    
     
     if (!is.null(grid_sf)) {
       # Transform to WGS84
@@ -1401,7 +1406,10 @@ get_classification_color <- function(classification) {
 filter_by_urban_extent <- function(shp_data, data, threshold = 0) {
   # Merge UrbanPercentage from external data
   
-  shp_data <- dplyr::left_join(shp_data, data[, c("WardName", "UrbanPercentage")], by = "WardName")
+  shp_data <- dplyr::left_join(shp_data, 
+                               data[, c("WardName", "WardCode", "UrbanPercentage")],
+                               by = c("WardCode", "WardName"))
+  
   
   
   # Handle missing UrbanPercentage in uploaded .csv file 
@@ -1422,7 +1430,7 @@ filter_by_urban_extent <- function(shp_data, data, threshold = 0) {
   shp_data$UrbanPercentage <- as.numeric(replace(shp_data$UrbanPercentage, is.na(shp_data$UrbanPercentage), 0))
   shp_data$MeetsThreshold <- shp_data$UrbanPercentage >= threshold
   
-  print(shp_data)
+
   
   return(shp_data)
 }
@@ -1525,8 +1533,8 @@ estimate_ward_population <- function(ward_name, grid_annotations, shp_data, grid
   is_urban <- FALSE
   if ("Urban" %in% names(ward_shape)) {
     is_urban <- ward_shape$Urban[1] %in% c("Yes", "YES", "yes", "Y", "y")
-  } else if ("UrbanPercent" %in% names(ward_shape)) {
-    is_urban <- ward_shape$UrbanPercent[1] > 30  # Using 30% threshold
+  } else if ("UrbanPercentage" %in% names(ward_shape)) {
+    is_urban <- ward_shape$UrbanPercentage[1] > 30  # Using 30% threshold
   }
   
   # Base density on urban status
@@ -1910,7 +1918,7 @@ calculate_prioritized_net_distribution <- function(ward_data, total_nets, avg_ho
   }
   
   # Filter based on urban threshold
-  ward_data$MeetsThreshold <- !is.na(ward_data$UrbanPercent) & ward_data$UrbanPercent >= urban_threshold
+  ward_data$MeetsThreshold <- !is.na(ward_data$UrbanPercentage) & ward_data$UrbanPercentage >= urban_threshold
   
   # For wards with grid classifications, adjust population estimate based on valid grid cells
   if (!is.null(grid_overrides) && nrow(grid_overrides) > 0) {

@@ -16,7 +16,7 @@ library(promises)
 
 # Source functions.R file
 source("functions.R")
-
+options(digits = 7)
 #==============================================================================
 # UI Components - Helper Functions
 #==============================================================================
@@ -2157,7 +2157,7 @@ server <- function(input, output, session) {
     threshold <- as.numeric(input$urban_threshold)
     
     # Force recalculation each time
-    filtered_data <- filter_by_urban_extent(rv$shp_data, rv$shp_data, threshold)
+    filtered_data <- filter_by_urban_extent(rv$shp_data, rv$raw_data, threshold)
     
     # Calculate statistics
     total_wards <- nrow(filtered_data)
@@ -2190,6 +2190,8 @@ server <- function(input, output, session) {
     p(paste0("Using ", threshold, "% urban extent threshold for bed net distribution planning:"))
   })
   
+  
+  
   output$dynamic_status_text <- renderUI({
     req(input$urban_threshold)
     threshold <- as.numeric(input$urban_threshold)
@@ -2201,39 +2203,50 @@ server <- function(input, output, session) {
   
   #' Create ward selection dropdown
   output$filtered_ward_select <- renderUI({
-    # Require both shapefile data and ward rankings to be available
-    req(rv$shp_data, rv$ward_rankings, input$urban_threshold)
+    # Require both shapefile, data and ward rankings to be available
+    req(rv$shp_data, rv$raw_data, rv$ward_rankings, input$urban_threshold)
+    
+    # print(paste("printing ", rv$shp_data))
+    # print(paste("printing ", rv$raw_data))
+    # print(paste("printing ", rv$ward_rankings))
+    
+    shp_data <- dplyr::left_join(rv$shp_data, 
+                                    rv$raw_data[, c("WardName",
+                                                    "WardCode",
+                                                    "UrbanPercentage")], 
+                                    by = c("WardCode", "WardName"))
     
     # Get threshold from input value
     threshold <- as.numeric(input$urban_threshold)
+    #rv$shp_data$UrbanPercentage
     
     # Get urban percent information directly from shapefile if available
-    if (!"UrbanPercent" %in% names(rv$shp_data)) {
-      if ("Urban" %in% names(rv$shp_data)) {
-        # Convert from Yes/No to percentages if that's what's available
-        rv$shp_data$UrbanPercent <- ifelse(rv$shp_data$Urban == "Yes", 100, 0)
+    if (!"UrbanPercentage" %in% names(shp_data)) {
+      
+      if ("Urban" %in% names(shp_data)) {
+        warning("UrbanPercentage not found in data; using Urban column from shapefile.")
+        shp_data$UrbanPercentage <- ifelse(shp_data$Urban == "Yes", 100, 0)
+        
       } else {
-        # Show error message if no urban data available
-        return(div(
-          style = "padding: 10px; background-color: #f8d7da; border-radius: 5px; margin-bottom: 10px;",
-          p(style = "margin: 0; color: #721c24;",
-            "Error: No urban extent data available. Please ensure your shapefile contains urban information.")
-        ))
+        
+        warning("No Urban or UrbanPercentage column found; assuming 100% urban.")
+        shp_data$UrbanPercentage <- 100
       }
     }
     
+    
     # Create a data frame with just WardName and UrbanPercent
-    urban_data <- rv$shp_data %>%
+    urban_data <- shp_data %>%
       st_drop_geometry() %>%
-      select(WardName, UrbanPercent)
+      select(WardName, WardCode, UrbanPercentage)
     
     # Join with ward rankings
     combined_data <- rv$ward_rankings %>%
-      inner_join(urban_data, by = "WardName")
+      inner_join(urban_data, by = c("WardCode", "WardName"))
     
     # Filter to include ONLY wards above the threshold
     filtered_wards <- combined_data %>%
-      filter(UrbanPercent >= threshold) %>%
+      filter(UrbanPercentage >= threshold) %>%
       arrange(overall_rank)
     
     # Check if any wards meet the threshold
@@ -2250,7 +2263,7 @@ server <- function(input, output, session) {
       filtered_wards$WardName,
       paste0(filtered_wards$WardName, " (Rank: ", 
              filtered_wards$overall_rank, ", Urban: ", 
-             round(filtered_wards$UrbanPercent, 1), "%)")
+             round(filtered_wards$UrbanPercentage, 1), "%)")
     )
     
     # Create the select input with dynamic threshold in label
@@ -2292,11 +2305,15 @@ server <- function(input, output, session) {
     threshold <- as.numeric(input$urban_threshold)
     
     # Apply urban extent threshold filtering with DYNAMIC threshold
-    filtered_data <- filter_by_urban_extent(ward_data, rv$data, threshold)
+    filtered_data <- filter_by_urban_extent(ward_data, rv$raw_data, threshold)
+    
+    
     
     # Get urban percentage and threshold status
-    urban_percent <- filtered_data$UrbanPercent[1]
-    meets_threshold <- filtered_data$MeetsThreshold[1]
+    urban_percent <- as.numeric(filtered_data$UrbanPercentange)
+    meets_threshold <- as.numeric(filtered_data$MeetsThreshold)
+    
+    
     
     # Get vulnerability rank if available
     rank_text <- ""
@@ -2384,7 +2401,7 @@ server <- function(input, output, session) {
         filter(WardName == input$selected_ward)
       
       threshold <- 30
-      filtered_ward <- filter_by_urban_extent(ward_data, rv$data, threshold)
+      filtered_ward <- filter_by_urban_extent(ward_data, rv$raw_data, threshold)
       is_prioritized <- filtered_ward$MeetsThreshold[1]
       
       # Render the map with our enhanced function
