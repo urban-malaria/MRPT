@@ -1017,7 +1017,7 @@ create_ward_grid <- function(ward_name, shapefile_data, cell_size = 500) {
     return(NULL)
   }
 
-  print("output from create_ward_grid", ward_shape)
+ # print("output from create_ward_grid", ward_shape)
   # Create the grid
   tryCatch({
     grid <- subdivide_polygon(ward_shape, cell_size)

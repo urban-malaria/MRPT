@@ -951,7 +951,7 @@ initialize_reactives <- function(session) {
   
   # Create a reactive for deprioritized wards
   rv$deprioritized_wards_list <- reactive({
-    req(rv$ward_rankings, rv$shp_data, input$urban_threshold)
+    req(rv$ward_rankings, rv$shp_data, rv$raw_data, input$urban_threshold)
     
     # Get the threshold value
     threshold <- as.numeric(input$urban_threshold)
@@ -960,16 +960,19 @@ initialize_reactives <- function(session) {
     if (threshold <= 0) return(NULL)
     
     # Apply urban extent threshold filtering
-    filtered_data <- filter_by_urban_extent(rv$shp_data, rv$data, threshold)
+    filtered_data <- filter_by_urban_extent(rv$shp_data, rv$raw_data, threshold)
+    
+    print("printing filtered data line 965")
+    print(filtered_data)
     
     # Join with vulnerability rankings
-    map_data <- left_join(filtered_data, rv$ward_rankings, by = "WardName")
+    map_data <- left_join(filtered_data, rv$ward_rankings, by = c("WardName", "WardCode"))
     
     # Get list of de-prioritized wards
     deprioritized_wards <- map_data %>%
       filter(!MeetsThreshold) %>%
       arrange(overall_rank) %>%
-      select(WardName, UrbanPercent, overall_rank)
+      select(WardName,WardCode, UrbanPercentage, overall_rank)
     
     return(deprioritized_wards)
   })
@@ -2292,7 +2295,7 @@ server <- function(input, output, session) {
   
   #' Show urban info for selected ward
   output$selected_ward_urban_info <- renderUI({
-    req(input$selected_ward, rv$shp_data, rv$data, input$urban_threshold)
+    req(input$selected_ward, rv$shp_data, rv$raw_data, input$urban_threshold)
     
     # Get urban info for the selected ward
     ward_data <- rv$shp_data %>% filter(WardName == input$selected_ward)
@@ -2307,12 +2310,13 @@ server <- function(input, output, session) {
     # Apply urban extent threshold filtering with DYNAMIC threshold
     filtered_data <- filter_by_urban_extent(ward_data, rv$raw_data, threshold)
     
-    
-    
+   
     # Get urban percentage and threshold status
-    urban_percent <- as.numeric(filtered_data$UrbanPercentange)
+    urban_percent <- as.numeric(filtered_data$UrbanPercentage)
     meets_threshold <- as.numeric(filtered_data$MeetsThreshold)
     
+    
+
     
     
     # Get vulnerability rank if available
@@ -2364,7 +2368,7 @@ server <- function(input, output, session) {
   
   #' Create ward grid and map
   observeEvent(input$plot_ward_map, {
-    req(input$selected_ward, rv$shp_data)
+    req(input$selected_ward, rv$shp_data, rv$raw_data, input$urban_threshold)
     
     withProgress(message = 'Processing ward data...', value = 0, {
       incProgress(0.2, detail = "Loading ward data...")
@@ -2400,8 +2404,13 @@ server <- function(input, output, session) {
       ward_data <- rv$shp_data %>%
         filter(WardName == input$selected_ward)
       
-      threshold <- 30
+      #threshold <- 30 # why is this hard coded 
+      threshold <- as.numeric(input$urban_threshold)
+      
+      
       filtered_ward <- filter_by_urban_extent(ward_data, rv$raw_data, threshold)
+      
+
       is_prioritized <- filtered_ward$MeetsThreshold[1]
       
       # Render the map with our enhanced function
@@ -2634,14 +2643,14 @@ server <- function(input, output, session) {
       export_data$GridCellDescription <- paste0(input$grid_cell_size, "m × ", input$grid_cell_size, "m square (for operational purposes)")
       
       # Get urban info
-      if (!is.null(rv$shp_data)) {
-        ward_data <- rv$shp_data %>%
+      if (!is.null(rv$raw_data)) {
+        ward_data <- rv$raw_data %>%
           filter(WardName == input$selected_ward)
         
         if (nrow(ward_data) > 0) {
           # Get urban percentage
-          urban_percent <- if ("UrbanPercent" %in% names(ward_data)) {
-            ward_data$UrbanPercent[1]
+          urban_percent <- if ("UrbanPercentage" %in% names(ward_data)) {
+            ward_data$UrbanPercentage[1]
           } else if ("Urban" %in% names(ward_data)) {
             ifelse(ward_data$Urban[1] == "Yes", 100, 0)
           } else {
@@ -2673,7 +2682,7 @@ server <- function(input, output, session) {
   
   # Create ward map with grid classifications
   observeEvent(input$plot_ward_map, {
-    req(input$selected_ward, rv$shp_data)
+    req(input$selected_ward, rv$shp_data, input$urban_threshold)
     
     withProgress(message = 'Processing ward data...', value = 0, {
       incProgress(0.2, detail = "Loading ward data...")
@@ -2709,9 +2718,16 @@ server <- function(input, output, session) {
       ward_data <- rv$shp_data %>%
         filter(WardName == input$selected_ward)
       
-      threshold <- 30
-      filtered_ward <- filter_by_urban_extent(ward_data, rv$data, threshold)
+      #threshold <- 30
+      threshold <- input$urban_threshold
+      filtered_ward <- filter_by_urban_extent(ward_data, rv$raw_data, threshold)
       is_prioritized <- filtered_ward$MeetsThreshold[1]
+      
+      print("gridded_ward")
+      print(head(grid_data))
+      print("filtered_data")
+      print(filtered_ward)
+      
       
       # Render the map with our enhanced function
       output$ward_map <- renderLeaflet({
@@ -2829,13 +2845,15 @@ server <- function(input, output, session) {
     }
   )
   
+  
+  
   #============================================================================
   # Net Distribution
   #============================================================================
   
   #' Process grid annotations to find overrides for prioritized wards
   observe({
-    req(rv$grid_annotations(), rv$shp_data)
+    req(rv$grid_annotations(), rv$raw_data, rv$shp_data)
     
     # Get all annotations
     annotations <- rv$grid_annotations()
@@ -2847,7 +2865,7 @@ server <- function(input, output, session) {
     
     # Apply urban extent threshold filtering with fixed 30% threshold
     threshold <- 30
-    filtered_data <- filter_by_urban_extent(rv$shp_data, rv$data, threshold)
+    filtered_data <- filter_by_urban_extent(rv$shp_data, rv$raw_data, threshold)
     
     # Find prioritized wards (below threshold) - UPDATED TERMINOLOGY
     prioritized_wards <- filtered_data %>%
