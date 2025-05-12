@@ -645,6 +645,26 @@ process_model_score <- function(data_to_process) {
 }
 
 
+#' Generate model formulas
+#'
+#' @param model_data Model data from composite_score_models
+#' @return Dataframe with model formulas
+models_formulas <- function(model_data) {
+  model_formulas_data <- data.frame(model = character(), 
+                                    variables = character(),
+                                    stringsAsFactors = FALSE)
+  
+  for (index in seq_along(model_data)) {
+    model_formula <- data.frame(model = paste0("model_", index), 
+                                variables = paste(gsub("normalization_", "", model_data[[index]]), collapse = " + "),
+                                stringsAsFactors = FALSE)
+    
+    model_formulas_data <- rbind(model_formulas_data, model_formula)
+  }
+  
+  return(model_formulas_data)
+}
+
 #' Plot model score map
 #'
 #' @param shp_data Shapefile data
