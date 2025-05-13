@@ -145,7 +145,7 @@ def prepare_geodataframe_for_json(gdf):
     
     return gdf_copy
 
-def create_plotly_html(fig, filename, include_plotlyjs='cdn'):
+def create_plotly_html(fig, filename, include_plotlyjs='cdn', config=None):
     """
     Convert plotly figure to HTML file, saving to the INSTANCE path's upload folder.
 
@@ -153,6 +153,7 @@ def create_plotly_html(fig, filename, include_plotlyjs='cdn'):
         fig: Plotly figure object
         filename: Desired output filename (will be secured)
         include_plotlyjs: How to include plotly.js ('cdn' or True for full)
+        config: Optional configuration dictionary for Plotly
 
     Returns:
         str: Web-accessible path using the /serve_viz_file/ route, or None on error.
@@ -189,11 +190,14 @@ def create_plotly_html(fig, filename, include_plotlyjs='cdn'):
     # Define the full path to the file on disk
     file_path_disk = os.path.join(session_folder_disk, safe_filename)
 
-    config = {
-        'responsive': True,
-        'displayModeBar': True,
-        'scrollZoom': True
-    }
+    # Use provided config or default to responsive options
+    if config is None:
+        config = {
+            'responsive': True,
+            'displayModeBar': True,
+            'scrollZoom': True,
+            'fillFrame': True  # Add fillFrame to maximize plot area
+        }
 
     # Write HTML file to the correct disk path
     try:
@@ -514,7 +518,7 @@ def create_variable_map(data_handler, variable_name=None):
                 )
             )
         
-        # Update overall layout
+        # Update overall layout - IMPORTANT CHANGES HERE
         fig.update_layout(
             title={
                 'text': f"Distribution of {full_variable_name}",
@@ -522,14 +526,26 @@ def create_variable_map(data_handler, variable_name=None):
                 'xanchor': 'center',
                 'font': {'size': 20}
             },
-            height=480,  # Reduced height for better fit
-            width=800,   # Reduced width for better fit
-            margin=dict(l=20, r=20, t=80, b=20),  # Adjusted margins
-            autosize=True  # Enable autosize for responsiveness
+            # Remove fixed dimensions
+            # height=480,  # Remove fixed height
+            # width=800,   # Remove fixed width
+            margin=dict(l=20, r=20, t=80, b=20),
+            autosize=True,  # Enable responsive sizing
+            paper_bgcolor='rgba(255,255,255,0.8)',
+            plot_bgcolor='rgba(255,255,255,0.8)'
         )
         
-        # Create HTML file
-        html_path = create_plotly_html(fig, f"variable_map_{actual_variable}.html")
+        # Create HTML file with improved config
+        html_path = create_plotly_html(
+            fig, 
+            f"variable_map_{actual_variable}.html", 
+            config={
+                'responsive': True,
+                'displayModeBar': True,
+                'scrollZoom': True,
+                'fillFrame': True  # Fill frame completely
+            }
+        )
         
         # Return success with paths and metadata
         message = "Missing values detected and cleaned." if has_missing else "No missing values detected."

@@ -6,6 +6,8 @@ import uuid
 import logging
 import pandas as pd
 import re
+import nltk
+from nltk.corpus import stopwords
 from datetime import datetime
 from flask import Blueprint, render_template, request, jsonify, current_app, session, send_from_directory
 from werkzeug.utils import secure_filename
@@ -14,6 +16,7 @@ import openai
 from .models.data_handler import DataHandler
 import app.models.visualization as viz
 import app.models.report_generator as report_gen
+from .kb import get_knowledge
 
 from flask import Blueprint, render_template, request, jsonify, current_app, session, send_from_directory # ensure send_from_directory is imported
 
@@ -24,12 +27,52 @@ logger = logging.getLogger(__name__)
 # Create blueprint
 main_bp = Blueprint('main', __name__)
 
+# --- Load Stopwords (Do this once when the module loads) ---
+try:
+    nltk_stopwords = set(stopwords.words('english'))
+    logger.info(f"Loaded {len(nltk_stopwords)} English stopwords from NLTK.")
+except LookupError:
+    logger.warning("NLTK stopwords corpus not found. Downloading it now...")
+    try:
+        nltk.download('stopwords', quiet=True)
+        nltk_stopwords = set(stopwords.words('english'))
+        logger.info(f"Successfully downloaded and loaded {len(nltk_stopwords)} NLTK stopwords.")
+    except Exception as e:
+        logger.error(f"Failed to download NLTK stopwords: {e}")
+        # Provide a minimal fallback list if download failed
+        nltk_stopwords = set(['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing', 'a', 'an', 'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until', 'while', 'of', 'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now'])
+
+# Add domain-specific words and common chat words to exclude from variable extraction
+DOMAIN_STOPWORDS = set([
+    'analysis', 'analyze', 'analyzed', 'composite', 'score', 'calculation', 'calculate', 'map', 'plot', 'variable',
+    'variables', 'data', 'model', 'rank', 'ranking', 'rankings', 'risk', 'vulnerability', 'vulnerable',
+    'show', 'tell', 'give', 'list', 'use', 'used', 'using', 'generate', 'create', 'run', 'start',
+    'normalized', 'normalization', 'urban', 'extent', 'threshold', 'report', 'download',
+    'ward', 'wards', 'wardname', 'file', 'upload', 'please', 'thank', 'thanks', 'ok', 'okay',
+    'yes', 'yeah', 'sure', 'hello', 'hi', 'hey', 'help', 'assistant', 'tool',
+    'did', # Keep critical function words if nltk list failed
+    'what', 'which', 'how', 'why', 'when', 'where', # Question words
+])
+
+# Combine NLTK and domain stopwords
+STOP_WORDS = nltk_stopwords.union(DOMAIN_STOPWORDS)
+logger.info(f"Total stopwords including domain-specific: {len(STOP_WORDS)}")
+
+# --- Define patterns for parsing ---
+QUESTION_PATTERNS = [
+    r'^\s*what\s+', r'^\s*which\s+', r'^\s*how\s+', r'^\s*why\s+',
+    r'did you use', r'were used', r'variables\s+used', r'explain\s+the\s+variables',
+    r'details\s+on\s+variables', r'can you explain', r'tell me about', r'explanation of'
+]
+RERUN_KEYWORDS = ['rerun', 'run again', 're-run', 're analyze', 're-analyze']
+
 # Allowed file extensions
 ALLOWED_EXTENSIONS_CSV = {'csv', 'xlsx', 'xls'}
 ALLOWED_EXTENSIONS_SHP = {'zip'}
 
 def allowed_file(filename, allowed_extensions):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
+
 
 @main_bp.route('/')
 def index():
@@ -43,6 +86,11 @@ def index():
         session['csv_loaded'] = False
         session['shapefile_loaded'] = False
         session['current_language'] = 'en'
+        # Initialize dialogue state tracking for Phase 3
+        session['pending_action'] = None
+        session['pending_variables'] = None
+        session['last_visualization'] = None
+        session['dialogue_context'] = {}
     
     return render_template('index.html')
 
@@ -171,7 +219,7 @@ def upload_shapefile():
 
 @main_bp.route('/run_analysis', methods=['POST'])
 def run_analysis():
-    """Run the complete analysis workflow"""
+    """Run the analysis directly (used for API calls, not main chat flow)"""
     try:
         # Get session folder path
         session_id = session.get('session_id', 'default')
@@ -272,7 +320,6 @@ def run_analysis():
         }), 500
     
 
-
 @main_bp.route('/load_sample_data', methods=['POST'])
 def load_sample_data():
     """Load pre-packaged sample data into the user's session."""
@@ -322,10 +369,10 @@ def load_sample_data():
         session['csv_filename'] = 'sample_data.csv'
         session['csv_rows'] = csv_result.get('rows', 0)
         session['csv_columns'] = csv_result.get('columns', 0)
-        # Extract and store available variables & metadata (using helper functions if refactored)
-        available_variables = get_available_variables(temp_data_handler) # Assuming this helper exists
+        # Extract and store available variables & metadata 
+        available_variables = get_available_variables(temp_data_handler)
         session['available_variables'] = available_variables
-        session['variable_metadata'] = extract_variable_metadata(temp_data_handler) # Assuming this helper exists
+        session['variable_metadata'] = extract_variable_metadata(temp_data_handler)
         logger.info("Sample CSV processed and session updated.")
 
         # Load Shapefile and update session
@@ -371,10 +418,6 @@ def load_sample_data():
         # Clean up potentially partially copied files? Maybe not necessary.
         return jsonify({'status': 'error', 'message': f'An internal error occurred while loading sample data: {str(e)}'}), 500
 
-# Make sure helper functions get_available_variables and extract_variable_metadata are accessible
-# If they are not defined globally, you might need to instantiate DataHandler and call its methods
-# or refactor them out. The code above assumes they are available.
-
 
 @main_bp.route('/serve_viz_file/<session_id>/<path:filename>')
 def serve_viz_file(session_id, filename):
@@ -399,42 +442,6 @@ def serve_viz_file(session_id, filename):
     
 
 
-
-def get_data_handler():
-    """Get the data handler for the current session"""
-    session_id = session.get('session_id', 'default')
-    session_data = current_app.config.get('SESSION_DATA', {})
-    
-    if session_id in session_data:
-        return session_data[session_id]['data_handler']
-    
-    # Create new data handler if not found
-    session_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], session_id)
-    data_handler = DataHandler(session_folder)
-    
-    # Load files if they exist in session
-    csv_filename = session.get('csv_filename', '')
-    shapefile_filename = session.get('shapefile_filename', '')
-    
-    if csv_filename:
-        csv_path = os.path.join(session_folder, csv_filename)
-        if os.path.exists(csv_path):
-            data_handler.load_csv(csv_path)
-    
-    if shapefile_filename:
-        shp_path = os.path.join(session_folder, shapefile_filename)
-        if os.path.exists(shp_path):
-            data_handler.load_shapefile(shp_path)
-    
-    # Store in session data
-    current_app.config.setdefault('SESSION_DATA', {})
-    current_app.config['SESSION_DATA'][session_id] = {
-        'data_handler': data_handler,
-        'timestamp': datetime.now()
-    }
-    
-    return data_handler
-
 @main_bp.route('/get_visualization', methods=['POST'])
 def get_visualization():
     """Handle visualization requests directly"""
@@ -457,67 +464,25 @@ def get_visualization():
             'ai_response': "I need to run the analysis before I can show you visualizations. Would you like me to run the analysis now?"
         })
     
+    # Update session to track last visualization for context
+    session['last_visualization'] = {
+        'type': viz_type,
+        'variable': variable,
+        'threshold': threshold,
+        'timestamp': datetime.now().isoformat()
+    }
+    
     # Handle different visualization types properly
     try:
-        if viz_type == 'variable_map':
-            # Call the variable map function with the specified variable
-            # Note: Allow viewing any variable in the CSV data, not just those in the analysis
-            result = viz.create_variable_map(data_handler, variable)
-        elif viz_type == 'normalized_map':
-            # Call the normalized map function with the specified variable
-            result = viz.create_normalized_map(data_handler, variable)
-        elif viz_type == 'composite_map':
-            # Call the composite map function
-            result = viz.create_composite_map(data_handler)
-        elif viz_type == 'vulnerability_plot':
-            # Call the box plot function to generate the vulnerability plot
-            if hasattr(data_handler, 'composite_scores') and data_handler.composite_scores is not None:
-                # Convert any NumPy data types to Python native types before creating the box plot
-                box_plot_result = viz.box_plot_function(data_handler.composite_scores['scores'])
-                if box_plot_result['status'] == 'success':
-                    # Store the box plot data for pagination
-                    data_handler.boxwhisker_plot = box_plot_result
-                    # Get the first plot
-                    plot_fig = box_plot_result['plots'][0]
-                    # Save as HTML
-                    html_path = viz.create_plotly_html(plot_fig, "vulnerability_plot.html")
-                    # Create result dict - convert any NumPy types to native Python types for JSON serialization
-                    result = {
-                        'status': 'success',
-                        'message': 'Successfully generated vulnerability plot',
-                        'image_path': html_path,
-                        'current_page': int(1),
-                        'total_pages': int(box_plot_result['total_pages']),
-                        'viz_type': 'vulnerability_plot',
-                        'ai_response': "Here's the vulnerability ranking box and whisker plot showing wards from most vulnerable (top) to least vulnerable (bottom). Each horizontal bar represents a ward, with the box showing the range of vulnerability scores across different models. This visualization helps identify priority areas for intervention."
-                    }
-                else:
-                    result = box_plot_result
-            else:
-                result = {
-                    'status': 'error',
-                    'message': 'Composite scores not available for vulnerability plot',
-                    'ai_response': "I couldn't generate the vulnerability box plot because the composite scores haven't been calculated yet. Let's run the analysis first."
-                }
-        elif viz_type == 'vulnerability_map':
-            # Call the vulnerability map function
-            result = viz.create_vulnerability_map(data_handler)
-        elif viz_type == 'urban_extent_map':
-            # Call the urban extent map function with the specified threshold
-            result = viz.create_urban_extent_map(data_handler, threshold)
-        elif viz_type == 'decision_tree':
-            # Call the decision tree function
-            result = viz.create_decision_tree_plot(data_handler)
-        else:
-            result = {
-                'status': 'error',
-                'message': f'Unknown visualization type: {viz_type}',
-                'ai_response': f"I'm not sure what visualization you're looking for. You can ask for variable maps, normalized maps, composite maps, vulnerability plots, vulnerability maps, or urban extent maps."
-            }
+        result = get_visualization_result({
+            'type': viz_type,
+            'variable': variable,
+            'threshold': threshold
+        }, data_handler)
         
-        # Ensure the result is serializable BEFORE jsonify
-        serializable_result = convert_to_json_serializable(result) # CALL THE HELPER HERE
-        return jsonify(serializable_result) # Pass the cleaned dict to jsonify
+        # Ensure the result is serializable
+        serializable_result = convert_to_json_serializable(result)
+        return jsonify(serializable_result)
 
     except Exception as e:
         logger.error(f"Error generating visualization: {str(e)}", exc_info=True) # Use exc_info=True for full traceback in log
@@ -528,1317 +493,1900 @@ def get_visualization():
             'ai_response': f"I encountered an error while creating the visualization. Please check the logs or try again."
         }
         return jsonify(convert_to_json_serializable(error_result)), 500 # Return 500 for server error
-    
-
-def convert_to_json_serializable(obj):
-    """
-    Recursively convert objects to JSON serializable types.
-    Specifically handles NumPy types which are not JSON serializable by default.
-    """
-    if isinstance(obj, dict):
-        return {k: convert_to_json_serializable(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_to_json_serializable(item) for item in obj]
-    # ------ ADDED/MODIFIED HANDLING for NumPy types ------
-    elif isinstance(obj, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32,
-                         np.int64, np.uint8, np.uint16, np.uint32, np.uint64)):
-        return int(obj) # Convert numpy int to python int
-    elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
-         # Note: np.float_ was removed in NumPy 2.0, kept for broader compatibility if needed
-         # but the error indicates you are using NumPy >= 2.0. So let's remove np.float_
-         # Use np.floating to catch all float types robustly
-         return float(obj) # Convert numpy float to python float
-    elif isinstance(obj, (np.complex_, np.complex64, np.complex128)):
-        return {'real': obj.real, 'imag': obj.imag} # Example: represent complex as dict
-    elif isinstance(obj, (np.bool_)):
-         return bool(obj) # Convert numpy bool to python bool
-    elif isinstance(obj, (np.void)):
-         return None # Handle numpy void type, e.g., by returning None or converting appropriately
-    # ------ END OF ADDED/MODIFIED HANDLING ------
-    elif isinstance(obj, np.ndarray):
-        return convert_to_json_serializable(obj.tolist()) # Existing good handling for arrays
-    elif pd.isna(obj): # Handle Pandas NA types
-        return None
-    elif isinstance(obj, (pd.Timestamp)): # Handle Pandas Timestamp
-        return obj.isoformat()
-    elif obj is None or isinstance(obj, (str, int, float, bool)):
-         # Check basic types last
-        return obj
-    else:
-        # For other types, try regular conversion or convert to string if that fails
-        try:
-            # Check if it has a to_dict method (like some complex objects might)
-            if hasattr(obj, 'to_dict') and callable(getattr(obj, 'to_dict')):
-                 return convert_to_json_serializable(obj.to_dict())
-            # Last resort: convert to string
-            return str(obj)
-        except (TypeError, OverflowError):
-            logger.warning(f"Could not serialize object of type {type(obj)}, converting to string.")
-            return str(obj)
 
 @main_bp.route('/navigate_composite_map', methods=['POST'])
 def navigate_composite_map():
-    """Handle pagination for composite maps"""
-    data = request.json
-    direction = data.get('direction', '')
-    
-    if not direction or direction not in ['next', 'prev']:
-        return jsonify({'status': 'error', 'message': 'Invalid navigation direction'}), 400
-    
-    # Get data handler
-    data_handler = get_data_handler()
-    
-    # Get current page from request or session
-    current_page = data.get('current_page', session.get('current_composite_map_page', 1))
-    
-    # Determine new page based on direction
-    if direction == 'next':
-        new_page = current_page + 1
-    else:  # prev
-        new_page = max(1, current_page - 1)
-    
-    # Get the composite map for the new page
-    result = viz.create_composite_map(data_handler, new_page)
-    
-    if result['status'] == 'success':
-        # Update session with new page info
-        session['current_composite_map_page'] = result.get('current_page', 1)
-        
-        # Ensure all values in the result dictionary are JSON serializable
-        result = convert_to_json_serializable(result)
-        
-        return jsonify(result)
-    else:
-        return jsonify({
-            'status': 'error',
-            'message': result.get('message', 'Error navigating composite maps')
-        }), 400
+   """Handle pagination for composite maps"""
+   data = request.json
+   direction = data.get('direction', '')
+   
+   if not direction or direction not in ['next', 'prev']:
+       return jsonify({'status': 'error', 'message': 'Invalid navigation direction'}), 400
+   
+   # Get data handler
+   data_handler = get_data_handler()
+   
+   # Get current page from request or session
+   current_page = data.get('current_page', session.get('current_composite_map_page', 1))
+   
+   # Determine new page based on direction
+   if direction == 'next':
+       new_page = current_page + 1
+   else:  # prev
+       new_page = max(1, current_page - 1)
+   
+   # Get the composite map for the new page
+   result = viz.create_composite_map(data_handler, new_page)
+   
+   if result['status'] == 'success':
+       # Update session with new page info
+       session['current_composite_map_page'] = result.get('current_page', 1)
+       
+       # Ensure all values in the result dictionary are JSON serializable
+       result = convert_to_json_serializable(result)
+       
+       return jsonify(result)
+   else:
+       return jsonify({
+           'status': 'error',
+           'message': result.get('message', 'Error navigating composite maps')
+       }), 400
 
 @main_bp.route('/navigate_boxplot', methods=['POST'])
 def navigate_boxplot():
-    """Handle pagination for box and whisker plots"""
-    data = request.json
-    direction = data.get('direction', '')
-    
-    if not direction or direction not in ['next', 'prev']:
-        return jsonify({'status': 'error', 'message': 'Invalid navigation direction'}), 400
-    
-    # Get data handler
-    data_handler = get_data_handler()
-    
-    # Check if box plot data is available
-    if not hasattr(data_handler, 'boxwhisker_plot') or not data_handler.boxwhisker_plot:
-        return jsonify({
-            'status': 'error',
-            'message': 'Box plot data not available'
-        }), 400
-    
-    # Get current page from request or session
-    current_page = data.get('current_page', session.get('current_boxplot_page', 1))
-    total_pages = len(data_handler.boxwhisker_plot['plots'])
-    
-    # Determine new page based on direction
-    if direction == 'next':
-        new_page = min(current_page + 1, total_pages)
-    else:  # prev
-        new_page = max(1, current_page - 1)
-    
-    # Get the plot for the new page
-    if 1 <= new_page <= total_pages:
-        plot_fig = data_handler.boxwhisker_plot['plots'][new_page - 1]
-    else:
-        return jsonify({
-            'status': 'error',
-            'message': f'Invalid page number: {new_page}. Valid range is 1-{total_pages}'
-        }), 400
-    
-    # Save as HTML
-    html_path = viz.create_plotly_html(plot_fig, f"vulnerability_plot_page{new_page}.html")
-    
-    # Update session
-    session['current_boxplot_page'] = new_page
-    
-    # Return result
-    result = {
-        'status': 'success',
-        'message': f'Successfully navigated to box plot page {new_page}',
-        'image_path': html_path,
-        'current_page': int(new_page),
-        'total_pages': int(total_pages),
-        'viz_type': 'vulnerability_plot'
-    }
-    
-    # Ensure all values in the result dictionary are JSON serializable
-    result = convert_to_json_serializable(result)
-    
-    return jsonify(result)
+   """Handle pagination for box and whisker plots"""
+   data = request.json
+   direction = data.get('direction', '')
+   
+   if not direction or direction not in ['next', 'prev']:
+       return jsonify({'status': 'error', 'message': 'Invalid navigation direction'}), 400
+   
+   # Get data handler
+   data_handler = get_data_handler()
+   
+   # Check if box plot data is available
+   if not hasattr(data_handler, 'boxwhisker_plot') or not data_handler.boxwhisker_plot:
+       return jsonify({
+           'status': 'error',
+           'message': 'Box plot data not available'
+       }), 400
+   
+   # Get current page from request or session
+   current_page = data.get('current_page', session.get('current_boxplot_page', 1))
+   total_pages = len(data_handler.boxwhisker_plot['plots'])
+   
+   # Determine new page based on direction
+   if direction == 'next':
+       new_page = min(current_page + 1, total_pages)
+   else:  # prev
+       new_page = max(1, current_page - 1)
+   
+   # Get the plot for the new page
+   if 1 <= new_page <= total_pages:
+       plot_fig = data_handler.boxwhisker_plot['plots'][new_page - 1]
+   else:
+       return jsonify({
+           'status': 'error',
+           'message': f'Invalid page number: {new_page}. Valid range is 1-{total_pages}'
+       }), 400
+   
+   # Save as HTML
+   html_path = viz.create_plotly_html(plot_fig, f"vulnerability_plot_page{new_page}.html")
+   
+   # Update session
+   session['current_boxplot_page'] = new_page
+   
+   # Return result
+   result = {
+       'status': 'success',
+       'message': f'Successfully navigated to box plot page {new_page}',
+       'image_path': html_path,
+       'current_page': int(new_page),
+       'total_pages': int(total_pages),
+       'viz_type': 'vulnerability_plot'
+   }
+   
+   # Ensure all values in the result dictionary are JSON serializable
+   result = convert_to_json_serializable(result)
+   
+   return jsonify(result)
 
 @main_bp.route('/update_boxplot_pagination', methods=['POST'])
 def update_boxplot_pagination():
-    """Update box plot pagination with new wards per page"""
-    data = request.json
-    wards_per_page = data.get('wards_per_page', 20)
-    
-    # Get data handler
-    data_handler = get_data_handler()
-    
-    # Check if composite scores are available
-    if not hasattr(data_handler, 'composite_scores') or not data_handler.composite_scores:
-        return jsonify({
-            'status': 'error',
-            'message': 'Composite scores not available'
-        }), 400
-    
-    # Generate new box plot with updated wards per page
-    box_plot_result = viz.box_plot_function(data_handler.composite_scores['scores'], wards_per_page)
-    
-    if box_plot_result['status'] == 'success':
-        # Store the box plot data for pagination
-        data_handler.boxwhisker_plot = box_plot_result
-        # Get the first plot
-        plot_fig = box_plot_result['plots'][0]
-        # Save as HTML
-        html_path = viz.create_plotly_html(plot_fig, "vulnerability_plot.html")
-        
-        # Update session
-        session['current_boxplot_page'] = 1
-        
-        # Return result
-        result = {
-            'status': 'success',
-            'message': 'Successfully updated box plot pagination',
-            'image_path': html_path,
-            'current_page': 1,
-            'total_pages': box_plot_result['total_pages'],
-            'viz_type': 'vulnerability_plot'
-        }
-        
-        # Ensure all values in the result dictionary are JSON serializable
-        result = convert_to_json_serializable(result)
-        
-        return jsonify(result)
-    else:
-        return jsonify({
-            'status': 'error',
-            'message': box_plot_result.get('message', 'Error updating box plot pagination')
-        }), 400
+   """Update box plot pagination with new wards per page"""
+   data = request.json
+   wards_per_page = data.get('wards_per_page', 20)
+   
+   # Get data handler
+   data_handler = get_data_handler()
+   
+   # Check if composite scores are available
+   if not hasattr(data_handler, 'composite_scores') or not data_handler.composite_scores:
+       return jsonify({
+           'status': 'error',
+           'message': 'Composite scores not available'
+       }), 400
+   
+   # Generate new box plot with updated wards per page
+   box_plot_result = viz.box_plot_function(data_handler.composite_scores['scores'], wards_per_page)
+   
+   if box_plot_result['status'] == 'success':
+       # Store the box plot data for pagination
+       data_handler.boxwhisker_plot = box_plot_result
+       # Get the first plot
+       plot_fig = box_plot_result['plots'][0]
+       # Save as HTML
+       html_path = viz.create_plotly_html(plot_fig, "vulnerability_plot.html")
+       
+       # Update session
+       session['current_boxplot_page'] = 1
+       
+       # Return result
+       result = {
+           'status': 'success',
+           'message': 'Successfully updated box plot pagination',
+           'image_path': html_path,
+           'current_page': 1,
+           'total_pages': box_plot_result['total_pages'],
+           'viz_type': 'vulnerability_plot'
+       }
+       
+       # Ensure all values in the result dictionary are JSON serializable
+       result = convert_to_json_serializable(result)
+       
+       return jsonify(result)
+   else:
+       return jsonify({
+           'status': 'error',
+           'message': box_plot_result.get('message', 'Error updating box plot pagination')
+       }), 400
+
+@main_bp.route('/download_report/<filename>')
+def download_report(filename):
+   """Handle report downloads"""
+   # REPORTS_FOLDER now points to instance_path/reports
+   session_folder = os.path.join(current_app.config['REPORTS_FOLDER'], session.get('session_id', 'default'))
+   
+   # Security check
+   safe_path = os.path.abspath(os.path.join(session_folder, filename))
+   if not safe_path.startswith(os.path.abspath(session_folder)):
+       logger.error(f"Attempt to access unsafe report path: {filename}")
+       return jsonify({'status': 'error', 'message': 'Invalid file path.'}), 400
+
+   if not os.path.exists(safe_path):
+       logger.error(f"Report file not found: {safe_path}")
+       return jsonify({'status': 'error', 'message': 'Report file not found.'}), 404
+   try:
+       return send_from_directory(session_folder, filename, as_attachment=True)
+   except Exception as e:
+       logger.error(f"Error serving report file {filename} for session {session.get('session_id', 'default')}: {e}")
+       return jsonify({'status': 'error', 'message': 'Could not serve report file.'}), 500
+
 
 @main_bp.route('/send_message', methods=['POST'])
 def send_message():
-    """Handle chat messages and AI responses"""
+    """
+    Handle chat messages and AI responses (Phase 3 enhanced with dialogue state tracking).
+    Manages all conversational flows including pending actions, confirmations, and explanations.
+    """
     data = request.json
     user_message = data.get('message', '')
-    
-    if not user_message:
+    if not user_message: 
         return jsonify({'status': 'error', 'message': 'No message provided'}), 400
-    
-    # Get data handler
+
+    # Get current session state and data handler
     data_handler = get_data_handler()
-    
-    # Get current session state
     session_state = {
         'csv_loaded': session.get('csv_loaded', False),
         'shapefile_loaded': session.get('shapefile_loaded', False),
-        'data_loaded': session.get('data_loaded', False),
         'analysis_complete': session.get('analysis_complete', False),
         'current_language': session.get('current_language', 'en')
     }
     
-    # Parse intent from message - SIMPLIFIED to handle only variables for custom analysis
-    intent = parse_message_intent(user_message, session_state, data_handler)
+    # Get available variables for validation
+    available_vars = session.get('available_variables', [])
+    if not available_vars and data_handler:
+         available_vars = get_available_variables(data_handler)
+         session['available_variables'] = available_vars
     
-    # Process message based on intent
-    if intent['type'] == 'run_analysis' and all([session.get('csv_loaded', False), session.get('shapefile_loaded', False)]):
-        # Run the analysis logic
-        try:
-            # Run the full analysis pipeline
-            logger.info("Starting full analysis pipeline...")
-            result = data_handler.run_full_analysis()
+    # Get variable metadata for better matching
+    variable_metadata = session.get('variable_metadata', None)
+    if not variable_metadata and data_handler:
+         variable_metadata = extract_variable_metadata(data_handler)
+         session['variable_metadata'] = variable_metadata
+    
+    # --- PHASE 3: Dialogue State Tracking ---
+    # Check if there's a pending action that requires user confirmation
+    pending_action = session.get('pending_action', None)
+    pending_variables = session.get('pending_variables', None)
+    last_visualization = session.get('last_visualization', None)
+    dialogue_context = session.get('dialogue_context', {})
+
+    # --- Handle Custom Analysis Confirmation Flow ---
+    if pending_action == 'confirm_custom_analysis' and pending_variables:
+        # Check if user confirmed or denied
+        user_confirmation = is_confirmation(user_message)
+        
+        if user_confirmation is True:  # User confirmed
+            logger.info(f"User confirmed custom analysis with variables: {pending_variables}")
             
-            if result['status'] == 'success':
-                # Store data handler in session config
-                session_id = session.get('session_id', 'default')
-                current_app.config.setdefault('SESSION_DATA', {})
-                current_app.config['SESSION_DATA'][session_id] = {
-                    'data_handler': data_handler,
-                    'timestamp': datetime.now()
-                }
+            # Reset pending state
+            session['pending_action'] = None
+            session['pending_variables'] = None
+            
+            # Run the custom analysis with the pending variables
+            try:
+                # Check if both files are loaded
+                if not all([session_state['csv_loaded'], session_state['shapefile_loaded']]):
+                    return jsonify({
+                        'status': 'error', 
+                        'response': "Please upload both data files first before running analysis.",
+                        'action': 'error'
+                    })
                 
+                result = data_handler.run_full_analysis(selected_variables=pending_variables)
+                
+                if result['status'] == 'success':
+                    # Update session state
+                    session['analysis_complete'] = True
+                    session['analysis_result'] = {
+                        'variables_used': result.get('variables_used', []),
+                        'vulnerable_wards': result.get('vulnerable_wards', [])[:5],
+                        'variable_selection_method': 'custom',
+                        'steps': {k: v.get('message', '') for k, v in result.get('steps', {}).items()}
+                    }
+                    
+                    # Prepare success response
+                    ai_response = generate_analysis_success_message(result, is_custom=True)
+                    return jsonify({
+                        'status': 'success', 
+                        'response': ai_response, 
+                        'action': 'analysis_complete'
+                    })
+                else:
+                    return jsonify({
+                        'status': 'error', 
+                        'response': f"Error running custom analysis: {result.get('message', 'Unknown error')}", 
+                        'action': 'error'
+                    })
+            except Exception as e:
+                logger.error(f"Error running custom analysis after confirmation: {e}", exc_info=True)
+                return jsonify({
+                    'status': 'error', 
+                    'response': f"Error running custom analysis: {str(e)}", 
+                    'action': 'error'
+                })
+                
+        elif user_confirmation is False:  # User denied
+            logger.info("User cancelled custom analysis")
+            
+            # Reset pending state
+            session['pending_action'] = None
+            session['pending_variables'] = None
+            
+            # Return cancellation response
+            return jsonify({
+                'status': 'success', 
+                'response': "Custom analysis cancelled. Would you like to run the standard analysis instead?",
+                'action': None
+            })
+        
+        else:  # User didn't clearly confirm or deny
+            # Keep the pending state and ask for clarification
+            return jsonify({
+                'status': 'success', 
+                'response': "I'm not sure if you want to proceed with the custom analysis. Please respond with 'yes' to confirm or 'no' to cancel.",
+                'action': None
+            })
+
+    # --- Handle Possible Clarification Turn ---
+    # If dialogue_context has a 'expecting_clarification' and refers to a certain entity
+    if dialogue_context.get('expecting_clarification', False):
+        clarification_type = dialogue_context.get('clarification_type')
+        
+        if clarification_type == 'variable_specification':
+            # User was asked to specify a variable - extract and validate it
+            extracted_vars = extract_variables(user_message, available_vars, variable_metadata)
+            
+            if extracted_vars and len(extracted_vars) > 0:
+                variable = extracted_vars[0]  # Take the first one if multiple
+                viz_type = dialogue_context.get('viz_type', 'variable_map')
+                
+                # Clear the clarification state
+                dialogue_context.pop('expecting_clarification', None)
+                dialogue_context.pop('clarification_type', None)
+                session['dialogue_context'] = dialogue_context
+                
+                # Generate the visualization with the clarified variable
+                return get_visualization_response(data_handler, viz_type, variable)
+            else:
+                # Still couldn't get a valid variable, maybe they didn't understand
+                dialogue_context.pop('expecting_clarification', None)  # Give up on this clarification
+                session['dialogue_context'] = dialogue_context
+                
+                available_vars_examples = ", ".join(available_vars[:5]) + ("..." if len(available_vars) > 5 else "")
+                return jsonify({
+                    'status': 'success',
+                    'response': f"I'm sorry, I still couldn't identify a valid variable from your input. Available variables include: {available_vars_examples}. You could try asking for a specific visualization like 'Show me a map of rainfall' or 'Show me a composite map'."
+                })
+
+    # --- Phase 2/3: Use LLM for Natural Language Understanding ---
+    nlu_result = get_llm_nlu_response(user_message, session_state, available_vars, last_visualization)
+
+    # Fallback to rule-based if LLM NLU fails
+    if nlu_result is None:
+        logger.warning("LLM NLU failed, falling back to rule-based intent parsing.")
+        intent_data = parse_message_intent_fallback(user_message, session_state, data_handler)
+        intent = intent_data.get('type', 'general_query')
+        entities = intent_data  # Pass the whole dict as potential entities
+    else:
+        intent = nlu_result.get('intent', 'general_query')
+        entities = nlu_result.get('entities', {})
+
+    # --- Process intents based on NLU result ---
+    logger.info(f"Detected intent: {intent} with entities: {entities}")
+
+    # --- EXPLANATION INTENTS ---
+    # Knowledge base lookups for methodology and variable explanations
+    if intent == 'explain_methodology':
+        # Get explanation from knowledge base 
+        methodology = entities.get('methodology_type')
+        if methodology:
+            kb_content = get_knowledge('methodology', methodology)
+            if kb_content:
+                return jsonify({
+                    'status': 'success',
+                    'response': kb_content
+                })
+        
+        # If not found or not specified, provide an overview
+        return jsonify({
+            'status': 'success',
+            'response': "The MRPT tool uses several methodologies to analyze malaria risk:\n\n1. **Data Cleaning** - Handles missing values through spatial imputation and other methods\n2. **Normalization** - Scales variables to 0-1 range based on their relationship with risk\n3. **Composite Scoring** - Combines variables to create risk models\n4. **Vulnerability Ranking** - Orders wards by risk priority\n5. **Urban Extent Analysis** - Classifies areas for intervention planning\n\nWhich aspect would you like me to explain in more detail?"
+        })
+    
+    elif intent == 'explain_variable':
+        # Look up the variable explanation in the knowledge base
+        variable = entities.get('variable_name')
+        if variable:
+            # Try to match to a standard variable name
+            matched_vars = match_variables_to_dataset([variable], available_vars, variable_metadata)
+            var_to_explain = matched_vars[0] if matched_vars else variable
+            
+            kb_content = get_knowledge(var_to_explain)
+            if kb_content:
+                return jsonify({
+                    'status': 'success',
+                    'response': kb_content
+                })
+            else:
+                # Variable not found in KB, generate a generic response
+                return jsonify({
+                    'status': 'success',
+                    'response': f"The variable '{var_to_explain}' is used in malaria risk analysis, but I don't have specific details about its relationship with malaria transmission. Generally, variables in our dataset relate to environmental conditions, demographics, or epidemiological measures."
+                })
+        else:
+            # No specific variable mentioned, provide overview of variable categories
+            return jsonify({
+                'status': 'success',
+                'response': "Variables in malaria risk analysis typically fall into three categories:\n\n1. **Environmental** - Rainfall, temperature, vegetation indices, elevation, distance to water, etc.\n2. **Demographic** - Population density, housing quality, urban/rural classification, etc.\n3. **Epidemiological** - Parasite rates, test positivity, case counts, etc.\n\nWhich type of variable would you like to learn more about?"
+            })
+    
+    elif intent == 'explain_variable_category':
+        # Look up explanation for a category of variables
+        category = entities.get('variable_category', '')
+        kb_content = get_knowledge('variables', category)
+        if kb_content:
+            return jsonify({
+                'status': 'success',
+                'response': kb_content
+            })
+        else:
+            return jsonify({
+                'status': 'success',
+                'response': "I can explain three categories of variables used in malaria risk analysis:\n\n1. **Environmental variables** - Physical factors like rainfall, temperature, and elevation\n2. **Demographic variables** - Human factors like population density and housing quality\n3. **Epidemiological variables** - Disease measures like parasite rates and case counts\n\nWhich would you like to learn about?"
+            })
+    
+    # --- QUERY ANALYSIS DETAILS ---
+    elif intent == 'query_analysis_details':
+        if session_state['analysis_complete']:
+             analysis_result = session.get('analysis_result', {})
+             variables_used = analysis_result.get('variables_used', [])
+             
+             if variables_used:
+                vars_list_str = ", ".join(f"**{var}**" for var in variables_used)
+                ai_response = f"The last analysis used these variables for the composite score: {vars_list_str}."
+                
+                # Provide additional context about variable selection method
+                selection_method = analysis_result.get('variable_selection_method', 'default')
+                if selection_method == 'custom':
+                    ai_response += " These were the custom variables you specified."
+                else:
+                    ai_response += " These were selected based on their known relationship with malaria risk."
+                
+                return jsonify({'status': 'success', 'response': ai_response})
+             else:
+                return jsonify({'status': 'success', 'response': "Analysis is complete, but the specific variables used weren't recorded for this session."})
+        else:
+             return jsonify({'status': 'success', 'response': "Analysis hasn't run yet. Run the analysis first, then ask about variables."})
+
+    # --- RUN STANDARD ANALYSIS ---
+    elif intent == 'run_standard_analysis':
+        # Check data loaded
+        if not all([session_state['csv_loaded'], session_state['shapefile_loaded']]):
+             return jsonify({'status': 'error', 'response': "Please upload both data files first.", 'action': 'error'})
+        
+        try:
+            result = data_handler.run_full_analysis(selected_variables=None)
+            if result['status'] == 'success':
                 # Update session
                 session['analysis_complete'] = True
                 session['analysis_result'] = {
                     'variables_used': result.get('variables_used', []),
                     'vulnerable_wards': result.get('vulnerable_wards', [])[:5],
-                    'steps': {
-                        'clean': result.get('steps', {}).get('clean', {}).get('message', ''),
-                        'normalize': result.get('steps', {}).get('normalize', {}).get('message', ''),
-                        'composite': result.get('steps', {}).get('composite', {}).get('message', ''),
-                        'ranking': result.get('steps', {}).get('ranking', {}).get('message', ''),
-                        'urban': result.get('steps', {}).get('urban', {}).get('message', '')
-                    }
+                    'variable_selection_method': 'default',
+                     'steps': {k: v.get('message', '') for k, v in result.get('steps', {}).items()}
                 }
-                
-                # Generate AI response with results
-                ai_response = f"""
-                <p><strong>Analysis completed successfully!</strong></p>
-                <p>I've analyzed your data and here are the results:</p>
-                <ul>
-                    <li><strong>Variables used:</strong> {', '.join(result.get('variables_used', []))}</li>
-                    <li><strong>Top 5 vulnerable wards:</strong> {', '.join(result.get('vulnerable_wards', [])[:5])}</li>
-                </ul>
-                <p>You can now ask me to show you visualizations like:</p>
-                <ul>
-                    <li>Variable distribution maps</li>
-                    <li>Normalized maps for specific variables</li>
-                    <li>Composite risk maps</li>
-                    <li>Vulnerability ranking plot (box and whisker plot)</li>
-                    <li>Vulnerability map</li>
-                    <li>Urban extent maps at different thresholds</li>
-                    <li>Decision tree visualization</li>
-                </ul>
-                <p>What would you like to see first?</p>
-                """
-                
-                return jsonify({
-                    'status': 'success',
-                    'response': ai_response,
-                    'action': 'analysis_complete'
-                })
+                ai_response = generate_analysis_success_message(result, is_custom=False)
+                return jsonify({'status': 'success', 'response': ai_response, 'action': 'analysis_complete'})
             else:
-                return jsonify({
-                    'status': 'error',
-                    'response': f"Error running analysis: {result.get('message', 'Unknown error')}",
-                    'action': 'error'
-                })
-                
+                return jsonify({'status': 'error', 'response': f"Error: {result.get('message', 'Unknown')}", 'action': 'error'})
         except Exception as e:
-            logger.error(f"Error running analysis: {str(e)}")
-            return jsonify({
-                'status': 'error',
-                'response': f"Error running analysis: {str(e)}",
-                'action': 'error'
-            })
-    
-    # Handle custom analysis with variables
-    elif intent['type'] == 'run_analysis_variables' and all([session.get('csv_loaded', False), session.get('shapefile_loaded', False)]):
-        # Get the extracted variables
-        variables = intent['variables']
-        
-        # Validate variables against dataset
-        cleaned_variables = clean_and_validate_variables(data_handler, variables)
-        
-        if not cleaned_variables or len(cleaned_variables) < 2:
-            # Return a prompt for the user with available variables
-            available_vars = get_available_variables(data_handler)
-            available_vars_text = ", ".join(available_vars[:10])
-            if len(available_vars) > 10:
-                available_vars_text += f", and {len(available_vars) - 10} more"
-            
-            return jsonify({
-                'status': 'error',
-                'response': f"I couldn't find enough valid variables matching your request. You need to specify at least 2 valid variables. Some available variables are: {available_vars_text}. Would you like to try again with different variables?",
-                'action': 'error'
-            })
-        
-        # Return a confirmation message - the frontend will handle showing the confirmation UI
-        variables_list = "<ul>" + "".join([f"<li>{var}</li>" for var in cleaned_variables]) + "</ul>"
+             logger.error(f"Run Standard Analysis Error: {e}", exc_info=True)
+             return jsonify({'status': 'error', 'response': f"Error: {e}", 'action': 'error'})
+
+    # --- RUN CUSTOM ANALYSIS ---
+    elif intent == 'run_custom_analysis':
+        if not all([session_state['csv_loaded'], session_state['shapefile_loaded']]):
+             return jsonify({'status': 'error', 'response': "Please upload both data files first.", 'action': 'error'})
+
+        variables = entities.get('variable_names', [])
+        # Validate variables again even if LLM extracted them, just in case
+        variables = match_variables_to_dataset(variables, available_vars, variable_metadata)
+
+        if not variables or len(variables) < 2:
+             available_vars_text = ", ".join(available_vars[:10]) + ('...' if len(available_vars) > 10 else '')
+             raw_request_vars = entities.get('variable_names', []) # Get original request
+             error_msg = f"Could not validate enough variables from your request "
+             if raw_request_vars: error_msg += f"({', '.join(raw_request_vars)})"
+             error_msg += f". Need >= 2 valid variables. Available: {available_vars_text}. Try again?"
+             return jsonify({'status': 'error', 'response': error_msg, 'action': 'error'})
+
+        # PHASE 3: Set pending state rather than immediately running
+        session['pending_action'] = 'confirm_custom_analysis'
+        session['pending_variables'] = variables
+
+        # Generate confirmation message
+        variables_list_html = "<ul>" + "".join([f"<li>{var}</li>" for var in variables]) + "</ul>"
         confirmation_response = f"""
-        <p>I'll run a custom analysis with these variables for the composite score calculation:</p>
-        {variables_list}
-        <p>Please confirm if you want to proceed with these variables.</p>
+        <p>I can run a custom analysis with these variables:</p>
+        {variables_list_html}
+        <p>Would you like me to proceed with this custom analysis? Please reply with "yes" or "no".</p>
         """
         
         return jsonify({
             'status': 'success',
-            'response': confirmation_response,
-            'variables': cleaned_variables,
-            'action': 'confirm_custom_variables'
+            'response': confirmation_response
         })
-    
-    # Handle visualization requests
-    elif intent['type'] in ['view_map', 'view_plot']:
-        try:
-            # Determine the visualization type and parameters
-            viz_request = {}
-            
-            if intent['type'] == 'view_map':
-                map_type = intent.get('map_type', 'unknown')
-                if map_type == 'variable':
-                    viz_request = {
-                        'type': 'variable_map',
-                        'variable': intent.get('variable_name')
-                    }
-                elif map_type == 'normalized':
-                    viz_request = {
-                        'type': 'normalized_map',
-                        'variable': intent.get('variable_name')
-                    }
-                elif map_type == 'composite':
-                    viz_request = {
-                        'type': 'composite_map'
-                    }
-                elif map_type == 'vulnerability':
-                    viz_request = {
-                        'type': 'vulnerability_map'
-                    }
-                elif map_type == 'urban_extent':
-                    viz_request = {
-                        'type': 'urban_extent_map',
-                        'threshold': intent.get('threshold', 50)
-                    }
-            elif intent['type'] == 'view_plot':
-                plot_type = intent.get('plot_type', 'unknown')
-                if plot_type == 'vulnerability':
-                    viz_request = {
-                        'type': 'vulnerability_plot'
-                    }
-                elif plot_type == 'decision_tree':
-                    viz_request = {
-                        'type': 'decision_tree'
-                    }
-            
-            # Generate visualization if a valid type was determined
-            if viz_request and 'type' in viz_request:
-                # Call the function directly to prevent unnecessary route roundtrip
-                result = get_visualization_result(viz_request, data_handler)
-                
-                if result['status'] == 'success':
-                    return jsonify({
-                        'status': 'success',
-                        'response': result.get('ai_response', 'Here is the visualization you requested.'),
-                        'visualization': result.get('image_path', ''),
-                        'viz_type': result.get('viz_type', ''),
-                        'current_page': result.get('current_page', 1),
-                        'total_pages': result.get('total_pages', 1),
-                        'action': 'show_visualization'
-                    })
-                else:
-                    return jsonify({
-                        'status': 'error',
-                        'response': result.get('ai_response', result.get('message', 'Error generating visualization')),
-                        'action': 'error'
-                    })
-            else:
-                # If no valid visualization type was determined
-                return jsonify({
-                    'status': 'error',
-                    'response': "I'm not sure what visualization you're looking for. You can ask for variable maps, normalized maps, composite maps, vulnerability plots, vulnerability maps, or urban extent maps.",
-                    'action': 'error'
-                })
-        except Exception as e:
-            logger.error(f"Error handling visualization request: {str(e)}")
-            return jsonify({
-                'status': 'error',
-                'response': f"Error generating visualization: {str(e)}",
-                'action': 'error'
-            })
-    
-    # Handle report generation
-    elif intent['type'] == 'generate_report':
-        # Ensure analysis is complete before generating report
-        if not session.get('analysis_complete', False):
-             return jsonify({
-                 'status': 'error',
-                 'response': "Please run the analysis before generating a report.",
-                 'action': 'error'
-             })
-        try:
-            format_type = intent.get('format', 'pdf')
 
-            # Call the report generator function (assuming it's imported)
-            # Make sure generate_report_file exists or call report_generator.generate_report directly
-            # For this example, let's assume you have a wrapper or call directly:
-            import app.models.report_generator as report_gen # Make sure imported
-            report_result = report_gen.generate_report(data_handler, format=format_type)
+    # --- VISUALIZATION REQUESTS ---
+    elif intent == 'request_visualization':
+        viz_type = entities.get('visualization_type') # General type like 'map', 'plot'
+        map_type = entities.get('map_type')
+        plot_type = entities.get('plot_type')
+        variable = entities.get('variable_for_viz') # Specific variable for the viz
+        threshold = entities.get('threshold_value', 30)
 
-            # Check the status first
-            if report_result.get('status') == 'success':
-                report_url = report_result.get('report_url') # Use get for safety
-                if report_url:
-                    # Provide a user-friendly message and the download button info
-                    ai_response = report_result.get('message', f'Your {format_type.upper()} report is ready.') # Get message
-                    ai_response += f'<br><br><a href="{report_url}" class="btn btn-success" download target="_blank"><i class="fas fa-download"></i> Download {format_type.upper()} Report</a>'
+        # Determine specific viz request type
+        viz_request = {}
+        if map_type:
+            if map_type == 'variable': viz_request = {'type': 'variable_map', 'variable': variable}
+            elif map_type == 'normalized': viz_request = {'type': 'normalized_map', 'variable': variable}
+            elif map_type == 'composite': viz_request = {'type': 'composite_map'}
+            elif map_type == 'vulnerability': viz_request = {'type': 'vulnerability_map'}
+            elif map_type == 'urban_extent': viz_request = {'type': 'urban_extent_map', 'threshold': threshold}
+            else: viz_request = {'type': 'composite_map'} # Default map
+        elif plot_type:
+            if plot_type == 'vulnerability': viz_request = {'type': 'vulnerability_plot'}
+            elif plot_type == 'decision_tree': viz_request = {'type': 'decision_tree'}
+            else: viz_request = {'type': 'vulnerability_plot'} # Default plot
+        elif viz_type == 'map': # General map request
+             viz_request = {'type': 'variable_map', 'variable': variable} if variable else {'type': 'composite_map'}
+        elif viz_type == 'plot': # General plot request
+             viz_request = {'type': 'vulnerability_plot'}
+        elif viz_type == 'tree':
+              viz_request = {'type': 'decision_tree'}
+        else:
+             # Could not determine specific type
+             return jsonify({'status':'error', 'response': "I understand you want a visualization, but couldn't determine which one. Try 'show composite map' or 'plot vulnerability'?", 'action':'error'})
 
-                    return jsonify({
-                        'status': 'success',
-                        'response': ai_response,
-                        'report_url': report_url, # Still useful to send if needed elsewhere by JS
-                        'action': 'show_report' # Keep this action
-                    })
-                else:
-                    # Handle case where success reported but URL missing (shouldn't happen ideally)
-                    logger.error(f"Report generation successful but 'report_url'/'web_url' missing. Result: {report_result}")
-                    return jsonify({
-                        'status': 'error',
-                        'response': f"Report generated ({report_result.get('format', 'unknown').upper()}), but the download link is missing. Please check server logs.",
-                        'action': 'error'
-                    })
-            else:
-                # Handle error status from report_generator
-                return jsonify({
-                    'status': 'error',
-                    'response': f"Error generating report: {report_result.get('message', 'Unknown error during report generation.')}",
-                    'action': 'error'
-                })
-        except Exception as e:
-            logger.error(f"Exception in report generation route: {str(e)}", exc_info=True)
-            return jsonify({
-                'status': 'error',
-                'response': f"An unexpected error occurred while processing the report request: {str(e)}",
-                'action': 'error'
-            })
-    
-    # Handle language change
-    elif intent['type'] == 'change_language':
-        try:
-            language = intent.get('language', 'en')
-            session['current_language'] = language
+        # Variable maps and normalized maps need a variable - if not provided, ask for clarification
+        if (viz_request.get('type') in ['variable_map', 'normalized_map']) and not viz_request.get('variable'):
+            # Set up dialogue state to expect variable specification
+            dialogue_context['expecting_clarification'] = True
+            dialogue_context['clarification_type'] = 'variable_specification'
+            dialogue_context['viz_type'] = viz_request.get('type')
+            session['dialogue_context'] = dialogue_context
             
-            # Generate confirmation response in the new language
-            language_names = {
-                'en': 'English',
-                'ha': 'Hausa',
-                'yo': 'Yoruba',
-                'ig': 'Igbo',
-                'fr': 'French',
-                'ar': 'Arabic'
-            }
-            
-            ai_response = f"<strong>Language changed to:</strong> {language_names.get(language, 'English')}"
+            # Get list of available variables to suggest
+            available_vars_examples = ", ".join(available_vars[:5]) + ("..." if len(available_vars) > 5 else "")
             
             return jsonify({
                 'status': 'success',
-                'response': ai_response,
-                'action': 'language_changed'
+                'response': f"What variable would you like to visualize? Available variables include: {available_vars_examples}"
             })
-        except Exception as e:
-            logger.error(f"Error changing language: {str(e)}")
-            return jsonify({
-                'status': 'error',
-                'response': f"Error changing language: {str(e)}",
-                'action': 'error'
-            })
+
+        # Generate visualization and return response
+        return get_visualization_response(data_handler, viz_request.get('type'), viz_request.get('variable'), viz_request.get('threshold'))
+
+    # --- GENERATE REPORT ---
+    elif intent == 'generate_report':
+         # Ensure format is extracted from entities if available
+         format_type = entities.get('report_format', 'pdf')
+         
+         if not session_state['analysis_complete']:
+             return jsonify({'status': 'error', 'response': "Please run analysis first.", 'action': 'error'})
+             
+         try:
+            report_result = report_gen.generate_report(data_handler, format=format_type)
+            if report_result.get('status') == 'success':
+                 report_url = report_result.get('report_url')
+                 ai_response = report_result.get('message', f'Report ({format_type.upper()}) ready.')
+                 ai_response_html = f'<p>{ai_response}</p><a href="{report_url}" class="btn btn-success mt-2" download target="_blank"><i class="fas fa-download"></i> Download</a>'
+                 return jsonify({'status': 'success', 'response': ai_response_html, 'report_url': report_url, 'action': 'show_report'})
+
+            else:
+                 return jsonify({'status': 'error', 'response': f"Error: {report_result.get('message', 'Unknown')}", 'action': 'error'})
+         except Exception as e:
+             logger.error(f"Report Generation Error: {e}", exc_info=True)
+             return jsonify({'status': 'error', 'response': f"Error: {e}", 'action': 'error'})
+
+    # --- CHANGE LANGUAGE ---
+    elif intent == 'change_language':
+        # Use language_code from entities if available
+        language = entities.get('language_code', session_state['current_language']) 
+        session['current_language'] = language
+        language_names = {'en': 'English', 'ha': 'Hausa', 'yo': 'Yoruba', 'ig': 'Igbo', 'fr': 'French', 'ar': 'Arabic'}
+        ai_response = f"Language set to **{language_names.get(language, language)}**."
+        return jsonify({'status': 'success', 'response': ai_response, 'action': 'language_changed'})
+
+    # --- SIMPLE GREETING/GOODBYE ---
+    elif intent == 'greet':
+        ai_response = "Hello! How can I help with your malaria risk analysis today?"
+        return jsonify({'status': 'success', 'response': ai_response})
     
-    # General queries with AI response
-    else:
-        # Generate a contextual response using OpenAI
-        analysis_result = session.get('analysis_result', None)
-        ai_response = generate_ai_response(user_message, session_state, intent, analysis_result)
+    elif intent == 'goodbye':
+        ai_response = "Goodbye! Feel free to return anytime you need assistance with malaria risk analysis."
+        return jsonify({'status': 'success', 'response': ai_response})
+
+    # --- CONTEXT-AWARE FOLLOW-UP FOR VISUALIZATIONS ---
+    elif intent == 'viz_followup_question' and last_visualization:
+        # User is asking a follow-up about the last visualization shown
+        viz_type = last_visualization.get('type')
+        variable = last_visualization.get('variable')
         
-        # Fallback if OpenAI is not available
-        if not ai_response:
+        # Prepare context about the visualization for the LLM
+        context_for_llm = f"The user is asking about a {viz_type.replace('_', ' ')} "
+        if variable:
+            context_for_llm += f"showing the variable '{variable}'. "
+        else:
+            context_for_llm += "that doesn't focus on a specific variable. "
+            
+        if viz_type == 'variable_map':
+            context_for_llm += "This map shows the raw values of a variable across different wards. "
+            if variable:
+                var_knowledge = get_knowledge(variable)
+                if var_knowledge:
+                    context_for_llm += f"Information about this variable: {var_knowledge}"
+        elif viz_type == 'normalized_map':
+            context_for_llm += "This map shows normalized values (0-1 scale) of a variable's contribution to malaria risk. "
+        elif viz_type == 'composite_map':
+            context_for_llm += "This shows multiple maps of different variable combinations and their calculated risk scores. "
+        elif viz_type == 'vulnerability_plot':
+            context_for_llm += "This shows a box and whisker plot of ward rankings by vulnerability, with most vulnerable wards at the top. "
+        elif viz_type == 'vulnerability_map':
+            context_for_llm += "This shows a geographical map of ward vulnerability rankings. "
+        elif viz_type == 'urban_extent_map':
+            threshold = last_visualization.get('threshold', 30)
+            context_for_llm += f"This shows urban areas that exceed {threshold}% urbanicity threshold. "
+        elif viz_type == 'decision_tree':
+            context_for_llm += "This shows the analysis workflow from data loading through variable selection to final risk scores. "
+        
+        # Use the ai response function with the specific context
+        ai_response = generate_ai_response(user_message, session_state, None, session.get('analysis_result'), context_for_llm)
+        
+        return jsonify({'status': 'success', 'response': ai_response})
+
+    # --- ELABORATION REQUESTS --- 
+    elif intent == 'request_elaboration':
+        topic = entities.get('topic', '')
+        logger.info(f"Handling request for elaboration about: {topic}")
+        
+        # Get the last topic from dialogue context if needed
+        last_topic = dialogue_context.get('last_topic', '')
+        
+        if not topic and last_topic:
+            topic = last_topic
+        
+        # Check for common elaboration topics
+        if any(word in topic.lower() for word in ['variable', 'parameter', 'variables']):
+            # Get explanation from knowledge base about variables
+            if analysis_result and 'variables_used' in analysis_result:
+                vars_used = analysis_result.get('variables_used', [])
+                
+                # Create a detailed explanation using KB content
+                explanation_parts = []
+                for var in vars_used:
+                    kb_content = get_knowledge(var)
+                    if kb_content:
+                        explanation_parts.append(f"\n\n**{var}**: {kb_content}")
+                
+                if explanation_parts:
+                    explanation = "\n".join(explanation_parts)
+                    return jsonify({
+                        'status': 'success',
+                        'response': f"These variables were selected because of their established relationships with malaria risk:{explanation}"
+                    })
+        
+        # Check if it's about methodology
+        elif any(word in topic.lower() for word in ['methodology', 'process', 'analysis', 'calculation']):
+            # Try to determine which specific methodology
+            method_type = None
+            if 'missing' in topic.lower() or 'clean' in topic.lower():
+                method_type = 'missing_values'
+            elif 'normal' in topic.lower():
+                method_type = 'normalization'
+            elif 'compos' in topic.lower() or 'score' in topic.lower():
+                method_type = 'composite_scores'
+            elif 'vulnerab' in topic.lower() or 'rank' in topic.lower():
+                method_type = 'vulnerability_ranking'
+            elif 'urban' in topic.lower():
+                method_type = 'urban_extent'
+            
+            if method_type:
+                kb_content = get_knowledge('methodology', method_type)
+                if kb_content:
+                    return jsonify({
+                        'status': 'success',
+                        'response': kb_content
+                    })
+        
+        # Check for urban microstratification specifically
+        elif 'microstrat' in topic.lower() or ('urban' in topic.lower() and any(word in topic.lower() for word in ['stratification', 'classification', 'categorization'])):
+            return jsonify({
+                'status': 'success',
+                'response': "Urban microstratification involves classifying urban areas at a fine scale based on their characteristics relevant to malaria transmission. In the context of malaria risk analysis, this typically refers to dividing urban areas into distinct ecological zones or strata that might have different risk profiles. This classification helps in targeting interventions more precisely. For example, areas near standing water bodies within an urban environment might have higher malaria risk compared to densely built areas without breeding sites for mosquitoes."
+            })
+        
+        # If we don't have specific knowledge, get AI to generate an explanation
+        context_for_llm = f"The user is asking for more details about {topic}."
+        if last_topic:
+            context_for_llm += f" They previously asked about {last_topic}."
+        
+        # Include knowledge base content as context if available
+        if topic:
+            kb_content = None
+            for potential_var in available_vars:
+                if potential_var.lower() in topic.lower():
+                    kb_content = get_knowledge(potential_var)
+                    if kb_content:
+                        context_for_llm += f"\n\nInformation about {potential_var}: {kb_content}"
+                        break
+        
+        ai_response = generate_ai_response(user_message, session_state, nlu_result, analysis_result, context_for_llm)
+        return jsonify({'status': 'success', 'response': ai_response})
+    
+    # --- CLARIFICATION NEEDED ---
+    elif intent == 'clarification_needed':
+        ai_response = "I'm not quite sure what you're asking. Could you please rephrase your request? For example, are you asking to run analysis, view a map, or something else?"
+        return jsonify({'status': 'success', 'response': ai_response})
+
+    # --- FALLBACK TO GENERAL QUERY ---
+    else:  # Default to general_query for any other intent
+        logger.info(f"Handling general query or fallback for intent: {intent}")
+        
+        # Create an appropriate context-aware response
+        analysis_result = session.get('analysis_result', None)
+        
+        # Access knowledge base if needed for specific topics
+        context_for_llm = None
+        
+        # Check if the query might be about a specific topic we have knowledge on
+        knowledge_topics = ["rainfall", "temperature", "elevation", "ndvi", "evi", 
+                           "distance_to_water", "housing_quality", "population"]
+        
+        for topic in knowledge_topics:
+            if topic.lower() in user_message.lower():
+                knowledge = get_knowledge(topic)
+                if knowledge:
+                    context_for_llm = f"Information about {topic}: {knowledge}"
+                    break
+        
+        # Get AI response, passing context if available
+        ai_response = generate_ai_response(user_message, session_state, nlu_result, analysis_result, context_for_llm)
+        
+        if not ai_response:  # Fallback if LLM fails
             ai_response = get_fallback_response(user_message, session_state)
         
-        return jsonify({
-            'status': 'success',
-            'response': ai_response
-        })
-
-def get_visualization_result(viz_request, data_handler):
-    """
-    Get visualization result without going through the API endpoint
-    Duplicates functionality from get_visualization but can be called directly
-    """
-    viz_type = viz_request.get('type', '')
-    variable = viz_request.get('variable', None)
-    threshold = viz_request.get('threshold', 30)
-    
-    # Check if analysis is complete, except for variable maps which can be viewed anytime
-    if not session.get('analysis_complete', False) and viz_type not in ['variable_map']:
-        return {
-            'status': 'error',
-            'message': 'Analysis has not been run yet. Please run the analysis first.',
-            'ai_response': "I need to run the analysis before I can show you visualizations. Would you like me to run the analysis now?"
-        }
-    
-    # Handle different visualization types
-    try:
-        if viz_type == 'variable_map':
-            result = viz.create_variable_map(data_handler, variable)
-        elif viz_type == 'normalized_map':
-            result = viz.create_normalized_map(data_handler, variable)
-        elif viz_type == 'composite_map':
-            result = viz.create_composite_map(data_handler)
-        elif viz_type == 'vulnerability_plot':
-            if hasattr(data_handler, 'composite_scores') and data_handler.composite_scores is not None:
-                box_plot_result = viz.box_plot_function(data_handler.composite_scores['scores'])
-                if box_plot_result['status'] == 'success':
-                    data_handler.boxwhisker_plot = box_plot_result
-                    plot_fig = box_plot_result['plots'][0]
-                    html_path = viz.create_plotly_html(plot_fig, "vulnerability_plot.html")
-                    result = {
-                        'status': 'success',
-                        'message': 'Successfully generated vulnerability plot',
-                        'image_path': html_path,
-                        'current_page': int(1),
-                        'total_pages': int(box_plot_result['total_pages']),
-                        'viz_type': 'vulnerability_plot',
-                        'ai_response': "Here's the vulnerability ranking box and whisker plot showing wards from most vulnerable (top) to least vulnerable (bottom). Each horizontal bar represents a ward, with the box showing the range of vulnerability scores across different models. This visualization helps identify priority areas for intervention."
-                    }
-                else:
-                    result = box_plot_result
-            else:
-                result = {
-                    'status': 'error',
-                    'message': 'Composite scores not available for vulnerability plot',
-                    'ai_response': "I couldn't generate the vulnerability box plot because the composite scores haven't been calculated yet. Let's run the analysis first."
-                }
-        elif viz_type == 'vulnerability_map':
-            result = viz.create_vulnerability_map(data_handler)
-        elif viz_type == 'urban_extent_map':
-            result = viz.create_urban_extent_map(data_handler, threshold)
-        elif viz_type == 'decision_tree':
-            result = viz.create_decision_tree_plot(data_handler)
-        else:
-            result = {
-                'status': 'error',
-                'message': f'Unknown visualization type: {viz_type}',
-                'ai_response': f"I'm not sure what visualization you're looking for. You can ask for variable maps, normalized maps, composite maps, vulnerability plots, vulnerability maps, or urban extent maps."
-            }
+        # Save the current topic and intent in dialogue context for better continuity
+        dialogue_context = session.get('dialogue_context', {})
         
-        # Ensure all values in the result dictionary are JSON serializable
-        result = convert_to_json_serializable(result)
+        # Update last intent
+        dialogue_context['last_intent'] = intent
         
-        return result
-    except Exception as e:
-        logger.error(f"Error generating visualization: {str(e)}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return {
-            'status': 'error',
-            'message': f'Error generating visualization: {str(e)}',
-            'ai_response': f"I encountered an error while creating the visualization: {str(e)}. Please try again with a different request."
-        }
-
-@main_bp.route('/download_report/<filename>')
-def download_report(filename):
-    """Handle report downloads"""
-    # REPORTS_FOLDER now points to instance_path/reports
-    session_folder = os.path.join(current_app.config['REPORTS_FOLDER'], session.get('session_id', 'default'))
-    
-    # Security check
-    safe_path = os.path.abspath(os.path.join(session_folder, filename))
-    if not safe_path.startswith(os.path.abspath(session_folder)):
-        logger.error(f"Attempt to access unsafe report path: {filename}")
-        return jsonify({'status': 'error', 'message': 'Invalid file path.'}), 400
-
-    if not os.path.exists(safe_path):
-        logger.error(f"Report file not found: {safe_path}")
-        return jsonify({'status': 'error', 'message': 'Report file not found.'}), 404
-    try:
-        return send_from_directory(session_folder, filename, as_attachment=True)
-    except Exception as e:
-        logger.error(f"Error serving report file {filename} for session {session.get('session_id', 'default')}: {e}")
-        return jsonify({'status': 'error', 'message': 'Could not serve report file.'}), 500
-
-# Function to clean and validate variable names
-def clean_and_validate_variables(data_handler, raw_variables):
-    """
-    Clean up and validate variable names from user input
-    
-    Args:
-        data_handler: DataHandler instance
-        raw_variables: List of raw variable names from user input
+        # Track the topic based on intent
+        if intent == 'explain_methodology':
+            dialogue_context['last_topic'] = entities.get('methodology_type', 'methodology')
+        elif intent == 'explain_variable':
+            dialogue_context['last_topic'] = entities.get('variable_name', 'variables')
+        elif intent == 'explain_variable_category':
+            dialogue_context['last_topic'] = entities.get('variable_category', 'variable categories')
+        elif intent == 'query_analysis_details':
+            dialogue_context['last_topic'] = 'analysis variables'
+        elif intent == 'request_visualization':
+            dialogue_context['last_topic'] = f"{entities.get('map_type', entities.get('plot_type', 'visualization'))}"
+        elif intent == 'request_elaboration':
+            # Keep the last topic if we're elaborating on it
+            if 'topic' in entities:
+                dialogue_context['last_topic'] = entities['topic']
         
-    Returns:
-        list: List of cleaned and validated variable names that exist in the dataset
-    """
-    if not raw_variables:
-        return []
-    
-    # Get available variables using session data if possible
-    available_vars = []
-    variable_metadata = None
-    
-    if 'available_variables' in session:
-        available_vars = session.get('available_variables', [])
-        variable_metadata = session.get('variable_metadata', None)
-    else:
-        available_vars = get_available_variables(data_handler)
-    
-    # Use the improved matching function
-    matched_variables = match_variables_to_dataset(raw_variables, available_vars, variable_metadata)
-    
-    logger.info(f"Raw variables: {raw_variables}")
-    logger.info(f"Matched variables: {matched_variables}")
-    
-    return matched_variables
+        # Store updated context
+        session['dialogue_context'] = dialogue_context
+        
+        return jsonify({'status': 'success', 'response': ai_response})
+
+
+# --- Helper Functions ---
+
+def is_confirmation(message):
+   """Check if a message is a confirmation or cancellation."""
+   message_lower = message.lower().strip()
+   
+   # Confirmation patterns
+   confirm_patterns = [
+       r'\byes\b', r'\byeah\b', r'\byep\b', r'\bsure\b', r'\bdefinitely\b', 
+       r'\bconfirm\b', r'\baffirmative\b', r'\bproceed\b', r'\bgo ahead\b', 
+       r'\bok\b', r'\bokay\b', r'\bfine\b'
+   ]
+   
+   # Cancellation patterns
+   cancel_patterns = [
+       r'\bno\b', r'\bnope\b', r'\bcancel\b', r'\bdont\b', r'\bdon\'t\b', 
+       r'\bstop\b', r'\babort\b', r'\bnegative\b', r'\bwait\b'
+   ]
+   
+   # Check for confirmation
+   for pattern in confirm_patterns:
+       if re.search(pattern, message_lower):
+           return True
+   
+   # Check for cancellation
+   for pattern in cancel_patterns:
+       if re.search(pattern, message_lower):
+           return False
+   
+   # No clear indication
+   return None
+
+
+def get_visualization_response(data_handler, viz_type, variable=None, threshold=30):
+   """Generate a response for a visualization request."""
+   try:
+       result = get_visualization_result({
+           'type': viz_type,
+           'variable': variable,
+           'threshold': threshold
+       }, data_handler)
+       
+       if result['status'] == 'success':
+           # Update session to track visualization for context
+           session['last_visualization'] = {
+               'type': viz_type,
+               'variable': variable,
+               'threshold': threshold,
+               'timestamp': datetime.now().isoformat()
+           }
+           
+           return jsonify({
+               'status': 'success', 
+               'response': result.get('ai_response', 'Here is the visualization:'), 
+               'visualization': result.get('image_path', ''), 
+               'viz_type': result.get('viz_type', ''), 
+               'variable': result.get('variable'), 
+               'current_page': result.get('current_page', 1), 
+               'total_pages': result.get('total_pages', 1), 
+               'action': 'show_visualization'
+           })
+       else:
+           return jsonify({
+               'status': 'error', 
+               'response': result.get('ai_response', result.get('message', 'Error generating visualization')), 
+               'action': 'error'
+           })
+   except Exception as e:
+       logger.error(f"Visualization Error: {e}", exc_info=True)
+       return jsonify({
+           'status': 'error', 
+           'response': f"Error generating visualization: {e}", 
+           'action': 'error'
+       })
+
+
+def get_data_handler():
+   """Get the data handler for the current session"""
+   session_id = session.get('session_id', 'default')
+   session_data = current_app.config.get('SESSION_DATA', {})
+   
+   if session_id in session_data:
+       return session_data[session_id]['data_handler']
+   
+   # Create new data handler if not found
+   session_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], session_id)
+   data_handler = DataHandler(session_folder)
+   
+   # Load files if they exist in session
+   csv_filename = session.get('csv_filename', '')
+   shapefile_filename = session.get('shapefile_filename', '')
+   
+   if csv_filename:
+       csv_path = os.path.join(session_folder, csv_filename)
+       if os.path.exists(csv_path):
+           data_handler.load_csv(csv_path)
+   
+   if shapefile_filename:
+       shp_path = os.path.join(session_folder, shapefile_filename)
+       if os.path.exists(shp_path):
+           data_handler.load_shapefile(shp_path)
+   
+   # Store in session data
+   current_app.config.setdefault('SESSION_DATA', {})
+   current_app.config['SESSION_DATA'][session_id] = {
+       'data_handler': data_handler,
+       'timestamp': datetime.now()
+   }
+   
+   return data_handler
+
 
 def get_available_variables(data_handler):
-    """Get a list of available variables from the dataset"""
-    available_vars = []
-    
-    if data_handler.normalized_data is not None:
-        # Get variables from normalized data
-        available_vars = [col.replace('normalization_', '') for col in data_handler.normalized_data.columns 
-                         if col.startswith('normalization_')]
-    elif data_handler.cleaned_data is not None:
-        # Get numeric columns from cleaned data
-        available_vars = [col for col in data_handler.cleaned_data.columns 
-                         if col != 'WardName' and pd.api.types.is_numeric_dtype(data_handler.cleaned_data[col])]
-    elif data_handler.csv_data is not None:
-        # Get numeric columns from original CSV
-        available_vars = [col for col in data_handler.csv_data.columns 
-                         if col != 'WardName' and pd.api.types.is_numeric_dtype(data_handler.csv_data[col])]
-    
-    return available_vars
+   """Get a list of available variables from the dataset"""
+   available_vars = []
+   
+   if data_handler.normalized_data is not None:
+       # Get variables from normalized data
+       available_vars = [col.replace('normalization_', '') for col in data_handler.normalized_data.columns 
+                        if col.startswith('normalization_')]
+   elif data_handler.cleaned_data is not None:
+       # Get numeric columns from cleaned data
+       available_vars = [col for col in data_handler.cleaned_data.columns 
+                        if col != 'WardName' and pd.api.types.is_numeric_dtype(data_handler.cleaned_data[col])]
+   elif data_handler.csv_data is not None:
+       # Get numeric columns from original CSV
+       available_vars = [col for col in data_handler.csv_data.columns 
+                        if col != 'WardName' and pd.api.types.is_numeric_dtype(data_handler.csv_data[col])]
+   
+   return available_vars
 
-def parse_message_intent(message, session_state, data_handler=None):
-    """Parse the intent from a user message"""
-    message_lower = message.lower()
-    
-    # Check for analysis intent with custom parameters
-    if any(keyword in message_lower for keyword in ['run', 'analyze', 'process', 'rerun']):
-        # Check if this is a custom analysis with variables
-        custom_analysis_patterns = [
-            r'rerun.*analysis.*variables',
-            r'rerun.*with.*variables',
-            r'run.*with.*variables',
-            r'use.*variables',
-            r'using.*variables',
-            r'following\s+variables',
-            r'composite.*score.*calculation',
-            r'calculation.*use'
-        ]
-        
-        is_custom = any(re.search(pattern, message_lower) for pattern in custom_analysis_patterns)
-        
-        if is_custom:
-            # Extract variables for the analysis
-            extracted_variables = extract_variables(message, data_handler)
-            
-            # If variables were found, treat as custom analysis request
-            if extracted_variables and len(extracted_variables) > 0:
-                return {
-                    'type': 'run_analysis_variables',
-                    'variables': extracted_variables
-                }
-                
-        # Default to standard analysis
-        return {'type': 'run_analysis'}
-    
-    # Check for visualization intent
-    if any(keyword in message_lower for keyword in ['show', 'display', 'view', 'see', 'map', 'plot', 'visualization', 'chart']):
-        # Decision tree visualization (highest priority to check)
-        if 'tree' in message_lower or 'decision' in message_lower or 'workflow' in message_lower:
-            return {'type': 'view_plot', 'plot_type': 'decision_tree'}
-            
-        # Box and whisker plot (check this before other vulnerability visualizations)
-        if ('box' in message_lower or 'whisker' in message_lower or 'ranking' in message_lower) and 'map' not in message_lower:
-            if 'vulnerability' in message_lower or 'vulnerable' in message_lower or 'ranking' in message_lower:
-                return {'type': 'view_plot', 'plot_type': 'vulnerability'}
-            # Default to vulnerability plot if just asking for box plot without specifying
-            if 'box' in message_lower or 'whisker' in message_lower:
-                return {'type': 'view_plot', 'plot_type': 'vulnerability'}
-        
-        # Map visualizations
-        if 'map' in message_lower:
-            # Variable distribution map
-            if any(var_word in message_lower for var_word in ['variable', 'distribution']):
-                var_name = extract_variable_name(message_lower, data_handler)
-                return {'type': 'view_map', 'map_type': 'variable', 'variable_name': var_name}
-            
-            # Normalized map
-            if 'normalize' in message_lower or 'normalized' in message_lower:
-                var_name = extract_variable_name(message_lower, data_handler)
-                return {'type': 'view_map', 'map_type': 'normalized', 'variable_name': var_name}
-            
-            # Composite map
-            if any(word in message_lower for word in ['composite', 'risk', 'score']):
-                return {'type': 'view_map', 'map_type': 'composite'}
-            
-            # Vulnerability map
-            if ('vulnerability' in message_lower or 'vulnerable' in message_lower) and 'map' in message_lower:
-                return {'type': 'view_map', 'map_type': 'vulnerability'}
-            
-            # Urban extent map
-            if any(word in message_lower for word in ['urban', 'extent', 'threshold']):
-                import re
-                threshold_match = re.search(r'(\d+)\s*%', message_lower)
-                threshold = 30  # Default
-                if threshold_match:
-                    threshold = int(threshold_match.group(1))
-                return {'type': 'view_map', 'map_type': 'urban_extent', 'threshold': threshold}
-            
-            # Default map type (if just asking for a map)
-            return {'type': 'view_map', 'map_type': 'composite'}
-        
-        # Check for decision tree again (in case it wasn't caught above)
-        if 'tree' in message_lower or 'decision' in message_lower or 'flow' in message_lower:
-            return {'type': 'view_plot', 'plot_type': 'decision_tree'}
-        
-        # Check for variable visualization when not specifying map
-        var_name = extract_variable_name(message_lower, data_handler)
-        if var_name:
-            return {'type': 'view_map', 'map_type': 'variable', 'variable_name': var_name}
-    
-    # Check for report generation
-    if any(word in message_lower for word in ['report', 'generate', 'download', 'pdf', 'docx', 'html']):
-        format_type = 'pdf'  # Default
-        if 'html' in message_lower:
-            format_type = 'html'
-        elif 'word' in message_lower or 'docx' in message_lower:
-            format_type = 'docx'
-        
-        return {'type': 'generate_report', 'format': format_type}
-    
-    # Check for language change
-    if any(word in message_lower for word in ['language', 'speak', 'talk']):
-        language = 'en'  # Default
-        if 'french' in message_lower or 'français' in message_lower:
-            language = 'fr'
-        elif 'hausa' in message_lower:
-            language = 'ha'
-        elif 'yoruba' in message_lower:
-            language = 'yo'
-        elif 'igbo' in message_lower:
-            language = 'ig'
-        
-        return {'type': 'change_language', 'language': language}
-    
-    # Default: general query
-    return {'type': 'general_query'}
+
+def base_name_from_parts(parts):
+   """Convert variable parts to a base name format."""
+   if not parts:
+       return ""
+   
+   # Join with underscore and lowercase
+   base_name = "_".join(parts).lower()
+   
+   # Remove common prefixes/suffixes for consistent matching
+   prefixes = ['mean_', 'avg_', 'normalized_']
+   suffixes = ['_mean', '_avg', '_value', '_data']
+   
+   for prefix in prefixes:
+       if base_name.startswith(prefix):
+           base_name = base_name[len(prefix):]
+           break
+   
+   for suffix in suffixes:
+       if base_name.endswith(suffix):
+           base_name = base_name[:-len(suffix)]
+           break
+   
+   return base_name
+
 
 def extract_variable_metadata(data_handler):
-    """
-    Extract metadata about available variables to aid in matching
-    
-    Args:
-        data_handler: DataHandler instance
-    
-    Returns:
-        dict: Variable metadata including alternative names and patterns
-    """
-    variable_metadata = {}
-    
-    # Get all available variables
-    available_vars = get_available_variables(data_handler)
-    
-    # Common prefixes/suffixes to generate alternatives
-    prefixes = ['mean_', 'avg_', 'normalized_', '']
-    suffixes = ['_mean', '_avg', '_value', '_data', '']
-    
-    # Add metadata for each variable
-    for var in available_vars:
-        var_lower = var.lower()
-        
-        # Initialize metadata entry
-        variable_metadata[var] = {
-            'original_name': var,
-            'alternative_names': set(),
-            'keywords': set(),
-            'data_type': None
-        }
-        
-        # Try to determine data type if CSV data is available
-        if data_handler.csv_data is not None and var in data_handler.csv_data.columns:
-            dtype = data_handler.csv_data[var].dtype
-            variable_metadata[var]['data_type'] = str(dtype)
-        
-        # Generate alternative names
-        # Split by underscores for parts
-        parts = var_lower.split('_')
-        
-        # Add the joined parts in different formats
-        if len(parts) > 1:
-            variable_metadata[var]['alternative_names'].add(' '.join(parts))
-            variable_metadata[var]['alternative_names'].add('-'.join(parts))
-        
-        # Add alternatives with different prefixes/suffixes
-        base_name = var_lower
-        for prefix in prefixes:
-            for suffix in suffixes:
-                if prefix + base_name + suffix != var_lower:
-                    variable_metadata[var]['alternative_names'].add(prefix + base_name + suffix)
-        
-        # Add each part as a keyword
-        for part in parts:
-            if len(part) > 2:  # Only meaningful parts
-                variable_metadata[var]['keywords'].add(part)
-        
-        # Special handling for common variables
-        # Rainfall
-        if 'rain' in var_lower or 'precip' in var_lower:
-            keywords = ['rain', 'rainfall', 'precipitation', 'precip']
-            variable_metadata[var]['keywords'].update(keywords)
-            variable_metadata[var]['alternative_names'].update(keywords)
-        
-        # Temperature
-        elif 'temp' in var_lower:
-            keywords = ['temp', 'temperature', 'climate']
-            variable_metadata[var]['keywords'].update(keywords)
-            variable_metadata[var]['alternative_names'].update(keywords)
-        
-        # Elevation
-        elif 'elev' in var_lower or 'alt' in var_lower:
-            keywords = ['elevation', 'altitude', 'height']
-            variable_metadata[var]['keywords'].update(keywords)
-            variable_metadata[var]['alternative_names'].update(keywords)
-        
-        # NDVI/EVI
-        elif 'ndvi' in var_lower:
-            keywords = ['ndvi', 'vegetation', 'greenness']
-            variable_metadata[var]['keywords'].update(keywords)
-            variable_metadata[var]['alternative_names'].update(keywords)
-        elif 'evi' in var_lower:
-            keywords = ['evi', 'vegetation', 'enhanced']
-            variable_metadata[var]['keywords'].update(keywords)
-            variable_metadata[var]['alternative_names'].update(keywords)
-        
-        # Water-related
-        elif 'ndwi' in var_lower or 'water' in var_lower:
-            keywords = ['ndwi', 'water', 'moisture', 'wetness']
-            variable_metadata[var]['keywords'].update(keywords)
-            variable_metadata[var]['alternative_names'].update(keywords)
-        
-        # Convert sets to lists for JSON serialization
-        variable_metadata[var]['alternative_names'] = list(variable_metadata[var]['alternative_names'])
-        variable_metadata[var]['keywords'] = list(variable_metadata[var]['keywords'])
-    
-    return variable_metadata
-
-
-def extract_variables(message, data_handler=None):
-    """
-    Extract variable names from a message for custom analysis with improved processing
-    
-    Args:
-        message: The user message
-        data_handler: Optional DataHandler instance for variable validation
-    
-    Returns:
-        list: List of extracted variable names
-    """
-    message_lower = message.lower()
-    
-    # First check for variable specifications with explicit lists
-    # Pattern 1: Look for "variables: var1, var2, var3" or "variables: var1 var2 var3" 
-    explicit_var_pattern = r'variables?:?\s+([^.;!?]+)'
-    
-    # Pattern 2: Look for "using X, Y, Z" or "use X, Y, Z"
-    using_var_pattern = r'(?:use|using|with)\s+([^.;!?]+?)(?:for|in|to|variable|$)'
-    
-    # Pattern 3: Look for "following variables: X, Y, Z"
-    following_var_pattern = r'following\s+variables:?\s+([^.;!?]+)'
-    
-    # Try each pattern
-    patterns = [explicit_var_pattern, using_var_pattern, following_var_pattern]
-    raw_variables = []
-    
-    for pattern in patterns:
-        var_match = re.search(pattern, message_lower)
-        if var_match:
-            var_list_text = var_match.group(1).strip()
-            
-            # First, check for comma-separated list
-            if ',' in var_list_text:
-                # Split by commas
-                var_list = var_list_text.split(',')
-                raw_variables.extend([v.strip() for v in var_list if v.strip()])
-            # Then check for "and" joining
-            elif ' and ' in var_list_text:
-                # Split by "and"
-                var_list = var_list_text.split(' and ')
-                raw_variables.extend([v.strip() for v in var_list if v.strip()])
-            else:
-                # Try to identify variables in space-separated text
-                # This is trickier, let's see if any known variables match first
-                if data_handler:
-                    # Get variable metadata
-                    variable_metadata = None
-                    if 'variable_metadata' in session:
-                        variable_metadata = session.get('variable_metadata')
-                    elif hasattr(data_handler, 'variable_metadata'):
-                        variable_metadata = data_handler.variable_metadata
-                    
-                    # If metadata available, check for matches in the text
-                    if variable_metadata:
-                        identified_vars = set()
-                        for var, metadata in variable_metadata.items():
-                            original_name = var.lower()
-                            # Check if original name is in the text
-                            if original_name in var_list_text:
-                                identified_vars.add(var)
-                                continue
-                            
-                            # Check alternative names
-                            for alt_name in metadata['alternative_names']:
-                                if alt_name in var_list_text:
-                                    identified_vars.add(var)
-                                    # Remove matching text to avoid double matches
-                                    var_list_text = var_list_text.replace(alt_name, '')
-                                    break
-                        
-                        # Add identified variables
-                        raw_variables.extend(list(identified_vars))
-                
-                # If no variables identified or no metadata available, try splitting by spaces and filtering
-                if not raw_variables:
-                    words = var_list_text.split()
-                    # Filter out stop words
-                    stop_words = ['the', 'following', 'variables', 'variable', 'these', 'in', 'for', 'and', 'to', 'with']
-                    for word in words:
-                        word = word.strip()
-                        if word and word not in stop_words and len(word) > 2:
-                            raw_variables.append(word)
-            
-            # Found variables with this pattern, no need to try others if we have results
-            if raw_variables:
-                break
-    
-    # If no variables were found using the regular patterns, try compound variable name detection
-    if not raw_variables:
-        # Look for compound variable names like "mean rainfall" or "distance to water"
-        compound_patterns = [
-            r'(mean\s+\w+)', 
-            r'(distance\s+to\s+\w+)',
-            r'(soil\s+wetness)',
-            r'(housing\s+quality)',
-            r'(\w+\s+tpr)',
-            r'(test\s+positivity\s+rate)',
-            r'(settlement\s+type)'
-        ]
-        
-        for pattern in compound_patterns:
-            matches = re.findall(pattern, message_lower)
-            if matches:
-                raw_variables.extend(matches)
-    
-    # If still no variables found, check for specific variable names
-    if not raw_variables:
-        # Check for common variable words
-        common_vars = [
-            'rainfall', 'temperature', 'elevation', 'population', 'distance', 
-            'housing', 'ndvi', 'evi', 'flood', 'ndwi', 'soil_wetness', 
-            'settlement_type', 'u5_tpr', 'tpr', 'mean_rainfall', 'mean_evi', 
-            'mean_ndvi', 'distance_to_water', 'housing_quality'
-        ]
-        
-        for var in common_vars:
-            var_lower = var.lower()
-            if var_lower in message_lower:
-                # Check if it's a standalone mention (not part of another word)
-                word_boundaries = r'\b' + re.escape(var_lower) + r'\b'
-                if re.search(word_boundaries, message_lower):
-                    raw_variables.append(var)
-    
-    # If data_handler is provided, validate the variables
-    if data_handler and raw_variables:
-        # Use stored variables from session if available
-        if 'available_variables' in session:
-            available_vars = session.get('available_variables')
-            # Perform matching with available variables
-            matched_variables = match_variables_to_dataset(raw_variables, available_vars, session.get('variable_metadata'))
-            return matched_variables
-        else:
-            # Fall back to the original validation method
-            return clean_and_validate_variables(data_handler, raw_variables)
-    
-    return raw_variables
+   """
+   Extract metadata about available variables to aid in matching
+   
+   Args:
+       data_handler: DataHandler instance
+   
+   Returns:
+       dict: Variable metadata including alternative names and patterns
+   """
+   variable_metadata = {}
+   
+   # Get all available variables
+   available_vars = get_available_variables(data_handler)
+   
+   # Common prefixes/suffixes to generate alternatives
+   prefixes = ['mean_', 'avg_', 'normalized_', '']
+   suffixes = ['_mean', '_avg', '_value', '_data', '']
+   
+   # Add metadata for each variable
+   for var in available_vars:
+       var_lower = var.lower()
+       
+       # Initialize metadata entry
+       variable_metadata[var] = {
+           'original_name': var,
+           'alternative_names': set(),
+           'keywords': set(),
+           'data_type': None
+       }
+       
+       # Try to determine data type if CSV data is available
+       if data_handler.csv_data is not None and var in data_handler.csv_data.columns:
+           dtype = data_handler.csv_data[var].dtype
+           variable_metadata[var]['data_type'] = str(dtype)
+       
+       # Generate alternative names
+       # Split by underscores for parts
+       parts = var_lower.split('_')
+       
+       # Add the joined parts in different formats
+       if len(parts) > 1:
+           variable_metadata[var]['alternative_names'].add(' '.join(parts))
+           variable_metadata[var]['alternative_names'].add('-'.join(parts))
+       
+       # Add alternatives with different prefixes/suffixes
+       # First, get a normalized base name
+       base_name = base_name_from_parts(parts)
+       
+       for prefix in prefixes:
+           for suffix in suffixes:
+               alt_name = prefix + base_name + suffix
+               if alt_name and alt_name != var_lower:
+                   variable_metadata[var]['alternative_names'].add(alt_name)
+       
+       # Add each part as a keyword
+       for part in parts:
+           if len(part) > 2:  # Only meaningful parts
+               variable_metadata[var]['keywords'].add(part)
+       
+       # Special handling for common variables
+       # Rainfall
+       if 'rain' in var_lower or 'precip' in var_lower:
+           keywords = ['rain', 'rainfall', 'precipitation', 'precip']
+           variable_metadata[var]['keywords'].update(keywords)
+           variable_metadata[var]['alternative_names'].update(keywords)
+       
+       # Temperature
+       elif 'temp' in var_lower:
+           keywords = ['temp', 'temperature', 'climate']
+           variable_metadata[var]['keywords'].update(keywords)
+           variable_metadata[var]['alternative_names'].update(keywords)
+       
+       # Elevation
+       elif 'elev' in var_lower or 'alt' in var_lower:
+           keywords = ['elevation', 'altitude', 'height']
+           variable_metadata[var]['keywords'].update(keywords)
+           variable_metadata[var]['alternative_names'].update(keywords)
+       
+       # NDVI/EVI
+       elif 'ndvi' in var_lower:
+           keywords = ['ndvi', 'vegetation', 'greenness']
+           variable_metadata[var]['keywords'].update(keywords)
+           variable_metadata[var]['alternative_names'].update(keywords)
+       elif 'evi' in var_lower:
+           keywords = ['evi', 'vegetation', 'enhanced']
+           variable_metadata[var]['keywords'].update(keywords)
+           variable_metadata[var]['alternative_names'].update(keywords)
+       
+       # Water-related
+       elif 'ndwi' in var_lower or 'water' in var_lower:
+           keywords = ['ndwi', 'water', 'moisture', 'wetness']
+           variable_metadata[var]['keywords'].update(keywords)
+           variable_metadata[var]['alternative_names'].update(keywords)
+       
+       # Convert sets to lists for JSON serialization
+       variable_metadata[var]['alternative_names'] = list(variable_metadata[var]['alternative_names'])
+       variable_metadata[var]['keywords'] = list(variable_metadata[var]['keywords'])
+   
+   return variable_metadata
 
 
 def match_variables_to_dataset(requested_vars, available_vars, variable_metadata=None):
-    """
-    Match requested variables to available variables with fuzzy matching
-    
-    Args:
-        requested_vars: List of variables requested by the user
-        available_vars: List of available variables in the dataset
-        variable_metadata: Optional metadata to improve matching
-        
-    Returns:
-        list: Matched variable names
-    """
-    matched_variables = []
-    
-    # Convert available vars to lowercase for case-insensitive matching
-    available_vars_lower = [var.lower() for var in available_vars]
-    # Create a mapping from lowercase to original case
-    case_mapping = {var.lower(): var for var in available_vars}
-    
-    for var in requested_vars:
-        var_lower = var.lower().strip()
-        if not var_lower:
-            continue
-        
-        # Try exact matching first
-        if var_lower in available_vars_lower:
-            original_case = case_mapping[var_lower]
-            if original_case not in matched_variables:
-                matched_variables.append(original_case)
-            continue
-        
-        # Standardize compound variable names
-        standardized_var = var_lower.replace(' ', '_')
-        if standardized_var in available_vars_lower:
-            original_case = case_mapping[standardized_var]
-            if original_case not in matched_variables:
-                matched_variables.append(original_case)
-            continue
-        
-        # Try to use variable metadata for better matching
-        if variable_metadata:
-            matched = False
-            for available_var, metadata in variable_metadata.items():
-                avail_var_lower = available_var.lower()
-                
-                # Check if requested var matches any alternative names
-                if var_lower in [alt.lower() for alt in metadata['alternative_names']]:
-                    if available_var not in matched_variables:
-                        matched_variables.append(available_var)
-                        matched = True
-                        break
-                
-                # Check if keyword matches
-                if any(keyword.lower() in var_lower for keyword in metadata['keywords']):
-                    if available_var not in matched_variables:
-                        matched_variables.append(available_var)
-                        matched = True
-                        break
-            
-            if matched:
-                continue
-        
-        # Try partial matching as a last resort
-        for available_var_lower in available_vars_lower:
-            if var_lower in available_var_lower or available_var_lower in var_lower:
-                original_case = case_mapping[available_var_lower]
-                if original_case not in matched_variables:
-                    matched_variables.append(original_case)
-                break
-    
-    return matched_variables
+   """
+   Match requested variables to available variables with fuzzy matching
+   
+   Args:
+       requested_vars: List of variables requested by the user
+       available_vars: List of available variables in the dataset
+       variable_metadata: Optional metadata to improve matching
+       
+   Returns:
+       list: Matched variable names
+   """
+   if not requested_vars or not available_vars:
+       return []
+       
+   matched_variables = []
+   
+   # Convert available vars to lowercase for case-insensitive matching
+   available_vars_lower = [var.lower() for var in available_vars]
+   # Create a mapping from lowercase to original case
+   case_mapping = {var.lower(): var for var in available_vars}
+   
+   for var in requested_vars:
+       var_lower = var.lower().strip()
+       if not var_lower:
+           continue
+       
+       # Try exact matching first
+       if var_lower in available_vars_lower:
+           original_case = case_mapping[var_lower]
+           if original_case not in matched_variables:
+               matched_variables.append(original_case)
+           continue
+       
+       # Standardize compound variable names
+       standardized_var = var_lower.replace(' ', '_')
+       if standardized_var in available_vars_lower:
+           original_case = case_mapping[standardized_var]
+           if original_case not in matched_variables:
+               matched_variables.append(original_case)
+           continue
+       
+       # Try to use variable metadata for better matching
+       if variable_metadata:
+           matched = False
+           for available_var, metadata in variable_metadata.items():
+               avail_var_lower = available_var.lower()
+               
+               # Check if requested var matches any alternative names
+               if var_lower in [alt.lower() for alt in metadata['alternative_names']]:
+                   if available_var not in matched_variables:
+                       matched_variables.append(available_var)
+                       matched = True
+                       break
+               
+               # Check if keyword matches
+               if any(keyword.lower() in var_lower for keyword in metadata['keywords']):
+                   if available_var not in matched_variables:
+                       matched_variables.append(available_var)
+                       matched = True
+                       break
+           
+           if matched:
+               continue
+       
+       # Try partial matching as a last resort
+       for available_var_lower in available_vars_lower:
+           if var_lower in available_var_lower or available_var_lower in var_lower:
+               original_case = case_mapping[available_var_lower]
+               if original_case not in matched_variables:
+                   matched_variables.append(original_case)
+               break
+   
+   return matched_variables
+
+
+def extract_variables(message, available_vars, variable_metadata=None):
+   """
+   Extract *validated* variable names from a message for custom analysis,
+   filtering using the loaded STOP_WORDS set.
+
+   Args:
+       message: The user message
+       available_vars: List of actual variable names available in the dataset.
+       variable_metadata: Optional metadata to aid matching.
+
+   Returns:
+       list: List of validated variable names found in the message.
+   """
+   global STOP_WORDS # Access the globally defined STOP_WORDS set
+
+   if not available_vars:
+       logger.warning("Cannot extract variables: available_vars list is empty.")
+       return []
+
+   message_lower = message.lower()
+   validated_variables = set() # Use a set to store unique validated vars
+
+   # --- Patterns to find potential variable lists ---
+   # Prioritize lists explicitly marked with keywords like "variables:", "using", "with" etc.
+   # This pattern looks for the keyword followed by colon (optional) and then a sequence of words/commas/and
+   list_patterns = [
+       # E.g., "variables: rain, pop, elev", "using rainfall and population", "with variable elevation"
+       r'\b(?:variables?|using|with|include|consider|only|select|custom)\s*:?\s+((?:[\w_\-\s]+(?:(?:,\s*|\s+and\s+)[\w_\-\s]+)*))'
+   ]
+   # More specific pattern: Match "run/analyze/process ... with/using ..."
+   command_list_pattern = r'\b(?:run|analyze|process)\s+(?:analysis|data)?\s*(?:with|using|for)\s+((?:[\w_\-\s]+(?:(?:,\s*|\s+and\s+)[\w_\-\s]+)*))'
+
+   potential_variable_strings = []
+   combined_patterns = list_patterns + [command_list_pattern]
+
+   for pattern in combined_patterns:
+       matches = re.findall(pattern, message_lower)
+       for group in matches:
+           # Split the captured group carefully: handles commas, 'and', and spaces between words
+           # Prioritize splitting by comma or ' and '
+           candidates = []
+           if ',' in group or ' and ' in group:
+               candidates = re.split(r'\s+and\s+|\s*,\s*', group.strip())
+           else:
+               # If no comma or 'and', split by space (might capture multi-word vars)
+               candidates = re.split(r'\s+', group.strip())
+
+           potential_variable_strings.extend([c.strip() for c in candidates if c.strip()])
+
+
+   # --- Filter and Validate ---
+   logger.info(f"Potential variable strings found: {potential_variable_strings}")
+   used_potential_strings = set() # Track which raw strings led to a validation
+
+   for potential_var in potential_variable_strings:
+       # Clean: lowercase, strip whitespace, remove trailing punctuation
+       cleaned_var = potential_var.strip().lower().rstrip('.,;:?!')
+
+       # **** Use the loaded STOP_WORDS set for filtering ****
+       if not cleaned_var or cleaned_var in STOP_WORDS:
+           continue
+
+       # Check if this potential string (or a variation) has already resulted in a match
+       # Helps prevent adding the same variable multiple times from phrases like "rainfall and mean rainfall"
+       if cleaned_var in used_potential_strings:
+           continue
+
+       # Attempt to match against available variables using the robust function
+       matched = match_variables_to_dataset([cleaned_var], available_vars, variable_metadata)
+
+       if matched:
+           # Add the *first* matched variable (most likely correct one)
+           validated_variables.add(matched[0])
+           used_potential_strings.add(cleaned_var) # Mark this raw string as used
+           # Also mark variations if the matched variable is multi-word
+           if '_' in matched[0] or ' ' in matched[0]:
+               parts = matched[0].replace('_', ' ').split()
+               for part in parts:
+                   if part not in STOP_WORDS: used_potential_strings.add(part)
+
+           logger.info(f"Validated '{cleaned_var}' -> '{matched[0]}'")
+
+   final_list = sorted(list(validated_variables)) # Sort for consistency
+   logger.info(f"Final validated variables extracted: {final_list}")
+   return final_list
+
+
+def clean_and_validate_variables(data_handler, raw_variables):
+   """
+   Clean up and validate variable names from user input
+   
+   Args:
+       data_handler: DataHandler instance
+       raw_variables: List of raw variable names from user input
+       
+   Returns:
+       list: List of cleaned and validated variable names that exist in the dataset
+   """
+   if not raw_variables:
+       return []
+   
+   # Get available variables using session data if possible
+   available_vars = []
+   variable_metadata = None
+   
+   if 'available_variables' in session:
+       available_vars = session.get('available_variables', [])
+       variable_metadata = session.get('variable_metadata', None)
+   else:
+       available_vars = get_available_variables(data_handler)
+   
+   # Use the improved matching function
+   matched_variables = match_variables_to_dataset(raw_variables, available_vars, variable_metadata)
+   
+   logger.info(f"Raw variables: {raw_variables}")
+   logger.info(f"Matched variables: {matched_variables}")
+   
+   return matched_variables
+
+
+def parse_message_intent_fallback(message, session_state, data_handler=None):
+   """Parse the intent from a user message (Phase 1 Refinement - using STOP_WORDS indirectly via extract_variables)"""
+   message_lower = message.lower().strip()
+   analysis_complete = session_state.get('analysis_complete', False)
+
+   # --- 1. Check for Query Intent First ---
+   if any(re.search(pattern, message_lower) for pattern in QUESTION_PATTERNS):
+       # Specifically check if it's about the variables used in analysis
+       if any(kw in message_lower for kw in ['variable', 'variables', 'parameter', 'parameters']) and \
+          any(kw in message_lower for kw in ['used', 'use', 'in the analysis', 'composite score', 'calculation']):
+            logger.info("Intent: Query Analysis Variables")
+            return {'type': 'query_analysis_details'}
+       # Add more specific query types here (e.g., methodology) if needed later
+       logger.info("Intent: General Query (likely question)")
+       return {'type': 'general_query'} # Let LLM handle general questions
+
+   # --- 2. Check for Analysis Commands ---
+   run_analysis_keywords = ['run', 'analyze', 'process', 'start', 'begin', 'compute', 'calculate']
+   # More explicit triggers for custom analysis
+   custom_analysis_keywords = ['with variable', 'using variable', 'variables:', 'custom analysis', 'only use', 'include variable', 'select variable']
+   is_rerun = any(re.search(kw, message_lower) for kw in RERUN_KEYWORDS)
+
+   # Check for Custom Analysis Request
+   # Trigger if custom keywords are present OR (run keyword AND 'variable' mentioned)
+   if any(re.search(kw, message_lower) for kw in custom_analysis_keywords) or \
+      (any(kw in message_lower for kw in run_analysis_keywords) and 'variable' in message_lower):
+       logger.info("Potential Custom Analysis Intent detected. Extracting variables...")
+       available_vars = session.get('available_variables', []) # Get actual vars for validation
+       if not available_vars and data_handler: # Fallback if not in session
+           available_vars = get_available_variables(data_handler) # Assumes this helper exists
+           session['available_variables'] = available_vars # Store for next time
+
+       variable_metadata = session.get('variable_metadata', None)
+       if not variable_metadata and data_handler: # Fallback
+            variable_metadata = extract_variable_metadata(data_handler) # Assumes this helper exists
+            session['variable_metadata'] = variable_metadata # Store for next time
+
+       # Pass available vars and metadata for immediate validation during extraction
+       extracted_variables = extract_variables(message, available_vars, variable_metadata) # extract_variables now uses STOP_WORDS
+
+       # Only consider it a custom run if VALID variables were extracted
+       if extracted_variables and len(extracted_variables) >= 1: # Allow even 1 for confirmation step
+           logger.info(f"Intent: Run Custom Analysis with Variables: {extracted_variables}")
+           return {'type': 'run_analysis_variables', 'variables': extracted_variables}
+       else:
+           logger.info("No valid variables extracted for custom analysis request.")
+           # Fall through gracefully to check for standard run or general query
+
+   # Check for Standard Analysis Request (requires explicit "analysis" keyword usually)
+   # Ensures "run with variable X" isn't mistaken for standard run
+   if any(re.search(kw + r'\s+(the\s+)?analysis', message_lower) for kw in run_analysis_keywords) or \
+      message_lower in ['run analysis', 'start analysis', 'analyze data']:
+       # Check if it was already identified as custom analysis (avoids misclassification)
+       if not any(re.search(kw, message_lower) for kw in custom_analysis_keywords) and 'variable' not in message_lower:
+           if analysis_complete and not is_rerun:
+               logger.info("Intent: Query (User asked to run analysis, but it's complete. Needs confirmation/clarification)")
+               return {'type': 'general_query', 'details': 'request_to_run_completed_analysis'}
+           else:
+               logger.info(f"Intent: Run Standard Analysis (Rerun: {is_rerun})")
+               return {'type': 'run_analysis'}
+
+   # --- 3. Check for Visualization Intent ---
+   viz_keywords = ['show', 'display', 'view', 'see', 'map', 'plot', 'visualization', 'chart', 'generate', 'create', 'draw']
+   if any(keyword in message_lower for keyword in viz_keywords):
+       # Decision tree visualization
+       if 'tree' in message_lower or 'decision' in message_lower or 'workflow' in message_lower:
+           logger.info("Intent: View Plot - Decision Tree")
+           return {'type': 'view_plot', 'plot_type': 'decision_tree'}
+       # Box plot
+       if ('box' in message_lower or 'whisker' in message_lower or 'ranking' in message_lower) and 'map' not in message_lower:
+           logger.info("Intent: View Plot - Vulnerability")
+           return {'type': 'view_plot', 'plot_type': 'vulnerability'}
+       # Map visualizations
+       if 'map' in message_lower:
+           var_name = extract_variable_name(message_lower, data_handler) # Simple extraction for viz target
+           if any(var_word in message_lower for var_word in ['variable', 'distribution']) and var_name:
+               logger.info(f"Intent: View Map - Variable ({var_name})")
+               return {'type': 'view_map', 'map_type': 'variable', 'variable_name': var_name}
+           if ('normalize' in message_lower or 'normalized' in message_lower) and var_name:
+               logger.info(f"Intent: View Map - Normalized ({var_name})")
+               return {'type': 'view_map', 'map_type': 'normalized', 'variable_name': var_name}
+           if any(word in message_lower for word in ['composite', 'risk', 'score']):
+                logger.info("Intent: View Map - Composite")
+                return {'type': 'view_map', 'map_type': 'composite'}
+           if ('vulnerability' in message_lower or 'vulnerable' in message_lower):
+                logger.info("Intent: View Map - Vulnerability")
+                return {'type': 'view_map', 'map_type': 'vulnerability'}
+           if any(word in message_lower for word in ['urban', 'extent', 'threshold']):
+               threshold_match = re.search(r'(\d+)\s*%?', message_lower) # Allow % sign or not
+               threshold = 30 if not threshold_match else int(threshold_match.group(1))
+               logger.info(f"Intent: View Map - Urban Extent (Threshold: {threshold})")
+               return {'type': 'view_map', 'map_type': 'urban_extent', 'threshold': threshold}
+           # Default map type if variable mentioned
+           if var_name:
+                logger.info(f"Intent: View Map - Variable (Default map for {var_name})")
+                return {'type': 'view_map', 'map_type': 'variable', 'variable_name': var_name}
+           else: # Default map if no variable found
+                logger.info("Intent: View Map - Composite (Default map)")
+                return {'type': 'view_map', 'map_type': 'composite'}
+       # Fallback for plot/chart/visualization if type unclear but variable mentioned
+       var_name = extract_variable_name(message_lower, data_handler)
+       if var_name:
+           logger.info(f"Intent: View Map - Variable (Default viz for {var_name})")
+           return {'type': 'view_map', 'map_type': 'variable', 'variable_name': var_name} # Default to map
+
+   # --- 4. Check for Report Generation ---
+   if any(word in message_lower for word in ['report', 'generate', 'download', 'pdf', 'docx', 'html', 'document']):
+       format_type = 'pdf' # Default
+       if 'html' in message_lower: format_type = 'html'
+       elif 'word' in message_lower or 'docx' in message_lower: format_type = 'docx'
+       logger.info(f"Intent: Generate Report (Format: {format_type})")
+       return {'type': 'generate_report', 'format': format_type}
+
+   # --- 5. Check for Language Change ---
+   if any(word in message_lower for word in ['language', 'speak', 'talk', 'translate']):
+       language = 'en' # Default
+       if 'french' in message_lower or 'français' in message_lower: language = 'fr'
+       elif 'hausa' in message_lower: language = 'ha'
+       elif 'yoruba' in message_lower: language = 'yo'
+       elif 'igbo' in message_lower: language = 'ig'
+       elif 'arabic' in message_lower: language = 'ar'
+       # Add more languages if needed
+       logger.info(f"Intent: Change Language (To: {language})")
+       return {'type': 'change_language', 'language': language}
+
+   # --- Default: General Query ---
+   logger.info("Intent: General Query (Fallback)")
+   return {'type': 'general_query'}
+
 
 def extract_variable_name(message_lower, data_handler=None):
-    """
-    Extract variable name from message
-    
-    Args:
-        message_lower: Lowercase user message
-        data_handler: Optional DataHandler instance for variable validation
-        
-    Returns:
-        str: Extracted and validated variable name, or None if not found
-    """
-    # Common variable patterns
-    patterns = [
-        r'variable[:\s]+(\w+)',
-        r'for\s+(?:the\s+)?(\w+)',
-        r'of\s+(?:the\s+)?(\w+)',
-        r'showing\s+(?:the\s+)?(\w+)',
-        r'see\s+(?:the\s+)?(\w+)',
-        r'display\s+(?:the\s+)?(\w+)',
-        r'view\s+(?:the\s+)?(\w+)',
-        r'about\s+(?:the\s+)?(\w+)'
-    ]
-    
-    # Try each pattern
-    for pattern in patterns:
-        match = re.search(pattern, message_lower)
-        if match:
-            var_name = match.group(1).strip()
-            # Filter out common words
-            stop_words = ['the', 'map', 'plot', 'variable', 'visualization', 'chart', 'distribution']
-            if var_name not in stop_words:
-                # Validate against dataset if data_handler provided
-                if data_handler:
-                    validated_vars = clean_and_validate_variables(data_handler, [var_name])
-                    if validated_vars:
-                        return validated_vars[0]
-                    else:
-                        continue  # Try next pattern if this variable doesn't validate
-                else:
-                    return var_name
-    
-    # Check for common variable names
-    common_vars = [
-        'rainfall', 'temperature', 'elevation', 'population', 'distance', 
-        'housing', 'temp_mean', 'mean_rainfall', 'pfpr', 'ndvi', 'evi',
-        'flood', 'housing_quality', 'distance_to_water', 'mean_ndvi', 'mean_evi',
-        'rh_mean', 'soil_wetness', 'mean_soil_wetness', 'water'
-    ]
-    
-    for var in common_vars:
-        if var in message_lower:
-            # Validate if data_handler provided
-            if data_handler:
-                validated_vars = clean_and_validate_variables(data_handler, [var])
-                if validated_vars:
-                    return validated_vars[0]
-            else:
-                return var
-    
-    # If data_handler is provided but no variable found yet, try compound variables
-    if data_handler:
-        # Check for compound forms like "mean evi"
-        compound_patterns = [
-            (r'mean\s+evi', 'mean_evi'),
-            (r'mean\s+ndvi', 'mean_ndvi'),
-            (r'distance\s+to\s+water', 'distance_to_water'),
-            (r'soil\s+wetness', 'mean_soil_wetness')
-        ]
-        
-        for pattern, standard_name in compound_patterns:
-            if re.search(pattern, message_lower):
-                validated_vars = clean_and_validate_variables(data_handler, [standard_name])
-                if validated_vars:
-                    return validated_vars[0]
-    
-    return None
+   """
+   Extract variable name from message
+   
+   Args:
+       message_lower: Lowercase user message
+       data_handler: Optional DataHandler instance for variable validation
+       
+   Returns:
+       str: Extracted and validated variable name, or None if not found
+   """
+   # Common variable patterns
+   patterns = [
+       r'variable[:\s]+(\w+)',
+       r'for\s+(?:the\s+)?(\w+)',
+       r'of\s+(?:the\s+)?(\w+)',
+       r'showing\s+(?:the\s+)?(\w+)',
+       r'see\s+(?:the\s+)?(\w+)',
+       r'display\s+(?:the\s+)?(\w+)',
+       r'view\s+(?:the\s+)?(\w+)',
+       r'about\s+(?:the\s+)?(\w+)'
+   ]
+   
+   # Try each pattern
+   for pattern in patterns:
+       match = re.search(pattern, message_lower)
+       if match:
+           var_name = match.group(1).strip()
+           # Filter out common words
+           stop_words = ['the', 'map', 'plot', 'variable', 'visualization', 'chart', 'distribution']
+           if var_name not in stop_words:
+               # Validate against dataset if data_handler provided
+               if data_handler:
+                   validated_vars = clean_and_validate_variables(data_handler, [var_name])
+                   if validated_vars:
+                       return validated_vars[0]
+                   else:
+                       continue  # Try next pattern if this variable doesn't validate
+               else:
+                   return var_name
+   
+   # Check for common variable names
+   common_vars = [
+       'rainfall', 'temperature', 'elevation', 'population', 'distance', 
+       'housing', 'temp_mean', 'mean_rainfall', 'pfpr', 'ndvi', 'evi',
+       'flood', 'housing_quality', 'distance_to_water', 'mean_ndvi', 'mean_evi',
+       'rh_mean', 'soil_wetness', 'mean_soil_wetness', 'water'
+   ]
+   
+   for var in common_vars:
+       if var in message_lower:
+           # Validate if data_handler provided
+           if data_handler:
+               validated_vars = clean_and_validate_variables(data_handler, [var])
+               if validated_vars:
+                   return validated_vars[0]
+           else:
+               return var
+   
+   # If data_handler is provided but no variable found yet, try compound variables
+   if data_handler:
+       # Check for compound forms like "mean evi"
+       compound_patterns = [
+           (r'mean\s+evi', 'mean_evi'),
+           (r'mean\s+ndvi', 'mean_ndvi'),
+           (r'distance\s+to\s+water', 'distance_to_water'),
+           (r'soil\s+wetness', 'mean_soil_wetness')
+       ]
+       for pattern, standard_name in compound_patterns:
+           if re.search(pattern, message_lower):
+               validated_vars = clean_and_validate_variables(data_handler, [standard_name])
+               if validated_vars:
+                   return validated_vars[0]
+   
+   return None
 
-def generate_report_file(data_handler, format_type='pdf'):
+
+def get_llm_nlu_response(user_message, session_state, available_variables, last_visualization=None):
     """
-    Generate a report file
-    
+    Uses the LLM to perform Natural Language Understanding (NLU)
+    to identify intent and extract entities.
+
     Args:
-        data_handler: DataHandler instance
-        format_type: Report format type ('pdf', 'html', 'docx')
-        
+        user_message (str): The raw message from the user.
+        session_state (dict): Current state (analysis_complete, etc.).
+        available_variables (list): List of valid variable names for entity extraction.
+        last_visualization (dict): Information about the last visualization shown (for context).
+
     Returns:
-        dict: Result with status and report URL
+        dict: A dictionary containing 'intent' and 'entities' (or None on error).
+              Example: {'intent': 'run_custom_analysis', 'entities': {'variable_names': ['rainfall', 'pop_density']}}
     """
+    api_key = current_app.config.get('OPENAI_API_KEY')
+    if not api_key:
+        logger.error("OpenAI API Key not found for NLU.")
+        return None # Cannot perform LLM NLU
+
+    client = openai.OpenAI(api_key=api_key)
+
+    # Define possible intents and entities for the LLM
+    # Enhanced for Phase 3 with explanation intents and confirmation handling
+    intents_description = """
+    Possible intents:
+    - run_standard_analysis: User wants to run the default analysis.
+    - run_custom_analysis: User wants to run analysis with specific variables.
+    - query_analysis_details: User asks about parameters/variables used in the last analysis.
+    - request_visualization: User asks to see a map, plot, or chart.
+    - generate_report: User asks to generate a PDF, HTML, or DOCX report.
+    - change_language: User wants to change the interaction language.
+    - greet: User says hello or greets the assistant.
+    - goodbye: User says goodbye or indicates ending the session.
+    - explain_methodology: User wants an explanation of a particular methodology (cleaning, normalization, etc.)
+    - explain_variable: User wants an explanation of a specific variable's relationship with malaria.
+    - explain_variable_category: User wants an explanation of a category of variables (environmental, demographic, etc.)
+    - viz_followup_question: User is asking a follow-up about the most recently shown visualization.
+    - confirm_custom_analysis: User is confirming a previously proposed custom analysis.
+    - cancel_custom_analysis: User is cancelling a previously proposed custom analysis.
+    - clarification_needed: The user's request is too ambiguous to proceed.
+    - request_elaboration: User asks for more details or elaboration on a previously discussed topic.
+    - general_query: User asks a general question not covered above.
+    """
+    
+    entities_description = f"""
+    Extractable entities:
+    - variable_names (list): List of specific variable names mentioned for custom analysis or visualization. Validate against this list: {', '.join(available_variables[:20])}{'...' if len(available_variables) > 20 else ''}.
+    - variable_name (string): A specific variable the user is asking about for explanation purposes.
+    - variable_category (string): Category of variables ('environmental', 'demographic', 'epidemiological').
+    - visualization_type (string): General type like 'map', 'plot', 'chart', 'tree'.
+    - map_type (string): Specific map type ('variable', 'normalized', 'composite', 'vulnerability', 'urban_extent').
+    - plot_type (string): Specific plot type ('vulnerability', 'decision_tree').
+    - variable_for_viz (string): The specific variable requested for a map/plot. Use a name from the available list if possible.
+    - threshold_value (integer): Numerical threshold for urban extent (default 30).
+    - report_format (string): 'pdf', 'html', or 'docx'.
+    - language_code (string): 'en', 'ha', 'yo', 'ig', 'fr', 'ar', etc.
+    - methodology_type (string): The methodology the user is asking about ('missing_values', 'normalization', 'composite_scores', 'vulnerability_ranking', 'urban_extent').
+    - topic (string): The specific topic the user is asking for more information about (e.g., 'variables', 'methodology', 'urban_extent').
+    """
+    
+    # Add context about current state
+    state_summary = f"Current state: Analysis previously run = {session_state.get('analysis_complete', False)}. Files loaded = {session_state.get('csv_loaded', False) and session_state.get('shapefile_loaded', False)}."
+    
+    # Add recent visualization context if available
+    viz_context = ""
+    if last_visualization:
+        viz_type = last_visualization.get('type', '')
+        variable = last_visualization.get('variable', '')
+        threshold = last_visualization.get('threshold', '')
+        
+        viz_context = f"Most recent visualization shown was a {viz_type}"
+        if variable:
+            viz_context += f" of the variable '{variable}'"
+        if threshold and viz_type == 'urban_extent_map':
+            viz_context += f" with threshold {threshold}%"
+        viz_context += "."
+    
+    # Get dialogue context for better continuity
+    dialogue_context = session.get('dialogue_context', {})
+    last_topic = dialogue_context.get('last_topic', '')
+    last_intent = dialogue_context.get('last_intent', '')
+    
+    dialogue_context_str = ""
+    if last_topic or last_intent:
+        dialogue_context_str = f"Previous conversation was about: {last_topic or last_intent}."
+
+    # Pending action context (for confirmation handling)
+    pending_context = ""
+    if session.get('pending_action') == 'confirm_custom_analysis' and session.get('pending_variables'):
+        pending_vars = session.get('pending_variables', [])
+        pending_context = f"IMPORTANT: The user was asked to confirm a custom analysis with these variables: {', '.join(pending_vars)}. Check if they are confirming or cancelling."
+
+    system_prompt = f"""
+    You are an expert NLU system for a Malaria Risk Analysis tool.
+    Analyze the user message considering the current application state and identify the primary intent and any relevant entities.
+    {state_summary}
+    {viz_context}
+    {dialogue_context_str}
+    {pending_context}
+    
+    IMPORTANT: Pay special attention to follow-up questions and requests for elaboration.
+    If the user asks for more details, explanations, or elaboration about a previously mentioned topic, 
+    classify this as 'request_elaboration' intent with the 'topic' entity set to what they're asking for more details about.
+    Examples of elaboration requests:
+    - "Tell me more about X"
+    - "Elaborate on X"
+    - "Why were these variables chosen?"
+    - "What makes these important?"
+    - "Can you explain more about..."
+    - "I want to understand better..."
+    
+    {intents_description}
+    {entities_description}
+    Respond ONLY with a JSON object containing the 'intent' (string) and 'entities' (object).
+    If multiple variables are mentioned for custom analysis, include them all in the 'variable_names' list within entities.
+    If a specific variable is mentioned for a visualization, put it in 'variable_for_viz'.
+    If no relevant entities are found, provide an empty entities object {{}}.
+    Prioritize specific intents over general_query. If the request is very ambiguous, use intent 'clarification_needed'.
+    If the user asks *what* variables were used, the intent is 'query_analysis_details'.
+    If the user asks *to use* specific variables, the intent is 'run_custom_analysis'.
+    If the user's message is a simple 'yes', 'confirm', 'ok', etc. following a custom analysis proposal, the intent is 'confirm_custom_analysis'.
+    If the user's message is a simple 'no', 'cancel', etc. following a custom analysis proposal, the intent is 'cancel_custom_analysis'.
+    If the user is asking about 'how' something works (methodology), use 'explain_methodology'.
+    If the user is asking about a specific variable and its relationship with malaria, use 'explain_variable'.
+    If the user is asking for more information after you've already provided an answer, use 'request_elaboration'.
+    """
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message}
+    ]
+
     try:
-        result = report_gen.generate_report(data_handler, format=format_type)
-        
-        if result['status'] == 'success':
-            return {
-                'status': 'success',
-                'message': result['message'],
-                'report_url': result['web_url'],
-                'ai_response': f"I've generated a {format_type.upper()} report for you. You can download it using the link below. The report includes data overview, missing value handling, variable relationships, composite scores, vulnerability rankings, and urban extent analysis."
-            }
-        else:
-            return {
-                'status': 'error',
-                'message': result['message'],
-                'ai_response': f"I encountered an error while generating the {format_type.upper()} report. Please try again or check if all required data is available."
-            }
-    except Exception as e:
-        logger.error(f"Error generating report: {str(e)}")
-        return {
-            'status': 'error',
-            'message': f'Error generating report: {str(e)}',
-            'ai_response': f"I encountered an error while generating the report. {str(e)}"
-        }
-        
-def generate_ai_response(message, session_state, intent, analysis_result=None):
-    """Generate an AI response using OpenAI"""
-    try:
-        api_key = current_app.config.get('OPENAI_API_KEY')
-        if not api_key:
-            return None # Fallback will be used
-            
-        system_message = get_system_message(session_state, analysis_result)
-        conversation_history = session.get('conversation_history', [])
-        
-        conversation_history.append({"role": "user", "content": message})
-        
-        # Keep only the last N messages for context to OpenAI
-        # And limit what's stored back in the session
-        MAX_HISTORY_FOR_OPENAI = 20 # e.g., last 10 pairs
-        MAX_HISTORY_IN_SESSION = 10 # Store even less in session to keep cookie small
-        
-        messages_for_openai = [
-            {"role": "system", "content": system_message},
-        ] + conversation_history[-MAX_HISTORY_FOR_OPENAI:]
-        
-        client = openai.OpenAI(api_key=api_key)
-        
         response = client.chat.completions.create(
-            model="gpt-4o", # Consider "gpt-3.5-turbo" if cost/speed is an issue and quality is acceptable
-            messages=messages_for_openai,
-            temperature=0.7,
-            max_tokens=800
+            model="gpt-4o", # Or gpt-3.5-turbo for faster/cheaper NLU
+            messages=messages,
+            temperature=0.1, # Low temperature for factual NLU
+            max_tokens=500, # Increased for potentially longer explanations
+            response_format={ "type": "json_object" } # Request JSON output directly (supported by newer models)
         )
-        ai_message = response.choices[0].message.content
-        
-        conversation_history.append({"role": "assistant", "content": ai_message})
-        # Store a limited version of the history back into the session
-        session['conversation_history'] = conversation_history[-MAX_HISTORY_IN_SESSION:] 
-        
-        return ai_message
-    
-    except Exception as e:
-        logger.error(f"Error generating AI response: {str(e)}")
-        return None # Fallback will be used
+        content = response.choices[0].message.content
+        logger.debug(f"LLM NLU raw response: {content}")
+        nlu_result = json.loads(content)
 
-def get_system_message(session_state, analysis_result=None):
-    """Generate a system message with the current state for the AI"""
-    base_message = """
-    You are an AI assistant for the Malaria Reprioritization Tool (MRPT), a sophisticated application for malaria risk analysis
-    and bed net distribution planning in Nigeria. You combine expertise in epidemiology, spatial analysis, and data science with
-    a conversational, helpful approach. Your role is to guide users through their analysis while being responsive to questions.
-    
-    Be warm, friendly, and conversational - like a helpful companion rather than a formal tool.
-    Use a natural, engaging tone while maintaining professionalism.
-    Keep explanations concise and clear, avoiding unnecessary jargon.
-    
-    When the user asks to see visualizations, suggest specific types they can request:
-    - Variable distribution maps (showing original data distribution)
-    - Normalized variable maps (showing values adjusted for relationship with malaria risk)
-    - Composite risk maps (showing combined risk scores from multiple variables)
-    - Vulnerability ranking plot (box and whisker plot showing ward vulnerability)
-    - Vulnerability map (showing geographical distribution of vulnerability)
-    - Urban extent maps (showing areas above/below urban thresholds)
-    - Decision tree visualization (showing the analysis workflow)
-    
-    When explaining visualizations:
-    - For variable maps: Explain how darker colors represent higher values
-    - For normalized maps: Explain the variable relationship (direct/inverse) with malaria risk
-    - For composite maps: Explain how multiple variables combine to create risk score
-    - For vulnerability plots: Explain how wards are ranked from most to least vulnerable
-    - For urban extent maps: Explain how thresholds determine resource allocation decisions
-    
-    Users can customize analysis by selecting specific variables for the composite score calculation.
-    Help users understand how to specify the variables they want to include in their analysis.
-    """
-    
-    # Add current session state
-    state_message = "\n\nCurrent session state:\n"
-    
-    if session_state.get('csv_loaded', False):
-        csv_rows = session.get('csv_rows', 0)
-        csv_columns = session.get('csv_columns', 0)
-        state_message += f"- CSV data loaded: {csv_rows} rows, {csv_columns} columns\n"
-    else:
-        state_message += "- CSV data has not been loaded yet\n"
-    
-    if session_state.get('shapefile_loaded', False):
-        state_message += "- Shapefile data has been loaded\n"
-    else:
-        state_message += "- Shapefile data has not been loaded yet\n"
-    
-    if session_state.get('analysis_complete', False):
-        state_message += "- Analysis is complete. All visualizations are available.\n"
-    else:
-        state_message += "- Analysis has not been run yet\n"
-    
-    # Add analysis results if available
-    if analysis_result:
-        result_message = "\n\nAnalysis results overview:\n"
-        
-        if 'variables_used' in analysis_result:
-            result_message += f"- Variables used in analysis: {', '.join(analysis_result['variables_used'])}\n"
-        
-        if 'vulnerable_wards' in analysis_result:
-            top_wards = analysis_result['vulnerable_wards'][:5]
-            result_message += f"- Top 5 most vulnerable wards: {', '.join(top_wards)}\n"
-    else:
-        result_message = ""
-    
-    return base_message + state_message + result_message
+        # Basic validation of the structure
+        if 'intent' in nlu_result and 'entities' in nlu_result:
+             # Validate extracted variable names against available_vars
+             if 'variable_names' in nlu_result['entities']:
+                  validated_vars = match_variables_to_dataset(
+                      nlu_result['entities']['variable_names'],
+                      available_variables,
+                      session.get('variable_metadata')
+                  )
+                  nlu_result['entities']['variable_names'] = validated_vars
+                  if not validated_vars: # Remove if validation yields nothing
+                       del nlu_result['entities']['variable_names']
+
+             if 'variable_for_viz' in nlu_result['entities'] and nlu_result['entities']['variable_for_viz']:
+                  matched_viz_var = match_variables_to_dataset(
+                      [nlu_result['entities']['variable_for_viz']],
+                       available_variables,
+                       session.get('variable_metadata')
+                       )
+                  # Update with validated name or remove if invalid
+                  nlu_result['entities']['variable_for_viz'] = matched_viz_var[0] if matched_viz_var else None
+                  if not nlu_result['entities']['variable_for_viz']:
+                      del nlu_result['entities']['variable_for_viz']
+
+             logger.info(f"LLM NLU Result: Intent='{nlu_result['intent']}', Entities={nlu_result['entities']}")
+             return nlu_result
+        else:
+             logger.error(f"LLM NLU response missing required keys ('intent', 'entities'): {content}")
+             return None
+
+    except json.JSONDecodeError as json_err:
+        logger.error(f"Failed to decode LLM NLU JSON response: {json_err}. Response: {content if 'content' in locals() else 'No response'}")
+        return None
+    except Exception as e:
+        logger.error(f"Error calling OpenAI for NLU: {e}", exc_info=True)
+        return None
+
+
+def generate_analysis_success_message(result, is_custom=False):
+   """Generates a standard success message after analysis."""
+   custom_text = "with the variables you specified" if is_custom else "using default parameters"
+   vars_used = result.get('variables_used', [])
+   top_wards = result.get('vulnerable_wards', [])[:5] # Get top 5
+
+   vars_text = ', '.join(f"'{v}'" for v in vars_used) if vars_used else 'a default set'
+   wards_text = ', '.join(top_wards) if top_wards else 'N/A'
+
+   message = f"""
+       <p><strong>{'Custom analysis' if is_custom else 'Analysis'} completed successfully!</strong></p>
+       <p>I've analyzed your data {custom_text}. Key results:</p>
+       <ul>
+           <li><strong>Variables Used:</strong> {vars_text}</li>
+           <li><strong>Top 5 Vulnerable Wards:</strong> {wards_text}</li>
+       </ul>
+       <p>You can now ask me to show visualizations like:</p>
+       <ul>
+           <li>"Show map for <i>[variable name]</i>" (e.g., population)</li>
+           <li>"Show normalized map for <i>[variable name]</i>"</li>
+           <li>"Show composite map"</li>
+           <li>"Show vulnerability plot" (Ranking)</li>
+           <li>"Show vulnerability map"</li>
+           <li>"Show urban extent map at 50%"</li>
+           <li>"Show decision tree" (Workflow)</li>
+       </ul>
+       <p>You can also <a href="#" onclick="document.getElementById('download-report-btn').click(); return false;">generate a report</a> summarising these findings.</p>
+       <p>What would you like to see first?</p>
+   """
+   return message
+
+
+def get_visualization_result(viz_request, data_handler):
+   """
+   Get visualization result without going through the API endpoint
+   Duplicates functionality from get_visualization but can be called directly
+   """
+   viz_type = viz_request.get('type', '')
+   variable = viz_request.get('variable', None)
+   threshold = viz_request.get('threshold', 30)
+   
+   # Check if analysis is complete, except for variable maps which can be viewed anytime
+   if not session.get('analysis_complete', False) and viz_type not in ['variable_map']:
+       return {
+           'status': 'error',
+           'message': 'Analysis has not been run yet. Please run the analysis first.',
+           'ai_response': "I need to run the analysis before I can show you visualizations. Would you like me to run the analysis now?"
+       }
+   
+   # Handle different visualization types
+   try:
+       if viz_type == 'variable_map':
+           result = viz.create_variable_map(data_handler, variable)
+       elif viz_type == 'normalized_map':
+           result = viz.create_normalized_map(data_handler, variable)
+       elif viz_type == 'composite_map':
+           result = viz.create_composite_map(data_handler)
+       elif viz_type == 'vulnerability_plot':
+           if hasattr(data_handler, 'composite_scores') and data_handler.composite_scores is not None:
+               box_plot_result = viz.box_plot_function(data_handler.composite_scores['scores'])
+               if box_plot_result['status'] == 'success':
+                   data_handler.boxwhisker_plot = box_plot_result
+                   plot_fig = box_plot_result['plots'][0]
+                   html_path = viz.create_plotly_html(plot_fig, "vulnerability_plot.html")
+                   result = {
+                       'status': 'success',
+                       'message': 'Successfully generated vulnerability plot',
+                       'image_path': html_path,
+                       'current_page': int(1),
+                       'total_pages': int(box_plot_result['total_pages']),
+                       'viz_type': 'vulnerability_plot',
+                       'ai_response': "Here's the vulnerability ranking box and whisker plot showing wards from most vulnerable (top) to least vulnerable (bottom). Each horizontal bar represents a ward, with the box showing the range of vulnerability scores across different models. This visualization helps identify priority areas for intervention."
+                   }
+               else:
+                   result = box_plot_result
+           else:
+               result = {
+                   'status': 'error',
+                   'message': 'Composite scores not available for vulnerability plot',
+                   'ai_response': "I couldn't generate the vulnerability box plot because the composite scores haven't been calculated yet. Let's run the analysis first."
+               }
+       elif viz_type == 'vulnerability_map':
+           result = viz.create_vulnerability_map(data_handler)
+       elif viz_type == 'urban_extent_map':
+           result = viz.create_urban_extent_map(data_handler, threshold)
+       elif viz_type == 'decision_tree':
+           result = viz.create_decision_tree_plot(data_handler)
+       else:
+           result = {
+               'status': 'error',
+               'message': f'Unknown visualization type: {viz_type}',
+               'ai_response': f"I'm not sure what visualization you're looking for. You can ask for variable maps, normalized maps, composite maps, vulnerability plots, vulnerability maps, or urban extent maps."
+           }
+       
+       # Ensure all values in the result dictionary are JSON serializable
+       result = convert_to_json_serializable(result)
+       
+       return result
+   except Exception as e:
+       logger.error(f"Error generating visualization: {str(e)}")
+       import traceback
+       logger.error(traceback.format_exc())
+       return {
+           'status': 'error',
+           'message': f'Error generating visualization: {str(e)}',
+           'ai_response': f"I encountered an error while creating the visualization: {str(e)}. Please try again with a different request."
+       }
+
+
+def generate_ai_response(user_message, session_state, nlu_result=None, analysis_result=None, context_for_llm=None):
+   """
+   Generate an AI response using OpenAI with enhanced context for Phase 3.
+   
+   Args:
+       user_message: The message from the user
+       session_state: Current state dict (csv_loaded, etc.)
+       nlu_result: Optional NLU classification result
+       analysis_result: Optional analysis results
+       context_for_llm: Optional additional context (e.g., knowledge base content)
+       
+   Returns:
+       str: The AI response or None on error
+   """
+   try:
+       api_key = current_app.config.get('OPENAI_API_KEY')
+       if not api_key:
+           return None # Fallback will be used
+           
+       system_message = get_system_message(session_state, analysis_result, context_for_llm)
+       conversation_history = session.get('conversation_history', [])
+       
+       conversation_history.append({"role": "user", "content": user_message})
+       
+       # Keep only the last N messages for context to OpenAI
+       # And limit what's stored back in the session
+       MAX_HISTORY_FOR_OPENAI = 10 # Last 5 pairs
+       MAX_HISTORY_IN_SESSION = 10 # Store even less in session to keep cookie small
+       
+       messages_for_openai = [
+           {"role": "system", "content": system_message},
+       ] + conversation_history[-MAX_HISTORY_FOR_OPENAI:]
+       
+       client = openai.OpenAI(api_key=api_key)
+       
+       response = client.chat.completions.create(
+           model="gpt-4o", # Consider "gpt-3.5-turbo" if cost/speed is an issue and quality is acceptable
+           messages=messages_for_openai,
+           temperature=0.7,
+           max_tokens=800
+       )
+       ai_message = response.choices[0].message.content
+       
+       conversation_history.append({"role": "assistant", "content": ai_message})
+       # Store a limited version of the history back into the session
+       session['conversation_history'] = conversation_history[-MAX_HISTORY_IN_SESSION:] 
+       
+       return ai_message
+   
+   except Exception as e:
+       logger.error(f"Error generating AI response: {str(e)}", exc_info=True)
+       return None # Fallback will be used
+
+
+def get_system_message(session_state, analysis_result=None, additional_context=None):
+   """
+   Generate a system message with CURRENT state for the LLM (Phase 3).
+   Includes dynamic state information and optional additional context.
+   
+   Args:
+       session_state: Current state dict
+       analysis_result: Optional analysis results
+       additional_context: Optional additional context (e.g., knowledge base entries)
+       
+   Returns:
+       str: System message for the LLM
+   """
+   # Base instructions
+   base_message = """
+   You are an AI assistant for the Malaria Reprioritization Tool (MRPT).
+   Your role is to help users analyze malaria risk factors and prioritize areas for intervention.
+   Be warm, friendly, and conversational while maintaining scientific accuracy.
+   Guide users through the analysis process, explain results clearly, and help them interpret visualizations.
+   Focus on being helpful, responsive, and informative about malaria epidemiology and risk assessment.
+   """
+
+   # --- Add Dynamic State Information ---
+   state_summary = "\n\nCurrent Session Status:\n"
+   csv_loaded = session_state.get('csv_loaded', False)
+   shp_loaded = session_state.get('shapefile_loaded', False)
+   analysis_complete = session_state.get('analysis_complete', False)
+
+   if csv_loaded and shp_loaded:
+       state_summary += "- Data Files: Both CSV/Excel and Shapefile are LOADED.\n"
+   elif csv_loaded:
+       state_summary += "- Data Files: CSV/Excel LOADED, Shapefile MISSING.\n"
+   elif shp_loaded:
+       state_summary += "- Data Files: Shapefile LOADED, CSV/Excel MISSING.\n"
+   else:
+       state_summary += "- Data Files: No data files loaded yet.\n"
+
+   if analysis_complete:
+       state_summary += "- Analysis: COMPLETE.\n"
+       if analysis_result:
+            vars_used = analysis_result.get('variables_used', [])
+            top_wards = analysis_result.get('vulnerable_wards', [])[:5] # Get top 5
+            if vars_used:
+                state_summary += f"  - Variables used in last analysis: {', '.join(vars_used)}\n"
+            if top_wards:
+                state_summary += f"  - Top vulnerable wards: {', '.join(top_wards)}\n"
+   else:
+        state_summary += "- Analysis: NOT YET RUN.\n"
+
+   state_summary += f"- Current Language: {session_state.get('current_language', 'en')}\n"
+   
+   # Include additional context if provided (e.g., knowledge base content)
+   context_section = ""
+   if additional_context:
+       context_section = f"\n\nAdditional Context:\n{additional_context}\n"
+
+   return base_message + state_summary + context_section
+
 
 def get_fallback_response(message, session_state):
-    """Generate a fallback response when OpenAI is not available"""
-    message_lower = message.lower()
-    
-    if 'hello' in message_lower or 'hi' in message_lower:
-        return "Hello! I'm your Malaria Risk Analysis assistant. How can I help you today?"
-    elif 'thank' in message_lower:
-        return "You're welcome! Is there anything else you'd like to know about your data?"
-    elif not session_state.get('csv_loaded', False) or not session_state.get('shapefile_loaded', False):
-        return "To get started, please upload both your CSV data and shapefile. I'll guide you through the analysis process once they're loaded."
-    elif not session_state.get('analysis_complete', False):
-        return "Would you like me to run the analysis on your data? Just type 'Run the analysis' to begin!"
-    else:
-        return "Great! Your analysis is complete. You can ask me to show you various visualizations like maps, plots, or generate a report. What would you like to see?"
+   """Generate a fallback response when OpenAI is not available"""
+   message_lower = message.lower()
+   
+   if 'hello' in message_lower or 'hi' in message_lower:
+       return "Hello! I'm your Malaria Risk Analysis assistant. How can I help you today?"
+   elif 'thank' in message_lower:
+       return "You're welcome! Is there anything else you'd like to know about your data?"
+   elif not session_state.get('csv_loaded', False) or not session_state.get('shapefile_loaded', False):
+       return "To get started, please upload both your CSV data and shapefile. I'll guide you through the analysis process once they're loaded."
+   elif not session_state.get('analysis_complete', False):
+       return "Would you like me to run the analysis on your data? Just type 'Run the analysis' to begin!"
+   else:
+       return "Your analysis is complete. You can ask me to show you various visualizations like maps, plots, or generate a report. What would you like to see?"
+
+
+def convert_to_json_serializable(obj):
+   """
+   Recursively convert objects to JSON serializable types.
+   Specifically handles NumPy types which are not JSON serializable by default.
+   Updated for NumPy 2.0 compatibility.
+   """
+   if isinstance(obj, dict):
+       return {k: convert_to_json_serializable(v) for k, v in obj.items()}
+   elif isinstance(obj, list):
+       return [convert_to_json_serializable(item) for item in obj]
+   
+   # --- NumPy Type Handling (Updated for NumPy 2.0+) ---
+   # Integer types
+   elif isinstance(obj, np.integer): # Catches all NumPy integer types
+       return int(obj)
+   # Floating point types
+   elif isinstance(obj, np.floating): # Catches all NumPy float types
+       return float(obj)
+   # Complex types
+   elif isinstance(obj, np.complexfloating): # Catches all NumPy complex types
+       return {'real': float(obj.real), 'imag': float(obj.imag)} # Ensure real/imag are also serializable
+   # Boolean types
+   elif isinstance(obj, np.bool_): # NumPy's specific boolean type
+       return bool(obj)
+   # Void types (structured arrays often have np.void elements for rows)
+   elif isinstance(obj, np.void):
+       # Convert structured array record to a dictionary if possible
+       # This assumes fields in the void type are themselves serializable
+       try:
+           return {name: convert_to_json_serializable(obj[name]) for name in obj.dtype.names}
+       except: # If it's not a structured array record or fails, return None or str
+           return None # Or str(obj) if you prefer a string representation
+   # NumPy arrays
+   elif isinstance(obj, np.ndarray):
+       return convert_to_json_serializable(obj.tolist())
+   # --- End NumPy Type Handling ---
+
+   # Pandas specific types
+   elif pd.isna(obj):
+       return None
+   elif isinstance(obj, pd.Timestamp):
+       return obj.isoformat()
+   # Add other pandas types if needed, e.g., pd.Interval
+
+   # Basic Python types (should be serializable by default)
+   elif obj is None or isinstance(obj, (str, int, float, bool)):
+       return obj
+   
+   # Fallback for other types
+   else:
+       # If it has a to_dict method (like some complex custom objects)
+       if hasattr(obj, 'to_dict') and callable(getattr(obj, 'to_dict')):
+           try:
+               return convert_to_json_serializable(obj.to_dict())
+           except Exception as e:
+               logger.warning(f"Error calling to_dict on {type(obj)}: {e}, falling back to str.")
+               pass # Fall through to string conversion
+       
+       # Last resort: convert to string, with a warning
+       try:
+           # Attempt a standard string conversion.
+           # Some objects might raise an error here if their __str__ is not well-behaved for serialization.
+           s = str(obj)
+           # Basic check to avoid overly long or problematic string representations in JSON
+           if len(s) > 256: # Arbitrary limit
+               logger.warning(f"Object of type {type(obj)} has a long string representation. Returning type info instead.")
+               return f"<Object of type: {type(obj).__name__}>"
+           return s
+       except Exception as e:
+           logger.error(f"Could not serialize object of type {type(obj)} to string: {e}. Returning type info.")
+           return f"<Unserializable object of type: {type(obj).__name__}>"

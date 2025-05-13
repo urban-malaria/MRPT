@@ -35,6 +35,7 @@ class DataHandler:
         self.vulnerability_rankings = None
         self.boxwhisker_plot = None
         self.urban_extent_results = None
+        self.na_handling_methods = []
         
         # Create session folder if it doesn't exist
         os.makedirs(self.session_folder, exist_ok=True)
@@ -687,212 +688,182 @@ class DataHandler:
         return top_vars[:5] if len(top_vars) > 5 else top_vars
     
     def compute_composite_scores(self, selected_variables=None, method='mean'):
-        """
-        Calculate composite scores using LLM-selected or user-specified normalized variables
-        
-        Args:
-            selected_variables: List of variables to use (if None, selects using LLM)
-            method: Aggregation method ('mean', 'weighted_mean', 'pca')
-            
-        Returns:
-            dict: Status and information about the composite scores
-        """
-        self.logger.info("===== STARTING COMPOSITE SCORE CALCULATION =====")
-        if self.normalized_data is None:
-            self.logger.info("Normalized data not found. Running normalization first...")
-            norm_result = self.normalize_data()
-            if norm_result['status'] != 'success':
-                self.logger.error(f"ERROR: Normalization failed - {norm_result['message']}")
-                return norm_result
-            self.logger.info("Normalization completed successfully.")
-            
-        try:
-            # Get normalized columns (starting with "normalization_")
-            norm_cols = [col for col in self.normalized_data.columns if col.startswith('normalization_')]
-            self.logger.info(f"Found {len(norm_cols)} normalized columns: {', '.join(norm_cols)}")
-            
-            # Extract original variable names from normalized columns
-            var_names = [col.replace('normalization_', '') for col in norm_cols]
-            
-            # If specific variables are selected, process and validate them
-            if selected_variables:
-                self.logger.info(f"Processing user-selected variables: {', '.join(selected_variables)}")
-                selected_norm_cols = []
-                
-                # For each selected variable, try to find matching normalized column
-                for var in selected_variables:
-                    # Try exact match with normalized column
-                    norm_col = f"normalization_{var.lower()}"
-                    if norm_col in norm_cols:
-                        selected_norm_cols.append(norm_col)
-                        self.logger.info(f"  - Found exact match: {var} -> {norm_col}")
-                    # Try exact match with already normalized name
-                    elif var in norm_cols:
-                        selected_norm_cols.append(var)
-                        self.logger.info(f"  - Found exact match with normalized column: {var}")
-                    # Try case-insensitive match
-                    else:
-                        # Try with normalized prefix
-                        for col in norm_cols:
-                            if col.lower() == f"normalization_{var.lower()}":
-                                selected_norm_cols.append(col)
-                                self.logger.info(f"  - Found case-insensitive match: {var} -> {col}")
-                                break
-                        else:
-                            # Try matching against original variable names
-                            for i, name in enumerate(var_names):
-                                if name.lower() == var.lower():
-                                    selected_norm_cols.append(norm_cols[i])
-                                    self.logger.info(f"  - Found match with original variable: {var} -> {norm_cols[i]}")
-                                    break
-                            else:
-                                # Try partial matches
-                                for col in norm_cols:
-                                    if var.lower() in col.lower():
-                                        selected_norm_cols.append(col)
-                                        self.logger.info(f"  - Found partial match: {var} -> {col}")
-                                        break
-                                
-                # Remove duplicates while preserving order
-                selected_norm_cols = list(dict.fromkeys(selected_norm_cols))
-                self.logger.info(f"After processing, using {len(selected_norm_cols)} columns: {', '.join(selected_norm_cols)}")
-                
-                # Update norm_cols with validated selection
-                norm_cols = selected_norm_cols
-                
-                # Save the composite variables selection for future use
-                self.composite_variables = [col.replace('normalization_', '') for col in norm_cols]
-                
-            else:
-                # Use LLM to select the best 3-5 variables
-                # Get OpenAI API key from environment or settings
-                openai_api_key = os.environ.get('OPENAI_API_KEY')
-                
-                selected_vars = self.suggest_composite_variables(var_names, self.variable_relationships, openai_api_key)
-                self.logger.info(f"LLM selected variables: {', '.join(selected_vars)}")
-                self.composite_variables = selected_vars
-                
-                # Convert selected variable names to normalized column names
-                selected_norm_cols = [f"normalization_{var.lower()}" for var in selected_vars 
-                                    if f"normalization_{var.lower()}" in norm_cols]
-                norm_cols = selected_norm_cols
-            
-            # Need at least 2 variables for composite score
-            if len(norm_cols) < 2:
-                self.logger.error(f"ERROR: Need at least 2 normalized variables. Found {len(norm_cols)}.")
-                return {
-                    'status': 'error',
-                    'message': f'Need at least 2 normalized variables. Found {len(norm_cols)}.'
-                }
-            
-            self.logger.info(f"Using {len(norm_cols)} variables for composite scores: {', '.join(norm_cols)}")
-            
-            # Initialize result dataframe with WardName
-            result = pd.DataFrame({'WardName': self.normalized_data['WardName']})
-            
-            # Generate all combinations
-            combinations = []
-            for r in range(2, len(norm_cols) + 1):
-                combinations.extend(list(itertools.combinations(norm_cols, r)))
-            
-            self.logger.info(f"Created a total of {len(combinations)} combinations")
-            
-            # Create a list to store model formulas
-            model_formulas = []
-            
-            # Calculate composite score for each combination
-            for i, combo in enumerate(combinations):
-                if i % 10 == 0:  # Print progress every 10 combinations
-                    self.logger.info(f"  - Processing combination {i+1}/{len(combinations)} ({(i+1)/len(combinations)*100:.1f}%)")
-                    
-                model_name = f"model_{i+1}"
-                
-                # Calculate composite score based on method
-                if method == 'mean':
-                    # Simple mean of normalized values
-                    result[model_name] = self.normalized_data[list(combo)].mean(axis=1)
-                
-                elif method == 'weighted_mean':
-                    # Weighted mean (equal weights for now)
-                    weights = np.ones(len(combo)) / len(combo)
-                    result[model_name] = np.average(self.normalized_data[list(combo)], axis=1, weights=weights)
-                
-                elif method == 'pca':
-                    # Principal Component Analysis
-                    from sklearn.decomposition import PCA
-                    from sklearn.preprocessing import StandardScaler
-                    
-                    # Standardize data
-                    X = StandardScaler().fit_transform(self.normalized_data[list(combo)])
-                    
-                    # Apply PCA
-                    pca = PCA(n_components=1)
-                    pca_result = pca.fit_transform(X)
-                    
-                    # Normalize to 0-1 scale
-                    min_val = np.min(pca_result)
-                    max_val = np.max(pca_result)
-                    normalized_pca = (pca_result - min_val) / (max_val - min_val)
-                    
-                    result[model_name] = normalized_pca.flatten()
-                
-                else:
-                    # Default to mean
-                    result[model_name] = self.normalized_data[list(combo)].mean(axis=1)
-                
-                # Store model formula
-                variables_used = [col.replace('normalization_', '') for col in combo]
-                model_formulas.append({
-                    'model': model_name,
-                    'variables': variables_used
-                })
-            
-            self.logger.info("Creating DataFrame with all scores (avoiding fragmentation)...")
-            
-            # Convert any int64, float64 values to int, float for better JSON compatibility
-            # Convert all NumPy types to native Python types
-            for col in result.columns:
-                if col != 'WardName':
-                    if np.issubdtype(result[col].dtype, np.integer):
-                        result[col] = result[col].astype(int)
-                    elif np.issubdtype(result[col].dtype, np.floating):
-                        result[col] = result[col].astype(float)
-            
-            # Store composite scores using the new structure
-            self.composite_scores = {
-                'scores': result,
-                'model_formulas': model_formulas
-            }
-            
-            self.logger.info("Saving composite scores to CSV...")
-            # Save composite scores
-            result.to_csv(os.path.join(self.session_folder, 'composite_scores.csv'), index=False)
-            
-            self.logger.info("Saving model formulas...")
-            # Also save model formulas for reference
-            formulas_df = pd.DataFrame(model_formulas)
-            # Convert lists of variables to comma-separated strings for CSV
-            formulas_df['variables'] = formulas_df['variables'].apply(lambda x: ','.join(x) if isinstance(x, list) else x)
-            formulas_df.to_csv(
-                os.path.join(self.session_folder, 'model_formulas.csv'),
-                index=False
-            )
-            
-            self.logger.info("===== COMPLETED COMPOSITE SCORE CALCULATION SUCCESSFULLY =====")
-            return {
-                'status': 'success',
-                'message': f'Successfully calculated {len(combinations)} composite score models',
-                'models': len(combinations),
-                'variables_used': selected_variables or self.composite_variables
-            }
-            
-        except Exception as e:
-            self.logger.error(f"ERROR in composite score calculation: {str(e)}")
-            return {
-                'status': 'error',
-                'message': f'Error calculating composite scores: {str(e)}'
-            }
-    
+       """
+       Calculate composite scores using LLM-selected or user-specified normalized variables
+       
+       Args:
+           selected_variables: List of variables to use (if None, selects using LLM)
+           method: Aggregation method ('mean')
+           
+       Returns:
+           dict: Status and information about the composite scores
+       """
+       self.logger.info("===== STARTING COMPOSITE SCORE CALCULATION =====")
+       if self.normalized_data is None:
+           self.logger.info("Normalized data not found. Running normalization first...")
+           norm_result = self.normalize_data()
+           if norm_result['status'] != 'success':
+               self.logger.error(f"ERROR: Normalization failed - {norm_result['message']}")
+               return norm_result
+           self.logger.info("Normalization completed successfully.")
+           
+       try:
+           # Get normalized columns (starting with "normalization_")
+           norm_cols = [col for col in self.normalized_data.columns if col.startswith('normalization_')]
+           self.logger.info(f"Found {len(norm_cols)} normalized columns: {', '.join(norm_cols)}")
+           
+           # Extract original variable names from normalized columns
+           var_names = [col.replace('normalization_', '') for col in norm_cols]
+           
+           # If specific variables are selected, process and validate them
+           if selected_variables:
+               self.logger.info(f"Processing user-selected variables: {', '.join(selected_variables)}")
+               selected_norm_cols = []
+               
+               # For each selected variable, try to find matching normalized column
+               for var in selected_variables:
+                   # Try exact match with normalized column
+                   norm_col = f"normalization_{var.lower()}"
+                   if norm_col in norm_cols:
+                       selected_norm_cols.append(norm_col)
+                       self.logger.info(f"  - Found exact match: {var} -> {norm_col}")
+                   # Try exact match with already normalized name
+                   elif var in norm_cols:
+                       selected_norm_cols.append(var)
+                       self.logger.info(f"  - Found exact match with normalized column: {var}")
+                   # Try case-insensitive match
+                   else:
+                       # Try with normalized prefix
+                       for col in norm_cols:
+                           if col.lower() == f"normalization_{var.lower()}":
+                               selected_norm_cols.append(col)
+                               self.logger.info(f"  - Found case-insensitive match: {var} -> {col}")
+                               break
+                       else:
+                           # Try matching against original variable names
+                           for i, name in enumerate(var_names):
+                               if name.lower() == var.lower():
+                                   selected_norm_cols.append(norm_cols[i])
+                                   self.logger.info(f"  - Found match with original variable: {var} -> {norm_cols[i]}")
+                                   break
+                           else:
+                               # Try partial matches
+                               for col in norm_cols:
+                                   if var.lower() in col.lower():
+                                       selected_norm_cols.append(col)
+                                       self.logger.info(f"  - Found partial match: {var} -> {col}")
+                                       break
+                               
+               # Remove duplicates while preserving order
+               selected_norm_cols = list(dict.fromkeys(selected_norm_cols))
+               self.logger.info(f"After processing, using {len(selected_norm_cols)} columns: {', '.join(selected_norm_cols)}")
+               
+               # Update norm_cols with validated selection
+               norm_cols = selected_norm_cols
+               
+               # Save the composite variables selection for future use
+               self.composite_variables = [col.replace('normalization_', '') for col in norm_cols]
+               
+           else:
+               # Use LLM to select the best 3-5 variables
+               # Get OpenAI API key from environment or settings
+               openai_api_key = os.environ.get('OPENAI_API_KEY')
+               
+               selected_vars = self.suggest_composite_variables(var_names, self.variable_relationships, openai_api_key)
+               self.logger.info(f"LLM selected variables: {', '.join(selected_vars)}")
+               self.composite_variables = selected_vars
+               
+               # Convert selected variable names to normalized column names
+               selected_norm_cols = [f"normalization_{var.lower()}" for var in selected_vars 
+                                   if f"normalization_{var.lower()}" in norm_cols]
+               norm_cols = selected_norm_cols
+           
+           # Need at least 2 variables for composite score
+           if len(norm_cols) < 2:
+               self.logger.error(f"ERROR: Need at least 2 normalized variables. Found {len(norm_cols)}.")
+               return {
+                   'status': 'error',
+                   'message': f'Need at least 2 normalized variables. Found {len(norm_cols)}.'
+               }
+           
+           self.logger.info(f"Using {len(norm_cols)} variables for composite scores: {', '.join(norm_cols)}")
+           
+           # Initialize result dataframe with WardName
+           result = pd.DataFrame({'WardName': self.normalized_data['WardName']})
+           
+           # Generate all combinations
+           combinations = []
+           for r in range(2, len(norm_cols) + 1):
+               combinations.extend(list(itertools.combinations(norm_cols, r)))
+           
+           self.logger.info(f"Created a total of {len(combinations)} combinations")
+           
+           # Create a list to store model formulas
+           model_formulas = []
+           
+           # Calculate composite score for each combination
+           for i, combo in enumerate(combinations):
+               if i % 10 == 0:  # Print progress every 10 combinations
+                   self.logger.info(f"  - Processing combination {i+1}/{len(combinations)} ({(i+1)/len(combinations)*100:.1f}%)")
+                   
+               model_name = f"model_{i+1}"
+               
+               # Simple mean of normalized values
+               result[model_name] = self.normalized_data[list(combo)].mean(axis=1)
+               
+               # Store model formula
+               variables_used = [col.replace('normalization_', '') for col in combo]
+               model_formulas.append({
+                   'model': model_name,
+                   'variables': variables_used
+               })
+           
+           self.logger.info("Creating DataFrame with all scores (avoiding fragmentation)...")
+           
+           # Convert any int64, float64 values to int, float for better JSON compatibility
+           # Convert all NumPy types to native Python types
+           for col in result.columns:
+               if col != 'WardName':
+                   if np.issubdtype(result[col].dtype, np.integer):
+                       result[col] = result[col].astype(int)
+                   elif np.issubdtype(result[col].dtype, np.floating):
+                       result[col] = result[col].astype(float)
+           
+           # Store composite scores using the new structure
+           self.composite_scores = {
+               'scores': result,
+               'model_formulas': model_formulas
+           }
+           
+           self.logger.info("Saving composite scores to CSV...")
+           # Save composite scores
+           result.to_csv(os.path.join(self.session_folder, 'composite_scores.csv'), index=False)
+           
+           self.logger.info("Saving model formulas...")
+           # Also save model formulas for reference
+           formulas_df = pd.DataFrame(model_formulas)
+           # Convert lists of variables to comma-separated strings for CSV
+           formulas_df['variables'] = formulas_df['variables'].apply(lambda x: ','.join(x) if isinstance(x, list) else x)
+           formulas_df.to_csv(
+               os.path.join(self.session_folder, 'model_formulas.csv'),
+               index=False
+           )
+           
+           self.logger.info("===== COMPLETED COMPOSITE SCORE CALCULATION SUCCESSFULLY =====")
+           return {
+               'status': 'success',
+               'message': f'Successfully calculated {len(combinations)} composite score models',
+               'models': len(combinations),
+               'variables_used': selected_variables or self.composite_variables
+           }
+           
+       except Exception as e:
+           self.logger.error(f"ERROR in composite score calculation: {str(e)}")
+           return {
+               'status': 'error',
+               'message': f'Error calculating composite scores: {str(e)}'
+           }
+   
     def calculate_vulnerability_rankings(self, n_categories=3):
         """
         Calculate vulnerability rankings based on composite scores
@@ -912,7 +883,7 @@ class DataHandler:
         try:
             # Get all model columns
             model_cols = [col for col in self.composite_scores['scores'].columns 
-                         if col.startswith('model_')]
+                            if col.startswith('model_')]
             
             # Calculate median rank for each ward across all models
             scores_df = self.composite_scores['scores']
@@ -973,8 +944,8 @@ class DataHandler:
         
         Args:
             thresholds: List of urban percentage thresholds to analyze
-                       If None, use default thresholds [30, 50, 75, 100]
-                       
+                        If None, use default thresholds [30, 50, 75, 100]
+                        
         Returns:
             dict: Status and urban extent information
         """
@@ -1283,40 +1254,133 @@ class DataHandler:
         
         return cols_with_missing
     
-    def _determine_best_cleaning_method(self, column_name):
+    def _handle_na_spatial_mean(self, df, column):
         """
-        Determine the best method for cleaning missing values in a column
-        
+        Handle missing values using spatial neighbor mean with improved robust matching.
+        This implementation is more robust by:
+        1. Creating a bidirectional mapping between ward names and indices
+        2. Using position-based weights properly while maintaining ward name lookups
+        3. Adding extensive error handling and fallback options
+
         Args:
-            column_name: Name of the column to determine method for
-            
+            df: DataFrame with missing values (will be modified in place)
+            column: Column name to process
+
         Returns:
-            str: Method to use ('mean', 'mode', 'spatial')
+            bool: True if spatial imputation was successfully attempted, False otherwise
         """
-        if self.csv_data is None:
-            return 'mean'  # Default
-        
-        # Get column data
-        if column_name not in self.csv_data.columns:
-            return 'mean'  # Column not found, use default
-        
-        column_data = self.csv_data[column_name]
-        
-        # Check if categorical
-        if column_data.dtype == 'object' or pd.api.types.is_categorical_dtype(column_data):
-            return 'mode'  # For categorical data, use mode
-        
-        # For high percentage missing values (>80%), use mean
-        missing_percent = column_data.isna().mean() * 100
-        if missing_percent > 80:
-            return 'mean'
-        
-        # Check if shapefile is available for spatial mean
-        if self.shapefile_data is not None:
-            return 'spatial'  # Prefer spatial mean when shapefile is available
-        
-        # Default
-        return 'mean'
+        if column not in df.columns or self.shapefile_data is None:
+            self.logger.warning(f"Cannot use spatial method for {column} (missing column or shapefile)")
+            return False # Indicate spatial method was not possible
+
+        if not pd.api.types.is_numeric_dtype(df[column]):
+            self.logger.info(f"Column {column} is not numeric. Spatial mean not applicable.")
+            return False # Indicate spatial method was not applicable
+
+        self.logger.info(f"Attempting spatial neighbor mean imputation for column: {column}...")
+
+        try:
+            # Ensure WardName exists in both dataframes
+            if 'WardName' not in df.columns or 'WardName' not in self.shapefile_data.columns:
+                self.logger.warning(f"WardName column missing for spatial imputation of {column}. Cannot proceed.")
+                return False
+
+            # --- Create a ward-to-position mapping for both datasets ---
+            # This is crucial for correct matching between datasets
+            csv_ward_to_index = {ward: idx for idx, ward in enumerate(df['WardName'])}
+            shp_ward_to_index = {ward: idx for idx, ward in enumerate(self.shapefile_data['WardName'])}
+            
+            # Also create reverse mappings for shapefile
+            shp_index_to_ward = {idx: ward for ward, idx in shp_ward_to_index.items()}
+
+            # --- Create spatial weights using shapefile ---
+            # Don't modify the original shapefile
+            temp_shp = self.shapefile_data.copy()
+            
+            # Create Queen contiguity weights
+            w = Queen.from_dataframe(temp_shp)
+            
+            # --- Find missing values to impute ---
+            missing_indices = df.index[df[column].isna()]
+            missing_wards = df.loc[missing_indices, 'WardName'].tolist()
+            self.logger.info(f"  - Found {len(missing_wards)} missing values in {column} to impute.")
+
+            # --- Track results for reporting ---
+            successful_imputation = 0
+            neighbor_mean_count = 0
+            no_neighbors_count = 0
+            no_valid_neighbor_values_count = 0
+            not_in_shapefile_count = 0
+            global_mean_fallback_count = 0
+
+            # --- Calculate global mean for fallback ---
+            global_mean = df[column].mean()
+            if pd.isna(global_mean):
+                global_mean = 0 # Use 0 as last resort fallback
+                self.logger.warning(f"  - All values in {column} are NA. Using 0 as fallback.")
+
+            # --- Process each missing value ---
+            for idx in missing_indices:
+                ward_name = df.loc[idx, 'WardName']
+                
+                # Check if this ward exists in the shapefile
+                if ward_name in shp_ward_to_index:
+                    # Get shapefile index for this ward
+                    shp_idx = shp_ward_to_index[ward_name]
+                    
+                    # Get neighbor indices from weights
+                    neighbor_indices = w.neighbors[shp_idx]
+                    
+                    if neighbor_indices:
+                        # Convert shapefile neighbor indices to ward names
+                        neighbor_wards = [shp_index_to_ward[i] for i in neighbor_indices]
+                        
+                        # Find these wards in the CSV data
+                        neighbor_values = []
+                        for nward in neighbor_wards:
+                            if nward in csv_ward_to_index:
+                                # Get the value for this ward from the CSV
+                                csv_idx = csv_ward_to_index[nward]
+                                val = df.iloc[csv_idx][column]
+                                if not pd.isna(val):
+                                    neighbor_values.append(val)
+                        
+                        # If we found valid neighbor values, use their mean
+                        if neighbor_values:
+                            imputed_value = sum(neighbor_values) / len(neighbor_values)
+                            df.loc[idx, column] = imputed_value
+                            neighbor_mean_count += 1
+                            successful_imputation += 1
+                        else:
+                            # No valid values from neighbors
+                            df.loc[idx, column] = global_mean
+                            no_valid_neighbor_values_count += 1
+                            global_mean_fallback_count += 1
+                    else:
+                        # Ward has no neighbors
+                        df.loc[idx, column] = global_mean
+                        no_neighbors_count += 1
+                        global_mean_fallback_count += 1
+                else:
+                    # Ward not found in shapefile
+                    df.loc[idx, column] = global_mean
+                    not_in_shapefile_count += 1
+                    global_mean_fallback_count += 1
+
+            # --- Report results ---
+            self.logger.info(f"  - Spatial imputation completed for {column}:")
+            self.logger.info(f"    * Total missing values: {len(missing_indices)}")
+            self.logger.info(f"    * Successful neighbor mean imputations: {neighbor_mean_count}")
+            self.logger.info(f"    * Fallbacks used: {global_mean_fallback_count}")
+            self.logger.info(f"      - Wards not in shapefile: {not_in_shapefile_count}")
+            self.logger.info(f"      - Wards with no neighbors: {no_neighbors_count}")
+            self.logger.info(f"      - Wards with no valid neighbor values: {no_valid_neighbor_values_count}")
+
+            return True # Indicate the spatial method was attempted
+
+        except Exception as e:
+            self.logger.error(f"  - ERROR during spatial imputation for {column}: {str(e)}", exc_info=True)
+            return False # Indicate spatial method failed
     
     def _handle_na_mean(self, df, column):
         """Imputes missing values with column mean. Returns df or None."""
@@ -1332,13 +1396,23 @@ class DataHandler:
             df[column] = df[column].fillna(mean_value)
             return df
         except Exception as e:
-             self.logger.error(f"Error during mean imputation for {column}: {e}")
-             return None
+                self.logger.error(f"Error during mean imputation for {column}: {e}")
+                return None
 
     def _handle_na_mode(self, df, column):
-        """Imputes missing values with column mode. Returns df or None."""
+        """
+        Handle missing values using column mode
+        
+        Args:
+            df: Dataframe with missing values
+            column: Column name to process
+            
+        Returns:
+            Dataframe with missing values filled with mode
+        """
         if column not in df.columns:
-            return None
+            return df
+        
         try:
             mode_result = df[column].mode()
             if not mode_result.empty:
@@ -1358,193 +1432,11 @@ class DataHandler:
             self.logger.error(f"Error during mode imputation for {column}: {e}")
             # Attempt ffill/bfill as a last resort
             try:
-                 df[column] = df[column].ffill().bfill()
-                 if df[column].isna().any(): df[column] = df[column].fillna('Unknown')
-                 return df
+                    df[column] = df[column].ffill().bfill()
+                    if df[column].isna().any(): df[column] = df[column].fillna('Unknown')
+                    return df
             except:
-                 return None
-    
-    def _handle_na_mode(self, df, column):
-        """
-        Handle missing values using column mode
-        
-        Args:
-            df: Dataframe with missing values
-            column: Column name to process
-            
-        Returns:
-            Dataframe with missing values filled with mode
-        """
-        if column not in df.columns:
-            return df
-        
-        # Get mode value (most frequent)
-        mode_value = df[column].mode()[0]
-        
-        # Fill missing values with mode
-        df[column] = df[column].fillna(mode_value)
-        
-        return df
-    
-    def _handle_na_spatial_mean(self, df, column):
-        """
-        Handle missing values using spatial neighbor mean, adapted from R logic.
-
-        Args:
-            df: DataFrame with missing values (will be modified in place).
-            column: Column name to process.
-
-        Returns:
-            bool: True if spatial imputation was successfully attempted (even if fallback was needed), False otherwise.
-        """
-        if column not in df.columns or self.shapefile_data is None:
-            self.logger.warning(f"Cannot use spatial method for {column} (missing column or shapefile).")
-            return False # Indicate spatial method was not possible
-
-        if not pd.api.types.is_numeric_dtype(df[column]):
-            self.logger.info(f"Column {column} is not numeric. Spatial mean not applicable.")
-            return False # Indicate spatial method was not applicable
-
-        self.logger.info(f"Attempting spatial neighbor mean imputation for column: {column}...")
-
-        try:
-            # Ensure WardName exists in both dataframes
-            if 'WardName' not in df.columns or 'WardName' not in self.shapefile_data.columns:
-                self.logger.warning(f"WardName column missing for spatial imputation of {column}. Cannot proceed.")
-                return False
-
-            # --- Create Weights Object ---
-            # Merge essential columns for weights creation (avoids modifying self.shapefile_data)
-            temp_gdf = self.shapefile_data[['WardName', 'geometry']].copy()
-            # Perform an inner merge to only get spatially matched wards
-            merged_gdf = temp_gdf.merge(df[['WardName']], on='WardName', how='inner')
-
-            if merged_gdf.empty or merged_gdf.geometry.isnull().all():
-                 self.logger.warning(f"No valid overlapping geometries found for spatial weights in {column}.")
-                 return False
-
-            # Drop rows with invalid geometry before creating weights
-            merged_gdf = merged_gdf[merged_gdf.geometry.is_valid & ~merged_gdf.geometry.is_empty]
-            if len(merged_gdf) < 2:
-                 self.logger.warning(f"Not enough valid geometries ({len(merged_gdf)}) after filtering for spatial weights in {column}.")
-                 return False
-
-            # Use WardName as the index for calculating weights and accessing neighbors
-            merged_gdf = merged_gdf.set_index('WardName')
-
-            try:
-                w = Queen.from_dataframe(merged_gdf) # Weights based on merged index (WardName)
-                self.logger.info(f"  - Created spatial weights for {column} with {w.n} units.")
-            except Exception as e:
-                self.logger.error(f"  - Failed to create spatial weights for {column}: {str(e)}. Cannot use spatial method.")
-                return False # Indicate spatial method failed
-
-            # --- Imputation Loop ---
-            missing_indices = df.index[df[column].isna()]
-            wards_to_impute = df.loc[missing_indices, 'WardName'].tolist()
-            self.logger.info(f"  - Found {len(wards_to_impute)} missing values in {column} to impute.")
-
-            # Pre-calculate global mean for fallback
-            global_mean = df[column].mean()
-            if pd.isna(global_mean):
-                global_mean = 0 # Use 0 if global mean can't be calculated
-                self.logger.warning(f"  - Global mean for {column} is NaN, will use 0 as fallback.")
-
-            imputed_count = 0
-            fallback_mean_count = 0
-            no_neighbor_count = 0
-            spatial_error_count = 0
-
-            for index in missing_indices:
-                ward_name = df.loc[index, 'WardName']
-                imputed_value = np.nan # Start with NaN
-
-                if ward_name in w.neighbors: # Check if the ward exists in the weights object
-                    neighbor_wards = w.neighbors[ward_name]
-                    if neighbor_wards:
-                        # Get neighbor values from the original DataFrame using WardNames
-                        neighbor_values = df[df['WardName'].isin(neighbor_wards)][column].dropna()
-
-                        if len(neighbor_values) > 0:
-                            imputed_value = neighbor_values.mean()
-                            # Check if neighbor mean is valid
-                            if pd.isna(imputed_value) or not np.isfinite(imputed_value):
-                                imputed_value = global_mean # Fallback 1a: Use global mean
-                                fallback_mean_count += 1
-                                # self.logger.debug(f"   - Ward '{ward_name}': Neighbor mean invalid, using global mean {global_mean:.4f}")
-                            #else:
-                                # self.logger.debug(f"   - Ward '{ward_name}': Imputed with neighbor mean {imputed_value:.4f}")
-                        else:
-                            # No valid neighbor values
-                            imputed_value = global_mean # Fallback 1b: Use global mean
-                            fallback_mean_count += 1
-                            # self.logger.debug(f"   - Ward '{ward_name}': No valid neighbors, using global mean {global_mean:.4f}")
-                    else:
-                        # No neighbors
-                        imputed_value = global_mean # Fallback 2: Use global mean
-                        no_neighbor_count += 1
-                        # self.logger.debug(f"   - Ward '{ward_name}': No neighbors, using global mean {global_mean:.4f}")
-                else:
-                     # Ward not found in weights (e.g., didn't merge with shapefile or invalid geometry)
-                     imputed_value = global_mean # Fallback 3: Use global mean
-                     spatial_error_count += 1
-                     # self.logger.warning(f"   - Ward '{ward_name}' not found in spatial weights, using global mean {global_mean:.4f}")
-
-                # Assign the determined value (neighbor mean, global mean, or 0)
-                df.loc[index, column] = imputed_value
-                imputed_count += 1
-
-            self.logger.info(f"  - Imputed {imputed_count} values for {column}. Fallbacks: GlobalMean={fallback_mean_count}, NoNeighbors={no_neighbor_count}, SpatialError={spatial_error_count}.")
-            return True # Indicate spatial method was attempted (even with fallbacks)
-
-        except Exception as e:
-            self.logger.error(f"  - ERROR during spatial imputation for {column}: {str(e)}", exc_info=True)
-            return False # Indicate spatial method failed
-    
-    def _handle_na_knn(self, df, column, k=5):
-        """
-        Handle missing values using K-nearest neighbors
-        
-        Args:
-            df: Dataframe with missing values
-            column: Column name to process
-            k: Number of neighbors to consider
-            
-        Returns:
-            Dataframe with missing values imputed using KNN
-        """
-        try:
-            from sklearn.impute import KNNImputer
-            
-            # Create a copy
-            result = df.copy()
-            
-            # Get numeric columns (for feature matrix)
-            numeric_cols = [col for col in result.columns 
-                           if pd.api.types.is_numeric_dtype(result[col])]
-            
-            # Skip non-numeric columns
-            if column not in numeric_cols:
-                return self._handle_na_mode(result, column)
-            
-            # Create imputer
-            imputer = KNNImputer(n_neighbors=k)
-            
-            # Create feature matrix
-            X = result[numeric_cols].copy()
-            
-            # Impute values
-            X_imputed = imputer.fit_transform(X)
-            
-            # Update the result with imputed values for target column
-            col_idx = numeric_cols.index(column)
-            result[column] = X_imputed[:, col_idx]
-            
-            return result
-        
-        except Exception as e:
-            self.logger.error(f"Error in KNN imputation for {column}: {str(e)}")
-            return self._handle_na_mean(df, column)  # Fallback to mean
+                    return None
     
     def _get_numeric_columns(self):
         """
