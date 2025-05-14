@@ -940,61 +940,168 @@ class DataHandler:
     
     def process_urban_extent(self, thresholds=None):
         """
-        Process urban extent analysis at different thresholds
+        Analyze urban extent at different thresholds using data from the CSV
+        instead of the shapefile.
         
         Args:
-            thresholds: List of urban percentage thresholds to analyze
-                        If None, use default thresholds [30, 50, 75, 100]
-                        
+            thresholds: List of thresholds to analyze (default: [30, 50, 75, 100])
+            
         Returns:
-            dict: Status and urban extent information
+            Dict with results for each threshold
         """
-        if self.shapefile_data is None:
-            return {
-                'status': 'error',
-                'message': 'No shapefile data loaded'
-            }
-        
-        # Find urban percentage column, checking for truncated names
-        urban_col = None
-        for col_name in ['UrbanPercent', 'UrbanPerce', 'Urban_Percent', 'urban_percent']:
-            if col_name in self.shapefile_data.columns:
-                urban_col = col_name
-                break
-        
-        if not urban_col:
-            return {
-                'status': 'error',
-                'message': 'Urban Percentage column not found in shapefile data'
-            }
-        
-        if thresholds is None:
-            thresholds = [30, 50, 75, 100]
-        
         try:
-            # Process each threshold
+            # Default thresholds if none provided
+            if thresholds is None:
+                thresholds = [30, 50, 75, 100]
+            
+            # Verify that both CSV and shapefile data are loaded
+            if self.csv_data is None:
+                return {
+                    'status': 'error',
+                    'message': 'CSV data not loaded'
+                }
+            
+            if self.shapefile_data is None:
+                return {
+                    'status': 'error',
+                    'message': 'Shapefile data not loaded'
+                }
+            
+            # Look for urban percentage column in the CSV data (priority)
+            urban_percent_col = None
+            potential_cols = ['UrbanPercentage', 'UrbanPercent', 'UrbanPerce', 'Urban_Percent', 
+                            'urban_percent', 'urbanPercent', 'urbanpercent', 'urban_percentage', 
+                            'percent_urban', 'urbanPercentage']
+            
+            # Create case-insensitive mappings of column names
+            csv_columns_lower = {col.lower(): col for col in self.csv_data.columns}
+            
+            # First search using case-insensitive matching in CSV
+            for potential_col in potential_cols:
+                if potential_col.lower() in csv_columns_lower:
+                    urban_percent_col = csv_columns_lower[potential_col.lower()]
+                    self.logger.info(f"Found urban percentage column in CSV: {urban_percent_col}")
+                    break
+            
+            # If not found in CSV, check for binary Urban column in CSV
+            if urban_percent_col is None and 'urban' in csv_columns_lower:
+                urban_col = csv_columns_lower['urban']
+                self.logger.info(f"Found binary Urban column in CSV ({urban_col}), converting to percentage")
+                # Create a new column name that doesn't exist yet
+                new_col_name = 'UrbanPercent_Generated'
+                # Convert binary Urban to percentage (Yes/No, True/False, etc.)
+                self.csv_data[new_col_name] = self.csv_data[urban_col].apply(
+                    lambda x: 100 if str(x).lower() in ['yes', 'true', '1', 'y'] else 0
+                )
+                urban_percent_col = new_col_name
+            
+            # If STILL not found in CSV, then check in shapefile as fallback
+            if urban_percent_col is None:
+                # Create case-insensitive mapping for shapefile columns
+                shp_columns_lower = {col.lower(): col for col in self.shapefile_data.columns}
+                
+                # Check shapefile columns (case-insensitive)
+                for potential_col in potential_cols:
+                    if potential_col.lower() in shp_columns_lower:
+                        shp_col_name = shp_columns_lower[potential_col.lower()]
+                        self.logger.info(f"Found urban percentage column in shapefile (fallback): {shp_col_name}")
+                        # Copy to CSV with a new column name to avoid conflicts
+                        new_col_name = 'UrbanPercent_FromShapefile'
+                        shapefile_data = self.shapefile_data.copy()
+                        tmp_df = pd.DataFrame({
+                            'WardName': shapefile_data['WardName'],
+                            new_col_name: shapefile_data[shp_col_name]
+                        })
+                        self.csv_data = self.csv_data.merge(
+                            tmp_df, on='WardName', how='left'
+                        )
+                        urban_percent_col = new_col_name
+                        break
+                
+                # If still not found, check for binary Urban in shapefile
+                if urban_percent_col is None and 'urban' in shp_columns_lower:
+                    urban_col = shp_columns_lower['urban']
+                    self.logger.info(f"Found binary Urban column in shapefile ({urban_col}), converting to percentage")
+                    # Create a new column name that doesn't exist yet
+                    new_col_name = 'UrbanPercent_FromShapefileBinary'
+                    # Get the column and merge with CSV
+                    shapefile_data = self.shapefile_data.copy()
+                    urban_col_data = pd.DataFrame({
+                        'WardName': shapefile_data['WardName'],
+                        new_col_name: shapefile_data[urban_col].apply(
+                            lambda x: 100 if str(x).lower() in ['yes', 'true', '1', 'y'] else 0
+                        )
+                    })
+                    # Merge to CSV
+                    self.csv_data = self.csv_data.merge(
+                        urban_col_data, on='WardName', how='left'
+                    )
+                    urban_percent_col = new_col_name
+            
+            # If still not found, provide a meaningful error
+            if urban_percent_col is None:
+                self.logger.warning("No urban percentage column found in CSV or shapefile data")
+                return {
+                    'status': 'error',
+                    'message': 'No Urban Percentage column found in CSV or shapefile data. Please include an UrbanPercent column.'
+                }
+            
+            # Log the urban column we're using
+            self.logger.info(f"Using urban percentage column: {urban_percent_col}")
+            
+            # Make sure urban_percent_col is numeric
+            self.csv_data[urban_percent_col] = pd.to_numeric(self.csv_data[urban_percent_col], errors='coerce')
+            
+            # Initialize results dictionary
             urban_extent_results = {}
             
+            # Create a clean subset of CSV data with just WardName and urban column
+            urban_data = self.csv_data[['WardName', urban_percent_col]].copy()
+            
+            # Merge the CSV data with shapefile to get geometry for visualization
+            merged_data = self.shapefile_data.merge(
+                urban_data, on='WardName', how='left'
+            )
+            
+            # Debug columns
+            self.logger.info(f"Merged data columns: {list(merged_data.columns)}")
+            self.logger.info(f"Urban column in merged data: {urban_percent_col in merged_data.columns}")
+            
+            # Process each threshold
             for threshold in thresholds:
                 # Add threshold classification column
-                result_df = self.shapefile_data.copy()
+                result_df = merged_data.copy()
                 meets_threshold_field = f'MeetsThreshold_{threshold}'
-                result_df[meets_threshold_field] = result_df[urban_col] >= threshold
+                
+                # Double-check column exists
+                if urban_percent_col not in result_df.columns:
+                    self.logger.error(f"Column '{urban_percent_col}' not found after merge. Available columns: {list(result_df.columns)}")
+                    continue  # Skip this threshold but don't fail the whole process
+                    
+                result_df[meets_threshold_field] = result_df[urban_percent_col] >= threshold
                 
                 # Count wards meeting/not meeting threshold
                 meets_count = result_df[result_df[meets_threshold_field]].shape[0]
                 not_meets_count = result_df[~result_df[meets_threshold_field]].shape[0]
                 
-                # Store in results
+                # Get ward names for each category
+                meets_wards = result_df[result_df[meets_threshold_field]]['WardName'].tolist()
+                below_wards = result_df[~result_df[meets_threshold_field]]['WardName'].tolist()
+                
+                # Store results
                 urban_extent_results[threshold] = {
+                    'threshold': threshold,
                     'meets_threshold': meets_count,
                     'below_threshold': not_meets_count,
-                    'meets_threshold_wards': result_df[result_df[meets_threshold_field]]['WardName'].tolist(),
-                    'below_threshold_wards': result_df[~result_df[meets_threshold_field]]['WardName'].tolist()
+                    'meets_threshold_wards': meets_wards,
+                    'below_threshold_wards': below_wards
                 }
                 
                 # Save threshold results
-                result_df.to_file(os.path.join(self.session_folder, f'urban_extent_{threshold}.shp'))
+                try:
+                    result_df.to_file(os.path.join(self.session_folder, f'urban_extent_{threshold}.shp'))
+                except Exception as save_error:
+                    self.logger.warning(f"Could not save shapefile for threshold {threshold}: {save_error}")
             
             # Store urban extent results
             self.urban_extent_results = urban_extent_results
@@ -1015,11 +1122,14 @@ class DataHandler:
                 'status': 'success',
                 'message': f'Successfully analyzed urban extent at {len(thresholds)} thresholds',
                 'thresholds': thresholds,
-                'results': urban_extent_results
+                'results': urban_extent_results,
+                'source': 'csv' # Indicate the source of the urban data
             }
             
         except Exception as e:
             self.logger.error(f"Error processing urban extent: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             return {
                 'status': 'error',
                 'message': f'Error processing urban extent: {str(e)}'

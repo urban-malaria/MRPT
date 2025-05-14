@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
 
-    <!-- Bootstrap CSS (ensure this is a version compatible with your design, e.g., 5.x) -->
+    <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
@@ -20,7 +20,10 @@
 <body>
     <header class="app-header">
         <div class="app-title-container">
-            <i class="fas fa-brain app-logo"></i> <!-- Changed logo -->
+            <button id="sidebar-toggle" class="sidebar-toggle-btn" aria-label="Toggle Sidebar">
+                <i class="fas fa-bars"></i>
+            </button>
+            <i class="fas fa-brain app-logo"></i>
             <span class="app-title-text">MRPT AI Assistant</span>
         </div>
         <div class="app-controls">
@@ -29,7 +32,6 @@
                 <option value="ha">Hausa</option>
                 <option value="yo">Yoruba</option>
                 <option value="ig">Igbo</option>
-                <!-- <option value="ff">Fulfulde</option> -->
                 <option value="fr">French</option>
                 <option value="ar">Arabic</option>
             </select>
@@ -40,19 +42,69 @@
         </div>
     </header>
 
+    <!-- Sidebar -->
+    <div id="app-sidebar" class="app-sidebar">
+        <div class="sidebar-header">
+            <h3>Settings</h3>
+            <button id="close-sidebar" class="close-sidebar-btn" aria-label="Close Sidebar">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="sidebar-content">
+            <div class="sidebar-section">
+                <h4>Display Settings</h4>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="dark-mode-toggle">
+                    <label class="form-check-label" for="dark-mode-toggle">Dark Mode</label>
+                </div>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="compact-view-toggle">
+                    <label class="form-check-label" for="compact-view-toggle">Compact View</label>
+                </div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h4>Legal Information</h4>
+                <div class="legal-content">
+                    <h5>Data Privacy Notice</h5>
+                    <p>This tool collects usage data to improve functionality and user experience. The data collected includes:</p>
+                    <ul>
+                        <li>Uploaded data file structures (not content)</li>
+                        <li>Interaction patterns and analysis requests</li>
+                        <li>Feature usage statistics</li>
+                        <li>Error reports</li>
+                    </ul>
+                    <p>No personal information is collected beyond session identification. All data is anonymized and used solely for improving the tool's functionality.</p>
+                    
+                    <h5>Terms of Use</h5>
+                    <p>By using this tool, you agree that:</p>
+                    <ul>
+                        <li>You will not upload sensitive personal health information</li>
+                        <li>You have appropriate permissions to analyze any data you upload</li>
+                        <li>The tool provides decision support only; final resource allocation decisions remain your responsibility</li>
+                    </ul>
+                    
+                    <h5>Attribution</h5>
+                    <p>When using results from this tool in publications or reports, please cite as:<br>
+                    <em>"Malaria Reprioritization Tool (MRPT), [Version], [Year]"</em></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <main class="main-content-area">
         <div class="chat-container">
             <div id="chat-messages" class="chat-messages-container">
                 <!-- Messages will be added here by JavaScript -->
             </div>
             <div class="chat-input-container">
-                <textarea id="message-input" class="chat-input" placeholder="Ask about malaria risk analysis or type 'load sample data'..." rows="1"></textarea>
+                <textarea id="message-input" class="chat-input" placeholder="Chat with MRPT Assistant..." rows="1"></textarea>
                 <div class="chat-actions">
                     <button id="upload-button" class="chat-btn" title="Upload Files">
-                        <i class="fas fa-folder-open"></i> <!-- Changed icon -->
+                        <i class="fas fa-folder-open"></i>
                     </button>
                     <button id="download-report-btn" class="chat-btn" title="Generate Report">
-                        <i class="fas fa-file-alt"></i> <!-- Changed icon -->
+                        <i class="fas fa-file-alt"></i>
                     </button>
                     <button id="send-message" class="chat-btn send-btn" title="Send Message">
                         <i class="fas fa-paper-plane"></i>
@@ -61,6 +113,14 @@
             </div>
         </div>
     </main>
+
+    <!-- Cookie Consent Banner -->
+    <div id="cookie-banner" class="cookie-banner">
+        <div class="cookie-content">
+            <p><strong>This tool uses cookies and collects usage data</strong> to improve functionality and user experience. See details in the sidebar under "Legal Information".</p>
+            <button id="accept-cookies" class="btn btn-primary">Accept</button>
+        </div>
+    </div>
 
     <!-- File Upload Modal -->
     <div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
@@ -80,8 +140,6 @@
                                 <div class="input-group">
                                     <input type="file" class="form-control" id="csv-upload" accept=".csv,.xlsx,.xls">
                                 </div>
-                                <button class="btn btn-outline-primary btn-sm mt-2 w-100" type="button" id="upload-csv-btn">Upload CSV/Excel</button>
-                                <div id="csv-upload-status" class="upload-status"></div>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -91,10 +149,14 @@
                                 <div class="input-group">
                                     <input type="file" class="form-control" id="shapefile-upload" accept=".zip">
                                 </div>
-                                <button class="btn btn-outline-primary btn-sm mt-2 w-100" type="button" id="upload-shapefile-btn">Upload Shapefile</button>
-                                <div id="shapefile-upload-status" class="upload-status"></div>
                             </div>
                         </div>
+                    </div>
+                    <div class="mt-3 text-center">
+                        <button class="btn btn-primary mt-2 w-100" type="button" id="upload-files-btn">
+                            <i class="fas fa-upload me-2"></i>Upload Files
+                        </button>
+                        <div id="files-upload-status" class="upload-status mt-2"></div>
                     </div>
                     <hr class="my-4">
                     <div class="text-center">
@@ -163,12 +225,9 @@
         </div>
     </div>
 
-    <!-- Plotly JS (ensure it's loaded if not using CDN everywhere) -->
-    <!-- <script src="https://cdn.plot.ly/plotly-latest.min.js"></script> -->
     <!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Custom JS -->
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>
-<!-- --- END OF FILE app/index.html --- -->

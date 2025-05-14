@@ -1,5 +1,7 @@
+# app/routes.py
 import numpy as np
 import json
+from datetime import datetime
 import shutil
 import os
 import uuid
@@ -17,8 +19,10 @@ from .models.data_handler import DataHandler
 import app.models.visualization as viz
 import app.models.report_generator as report_gen
 from .kb import get_knowledge
-
-from flask import Blueprint, render_template, request, jsonify, current_app, session, send_from_directory # ensure send_from_directory is imported
+# Add this import at the top of routes.py alongside other imports
+from .models.visualization import is_id_column
+from flask import Blueprint, render_template, request, jsonify, current_app, session, send_from_directory  # ensure send_from_directory is imported
+import sqlite3
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -26,6 +30,11 @@ logger = logging.getLogger(__name__)
 
 # Create blueprint
 main_bp = Blueprint('main', __name__)
+
+# Helper function to get the interaction logger
+def get_interaction_logger():
+    """Get the interaction logger from app config"""
+    return current_app.config.get('INTERACTION_LOGGER')
 
 # --- Load Stopwords (Do this once when the module loads) ---
 try:
@@ -50,8 +59,8 @@ DOMAIN_STOPWORDS = set([
     'normalized', 'normalization', 'urban', 'extent', 'threshold', 'report', 'download',
     'ward', 'wards', 'wardname', 'file', 'upload', 'please', 'thank', 'thanks', 'ok', 'okay',
     'yes', 'yeah', 'sure', 'hello', 'hi', 'hey', 'help', 'assistant', 'tool',
-    'did', # Keep critical function words if nltk list failed
-    'what', 'which', 'how', 'why', 'when', 'where', # Question words
+    'did',  # Keep critical function words if nltk list failed
+    'what', 'which', 'how', 'why', 'when', 'where',  # Question words
 ])
 
 # Combine NLTK and domain stopwords
@@ -73,6 +82,20 @@ ALLOWED_EXTENSIONS_SHP = {'zip'}
 def allowed_file(filename, allowed_extensions):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
 
+@main_bp.before_request
+def log_session_start():
+    """Log session start for new sessions"""
+    if request.endpoint and not request.endpoint.startswith('static'):
+        session_id = session.get('session_id')
+        if session_id:
+            # Get browser and IP info
+            browser_info = request.user_agent.string
+            ip_address = request.remote_addr
+            
+            # Log session start/activity
+            logger = get_interaction_logger()
+            if logger:
+                logger.log_session_start(session_id, browser_info, ip_address)
 
 @main_bp.route('/')
 def index():
@@ -91,8 +114,228 @@ def index():
         session['pending_variables'] = None
         session['last_visualization'] = None
         session['dialogue_context'] = {}
+        
+        # Log new session
+        logger = get_interaction_logger()
+        if logger:
+            logger.log_session_start(
+                session['session_id'], 
+                request.user_agent.string, 
+                request.remote_addr
+            )
     
     return render_template('index.html')
+
+
+@main_bp.route('/upload_both_files', methods=['POST'])
+def upload_both_files():
+    """Handle simultaneous upload of both CSV and shapefile files"""
+    response = {'status': 'error', 'message': 'No files received'}
+    
+    # Check if files were provided
+    csv_file = None
+    shapefile = None
+    
+    if 'csv_file' in request.files:
+        csv_file = request.files['csv_file']
+        if csv_file.filename == '':
+            csv_file = None
+    
+    if 'shapefile' in request.files:
+        shapefile = request.files['shapefile']
+        if shapefile.filename == '':
+            shapefile = None
+    
+    if not csv_file and not shapefile:
+        return jsonify({'status': 'error', 'message': 'No files selected'}), 400
+    
+    # Create session folder
+    session_folder = os.path.join(current_app.config['UPLOAD_FOLDER'], session.get('session_id', 'default'))
+    os.makedirs(session_folder, exist_ok=True)
+    
+    # Process CSV file if provided
+    csv_result = None
+    if csv_file and allowed_file(csv_file.filename, ALLOWED_EXTENSIONS_CSV):
+        csv_filename = secure_filename(csv_file.filename)
+        csv_path = os.path.join(session_folder, csv_filename)
+        csv_file.save(csv_path)
+        
+        # Process the CSV file
+        data_handler = DataHandler(session_folder)
+        csv_result = data_handler.load_csv(csv_path)
+        
+        if csv_result['status'] == 'success':
+            session['csv_loaded'] = True
+            session['csv_filename'] = csv_filename
+            session['csv_rows'] = csv_result.get('rows', 0)
+            session['csv_columns'] = csv_result.get('columns', 0)
+            
+            # Extract and store all available variables
+            available_variables = get_available_variables(data_handler)
+            session['available_variables'] = available_variables
+            # Also store variable metadata for better matching
+            session['variable_metadata'] = extract_variable_metadata(data_handler)
+            
+            # Log the file upload
+            logger = get_interaction_logger()
+            if logger and session.get('session_id'):
+                metadata = {
+                    'rows': csv_result.get('rows', 0),
+                    'columns': csv_result.get('columns', 0),
+                    'missing_values': len(csv_result.get('missing_columns', [])),
+                    'available_variables': available_variables[:10]  # Just log first 10 to avoid huge logs
+                }
+                logger.log_file_upload(
+                    session.get('session_id'),
+                    'csv',
+                    csv_filename,
+                    os.path.getsize(csv_path),
+                    metadata
+                )
+        else:
+            # Log the error
+            logger = get_interaction_logger()
+            if logger and session.get('session_id'):
+                logger.log_error(
+                    session.get('session_id'),
+                    'csv_upload_error',
+                    csv_result.get('message', 'Unknown error processing CSV file')
+                )
+    elif csv_file:
+        csv_result = {'status': 'error', 'message': 'Invalid CSV file type'}
+        
+    # Process shapefile if provided
+    shp_result = None
+    if shapefile and allowed_file(shapefile.filename, ALLOWED_EXTENSIONS_SHP):
+        shp_filename = secure_filename(shapefile.filename)
+        shp_path = os.path.join(session_folder, shp_filename)
+        shapefile.save(shp_path)
+        
+        # Process the shapefile
+        data_handler = DataHandler(session_folder)
+        shp_result = data_handler.load_shapefile(shp_path)
+        
+        if shp_result['status'] == 'success':
+            session['shapefile_loaded'] = True
+            session['shapefile_filename'] = shp_filename
+            session['shapefile_features'] = shp_result.get('features', 0)
+            
+            # Log the file upload
+            logger = get_interaction_logger()
+            if logger and session.get('session_id'):
+                metadata = {
+                    'features': shp_result.get('features', 0),
+                    'crs': shp_result.get('crs', ''),
+                    'has_mismatches': shp_result.get('mismatches') is not None
+                }
+                logger.log_file_upload(
+                    session.get('session_id'),
+                    'shapefile',
+                    shp_filename,
+                    os.path.getsize(shp_path),
+                    metadata
+                )
+        else:
+            # Log the error
+            logger = get_interaction_logger()
+            if logger and session.get('session_id'):
+                logger.log_error(
+                    session.get('session_id'),
+                    'shapefile_upload_error',
+                    shp_result.get('message', 'Unknown error processing shapefile')
+                )
+    elif shapefile:
+        shp_result = {'status': 'error', 'message': 'Invalid shapefile type'}
+        
+    # If both files are uploaded, check for ward name mismatches
+    if session.get('csv_loaded', False) and session.get('shapefile_loaded', False):
+        # We need to use either the data_handler from CSV or shapefile processing
+        # Prioritize using the one that was just processed
+        mismatches = None
+        if csv_result and shp_result:
+            # If both were uploaded at once, recreate a fresh data handler
+            data_handler = DataHandler(session_folder)
+            # Load both files again to ensure consistency
+            data_handler.load_csv(os.path.join(session_folder, session['csv_filename']))
+            data_handler.load_shapefile(os.path.join(session_folder, session['shapefile_filename']))
+            mismatches = data_handler.check_wardname_mismatches()
+        elif csv_result:
+            # CSV was just uploaded, load the shapefile data into the handler
+            data_handler.load_shapefile(os.path.join(session_folder, session['shapefile_filename']))
+            mismatches = data_handler.check_wardname_mismatches()
+        elif shp_result:
+            # Shapefile was just uploaded, load the CSV data into the handler
+            data_handler.load_csv(os.path.join(session_folder, session['csv_filename']))
+            mismatches = data_handler.check_wardname_mismatches()
+        
+        if mismatches and len(mismatches) > 0:
+            if shp_result:
+                shp_result['mismatches'] = mismatches
+                shp_result['status'] = 'warning'
+                shp_result['message'] = f'Shapefile loaded but found {len(mismatches)} ward name mismatches'
+            elif csv_result:
+                csv_result['mismatches'] = mismatches
+                csv_result['status'] = 'warning'
+                csv_result['message'] = f'CSV loaded but found {len(mismatches)} ward name mismatches'
+        
+        # Create analysis prompt
+        analysis_prompt = f"""
+        <p><strong>Excellent! All files are now loaded successfully!</strong></p>
+        <p>Your data includes:</p>
+        <ul>
+            <li>📊 CSV data: {session.get('csv_rows', 0)} rows with {session.get('csv_columns', 0)} columns</li>
+            <li>🗺️ Shapefile data: {session.get('shapefile_features', 0)} features</li>
+        </ul>
+        <div class="analysis-ready-prompt">
+            <p><strong>🚀 Everything is ready for analysis!</strong></p>
+            <p>Type "Run the analysis" to begin processing your data.</p>
+            <button class="btn btn-primary mt-2" onclick="document.getElementById('message-input').value='Run the analysis'; document.getElementById('send-message').click();">
+                Start Analysis
+            </button>
+        </div>
+        """
+    
+    # Prepare final response based on which files were processed
+    if csv_result and shp_result:
+        # Both files were uploaded
+        if csv_result['status'] == 'success' and shp_result['status'] in ['success', 'warning']:
+            response = {
+                'status': 'success',
+                'message': 'Both files uploaded successfully',
+                'csv_result': csv_result,
+                'shp_result': shp_result
+            }
+            if session.get('csv_loaded', False) and session.get('shapefile_loaded', False):
+                response['analysis_prompt'] = analysis_prompt
+        else:
+            # At least one upload failed
+            response = {
+                'status': 'error',
+                'message': 'One or more file uploads failed',
+                'csv_result': csv_result,
+                'shp_result': shp_result
+            }
+    elif csv_result:
+        # Only CSV was uploaded
+        response = {
+            'status': csv_result['status'],
+            'message': csv_result['message'],
+            'csv_result': csv_result
+        }
+        if csv_result['status'] == 'success' and not session.get('shapefile_loaded', False):
+            response['note'] = 'CSV loaded successfully. Please upload a shapefile.'
+    elif shp_result:
+        # Only shapefile was uploaded
+        response = {
+            'status': shp_result['status'],
+            'message': shp_result['message'],
+            'shp_result': shp_result
+        }
+        if shp_result['status'] in ['success', 'warning'] and not session.get('csv_loaded', False):
+            response['note'] = 'Shapefile loaded successfully. Please upload a CSV file.'
+    
+    return jsonify(response)
+
 
 @main_bp.route('/upload_csv', methods=['POST'])
 def upload_csv():
@@ -129,6 +372,23 @@ def upload_csv():
             # Also store variable metadata for better matching
             session['variable_metadata'] = extract_variable_metadata(data_handler)
             
+            # Log the file upload
+            logger = get_interaction_logger()
+            if logger and session.get('session_id'):
+                metadata = {
+                    'rows': result.get('rows', 0),
+                    'columns': result.get('columns', 0),
+                    'missing_values': len(result.get('missing_columns', [])),
+                    'available_variables': available_variables[:10]  # Just log first 10 to avoid huge logs
+                }
+                logger.log_file_upload(
+                    session.get('session_id'),
+                    'csv',
+                    filename,
+                    os.path.getsize(file_path),
+                    metadata
+                )
+            
             return jsonify({
                 'status': 'success', 
                 'message': f'CSV file {filename} uploaded successfully',
@@ -138,6 +398,14 @@ def upload_csv():
                 'available_variables': available_variables
             })
         else:
+            # Log the error
+            logger = get_interaction_logger()
+            if logger and session.get('session_id'):
+                logger.log_error(
+                    session.get('session_id'),
+                    'csv_upload_error',
+                    result.get('message', 'Unknown error processing CSV file')
+                )
             return jsonify({'status': 'error', 'message': result.get('message', 'Failed to process CSV file')}), 400
     
     return jsonify({'status': 'error', 'message': 'Invalid file type'}), 400
@@ -169,6 +437,22 @@ def upload_shapefile():
             session['shapefile_loaded'] = True
             session['shapefile_filename'] = filename
             session['shapefile_features'] = result.get('features', 0)
+            
+            # Log the file upload
+            logger = get_interaction_logger()
+            if logger and session.get('session_id'):
+                metadata = {
+                    'features': result.get('features', 0),
+                    'crs': result.get('crs', ''),
+                    'has_mismatches': result.get('mismatches') is not None
+                }
+                logger.log_file_upload(
+                    session.get('session_id'),
+                    'shapefile',
+                    filename,
+                    os.path.getsize(file_path),
+                    metadata
+                )
             
             # Check for ward name mismatches if CSV is already loaded
             if session.get('csv_loaded', False):
@@ -213,6 +497,14 @@ def upload_shapefile():
                     'note': 'Waiting for CSV file...'
                 })
         else:
+            # Log the error
+            logger = get_interaction_logger()
+            if logger and session.get('session_id'):
+                logger.log_error(
+                    session.get('session_id'),
+                    'shapefile_upload_error',
+                    result.get('message', 'Unknown error processing shapefile')
+                )
             return jsonify({'status': 'error', 'message': result.get('message', 'Failed to process shapefile')}), 400
     
     return jsonify({'status': 'error', 'message': 'Invalid file type'}), 400
@@ -254,9 +546,9 @@ def run_analysis():
                 return jsonify({'status': 'error', 'message': 'Failed to load shapefile data'})
         
         # Run the full analysis pipeline with custom variables if provided
-        logger.info("Starting full analysis pipeline...")
+        logging.getLogger(__name__).info("Starting full analysis pipeline...")  # CHANGED THIS LINE
         if selected_variables:
-            logger.info(f"Using custom variables: {selected_variables}")
+            logging.getLogger(__name__).info(f"Using custom variables: {selected_variables}")  # CHANGED THIS LINE
             
             # Clean up variable names
             cleaned_variables = clean_and_validate_variables(data_handler, selected_variables)
@@ -298,6 +590,22 @@ def run_analysis():
                 }
             }
             
+            # Log the analysis event
+            interaction_logger = get_interaction_logger()
+            if interaction_logger and session.get('session_id'):
+                details = {
+                    'variables_used': result.get('variables_used', []),
+                    'vulnerable_wards': result.get('vulnerable_wards', [])[:5],
+                    'custom_variables': selected_variables is not None,
+                    'num_variables': len(result.get('variables_used', []))
+                }
+                interaction_logger.log_analysis_event(
+                    session.get('session_id'),
+                    'run_analysis',
+                    details,
+                    True
+                )
+            
             # Return success response
             return jsonify({
                 'status': 'success',
@@ -307,18 +615,35 @@ def run_analysis():
                 'vulnerable_wards': result.get('vulnerable_wards', [])[:5]
             })
         else:
+            # Log the error
+            interaction_logger = get_interaction_logger()
+            if interaction_logger and session.get('session_id'):
+                interaction_logger.log_error(
+                    session.get('session_id'),
+                    'analysis_error',
+                    result.get('message', 'Unknown error running analysis')
+                )
             return jsonify({
                 'status': 'error',
                 'message': result.get('message', 'Error running analysis')
             }), 400
     
     except Exception as e:
-        logger.error(f"Error running analysis: {str(e)}")
+        logging.getLogger(__name__).error(f"Error running analysis: {str(e)}")  # CHANGED THIS LINE
+        # Log the error
+        interaction_logger = get_interaction_logger()
+        if interaction_logger and session.get('session_id'):
+            import traceback
+            interaction_logger.log_error(
+                session.get('session_id'),
+                'analysis_exception',
+                str(e),
+                traceback.format_exc()
+            )
         return jsonify({
             'status': 'error',
             'message': f'Error running analysis: {str(e)}'
         }), 500
-    
 
 @main_bp.route('/load_sample_data', methods=['POST'])
 def load_sample_data():
@@ -385,6 +710,35 @@ def load_sample_data():
         session['shapefile_filename'] = 'sample_boundary.zip'
         session['shapefile_features'] = shp_result.get('features', 0)
         logger.info("Sample Shapefile processed and session updated.")
+        
+        # Log sample data loading
+        logger = get_interaction_logger()
+        if logger:
+            # Log CSV sample
+            logger.log_file_upload(
+                session_id,
+                'sample_csv',
+                'sample_data.csv',
+                os.path.getsize(target_csv_path),
+                {'rows': csv_result.get('rows', 0), 'columns': csv_result.get('columns', 0)}
+            )
+            
+            # Log shapefile sample
+            logger.log_file_upload(
+                session_id,
+                'sample_shapefile',
+                'sample_boundary.zip',
+                os.path.getsize(target_zip_path),
+                {'features': shp_result.get('features', 0)}
+            )
+            
+            # Log the event
+            logger.log_analysis_event(
+                session_id,
+                'load_sample_data',
+                {'success': True},
+                True
+            )
 
         # --- Prepare response ---
         # Generate the 'analysis ready' prompt
@@ -415,9 +769,18 @@ def load_sample_data():
 
     except Exception as e:
         logger.error(f"Error loading sample data: {str(e)}", exc_info=True)
+        # Log the error
+        logger = get_interaction_logger()
+        if logger and session.get('session_id'):
+            import traceback
+            logger.log_error(
+                session.get('session_id'),
+                'sample_data_error',
+                str(e),
+                traceback.format_exc()
+            )
         # Clean up potentially partially copied files? Maybe not necessary.
         return jsonify({'status': 'error', 'message': f'An internal error occurred while loading sample data: {str(e)}'}), 500
-
 
 @main_bp.route('/serve_viz_file/<session_id>/<path:filename>')
 def serve_viz_file(session_id, filename):
@@ -439,8 +802,6 @@ def serve_viz_file(session_id, filename):
     except Exception as e:
         logger.error(f"Error serving viz file {filename} for session {session_id}: {e}")
         return jsonify({'status': 'error', 'message': 'Could not serve visualization file.'}), 500
-    
-
 
 @main_bp.route('/get_visualization', methods=['POST'])
 def get_visualization():
@@ -449,9 +810,6 @@ def get_visualization():
     viz_type = data.get('type', '')
     variable = data.get('variable', None)
     threshold = data.get('threshold', 30)
-    
-    if not viz_type:
-        return jsonify({'status': 'error', 'message': 'No visualization type provided'}), 400
     
     # Get data handler from session
     data_handler = get_data_handler()
@@ -480,19 +838,60 @@ def get_visualization():
             'threshold': threshold
         }, data_handler)
         
+        # Log the visualization request
+        interaction_logger = get_interaction_logger()
+        if interaction_logger and session.get('session_id'):
+            details = {
+                'viz_type': viz_type,
+                'variable': variable,
+                'threshold': threshold,
+                'success': result.get('status') == 'success'
+            }
+            interaction_logger.log_analysis_event(
+                session.get('session_id'),
+                'visualization',
+                details,
+                result.get('status') == 'success'
+            )
+        
+        # Double-check that required fields are present in successful responses
+        if result.get('status') == 'success' and 'image_path' not in result:
+            result['status'] = 'error'
+            result['message'] = 'Visualization was created but the file path is missing in the response'
+            # Use the regular Python logger for detailed info (not the interaction logger)
+            logging.getLogger(__name__).error(f"Visualization missing image_path: {result}")
+        
         # Ensure the result is serializable
         serializable_result = convert_to_json_serializable(result)
+        
+        # Debug print the response - use the regular Python logger
+        logging.getLogger(__name__).info(f"Visualization response: {json.dumps(serializable_result)[:500]}...")
+        
         return jsonify(serializable_result)
 
     except Exception as e:
-        logger.error(f"Error generating visualization: {str(e)}", exc_info=True) # Use exc_info=True for full traceback in log
+        # Use the regular Python logger for detailed error info
+        logging.getLogger(__name__).error(f"Error generating visualization: {str(e)}", exc_info=True)
+        
+        # Log the error using the interaction logger
+        interaction_logger = get_interaction_logger()
+        if interaction_logger and session.get('session_id'):
+            import traceback
+            interaction_logger.log_error(
+                session.get('session_id'),
+                'visualization_error',
+                str(e),
+                traceback.format_exc()
+            )
+        
         # Return an error response, ensuring it's also serializable
         error_result = {
             'status': 'error',
             'message': f'Error generating visualization: {str(e)}',
             'ai_response': f"I encountered an error while creating the visualization. Please check the logs or try again."
         }
-        return jsonify(convert_to_json_serializable(error_result)), 500 # Return 500 for server error
+        return jsonify(convert_to_json_serializable(error_result))
+    
 
 @main_bp.route('/navigate_composite_map', methods=['POST'])
 def navigate_composite_map():
@@ -522,11 +921,34 @@ def navigate_composite_map():
        # Update session with new page info
        session['current_composite_map_page'] = result.get('current_page', 1)
        
+       # Log the navigation event
+       logger = get_interaction_logger()
+       if logger and session.get('session_id'):
+           details = {
+               'map_type': 'composite_map',
+               'direction': direction,
+               'new_page': new_page
+           }
+           logger.log_analysis_event(
+               session.get('session_id'),
+               'map_navigation',
+               details,
+               True
+           )
+       
        # Ensure all values in the result dictionary are JSON serializable
        result = convert_to_json_serializable(result)
        
        return jsonify(result)
    else:
+       # Log the error
+       logger = get_interaction_logger()
+       if logger and session.get('session_id'):
+           logger.log_error(
+               session.get('session_id'),
+               'map_navigation_error',
+               result.get('message', 'Error navigating composite maps')
+           )
        return jsonify({
            'status': 'error',
            'message': result.get('message', 'Error navigating composite maps')
@@ -576,6 +998,22 @@ def navigate_boxplot():
    # Update session
    session['current_boxplot_page'] = new_page
    
+   # Log the navigation event
+   logger = get_interaction_logger()
+   if logger and session.get('session_id'):
+       details = {
+           'plot_type': 'vulnerability_plot',
+           'direction': direction,
+           'new_page': new_page,
+           'total_pages': total_pages
+       }
+       logger.log_analysis_event(
+           session.get('session_id'),
+           'plot_navigation',
+           details,
+           True
+       )
+   
    # Return result
    result = {
        'status': 'success',
@@ -621,6 +1059,21 @@ def update_boxplot_pagination():
        # Update session
        session['current_boxplot_page'] = 1
        
+       # Log the pagination update
+       logger = get_interaction_logger()
+       if logger and session.get('session_id'):
+           details = {
+               'plot_type': 'vulnerability_plot',
+               'wards_per_page': wards_per_page,
+               'total_pages': box_plot_result['total_pages']
+           }
+           logger.log_analysis_event(
+               session.get('session_id'),
+               'update_boxplot_pagination',
+               details,
+               True
+           )
+       
        # Return result
        result = {
            'status': 'success',
@@ -636,6 +1089,14 @@ def update_boxplot_pagination():
        
        return jsonify(result)
    else:
+       # Log the error
+       logger = get_interaction_logger()
+       if logger and session.get('session_id'):
+           logger.log_error(
+               session.get('session_id'),
+               'update_boxplot_pagination_error',
+               box_plot_result.get('message', 'Error updating box plot pagination')
+           )
        return jsonify({
            'status': 'error',
            'message': box_plot_result.get('message', 'Error updating box plot pagination')
@@ -657,11 +1118,30 @@ def download_report(filename):
        logger.error(f"Report file not found: {safe_path}")
        return jsonify({'status': 'error', 'message': 'Report file not found.'}), 404
    try:
+       # Log the report download
+       logger = get_interaction_logger()
+       if logger and session.get('session_id'):
+           details = {
+               'report_file': filename,
+               'file_size': os.path.getsize(safe_path)
+           }
+           logger.log_analysis_event(
+               session.get('session_id'),
+               'report_download',
+               details,
+               True
+           )
        return send_from_directory(session_folder, filename, as_attachment=True)
    except Exception as e:
        logger.error(f"Error serving report file {filename} for session {session.get('session_id', 'default')}: {e}")
+       # Log the error
+       if logger and session.get('session_id'):
+           logger.log_error(
+               session.get('session_id'),
+               'report_download_error',
+               str(e)
+           )
        return jsonify({'status': 'error', 'message': 'Could not serve report file.'}), 500
-
 
 @main_bp.route('/send_message', methods=['POST'])
 def send_message():
@@ -674,6 +1154,11 @@ def send_message():
     if not user_message: 
         return jsonify({'status': 'error', 'message': 'No message provided'}), 400
 
+    # Log the user message
+    interaction_logger = get_interaction_logger()
+    if interaction_logger and session.get('session_id'):
+        interaction_logger.log_message(session.get('session_id'), 'user', user_message)
+
     # Get current session state and data handler
     data_handler = get_data_handler()
     session_state = {
@@ -684,16 +1169,16 @@ def send_message():
     }
     
     # Get available variables for validation
-    available_vars = session.get('available_variables', [])
-    if not available_vars and data_handler:
-         available_vars = get_available_variables(data_handler)
-         session['available_variables'] = available_vars
+    available_vars = session.get('available_variables', []) # Get actual vars for validation
+    if not available_vars and data_handler: # Fallback if not in session
+         available_vars = get_available_variables(data_handler) # Assumes this helper exists
+         session['available_variables'] = available_vars # Store for next time
     
     # Get variable metadata for better matching
     variable_metadata = session.get('variable_metadata', None)
-    if not variable_metadata and data_handler:
-         variable_metadata = extract_variable_metadata(data_handler)
-         session['variable_metadata'] = variable_metadata
+    if not variable_metadata and data_handler: # Fallback
+         variable_metadata = extract_variable_metadata(data_handler) # Assumes this helper exists
+         session['variable_metadata'] = variable_metadata # Store for next time
     
     # --- PHASE 3: Dialogue State Tracking ---
     # Check if there's a pending action that requires user confirmation
@@ -736,14 +1221,42 @@ def send_message():
                         'steps': {k: v.get('message', '') for k, v in result.get('steps', {}).items()}
                     }
                     
+                    # Log the custom analysis
+                    if interaction_logger:
+                        details = {
+                            'custom_analysis': True,
+                            'variables_used': result.get('variables_used', []),
+                            'num_variables': len(result.get('variables_used', [])),
+                            'confirmation': True
+                        }
+                        interaction_logger.log_analysis_event(
+                            session.get('session_id'),
+                            'custom_analysis_confirmed',
+                            details,
+                            True
+                        )
+                    
                     # Prepare success response
                     ai_response = generate_analysis_success_message(result, is_custom=True)
+                    
+                    # Log assistant response
+                    if interaction_logger and session.get('session_id'):
+                        interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+                    
                     return jsonify({
                         'status': 'success', 
                         'response': ai_response, 
                         'action': 'analysis_complete'
                     })
                 else:
+                    # Log the error
+                    if interaction_logger:
+                        interaction_logger.log_error(
+                            session.get('session_id'),
+                            'custom_analysis_error',
+                            result.get('message', 'Unknown error')
+                        )
+                    
                     return jsonify({
                         'status': 'error', 
                         'response': f"Error running custom analysis: {result.get('message', 'Unknown error')}", 
@@ -751,6 +1264,15 @@ def send_message():
                     })
             except Exception as e:
                 logger.error(f"Error running custom analysis after confirmation: {e}", exc_info=True)
+                # Log the error
+                if interaction_logger:
+                    import traceback
+                    interaction_logger.log_error(
+                        session.get('session_id'),
+                        'custom_analysis_exception',
+                        str(e),
+                        traceback.format_exc()
+                    )
                 return jsonify({
                     'status': 'error', 
                     'response': f"Error running custom analysis: {str(e)}", 
@@ -764,18 +1286,39 @@ def send_message():
             session['pending_action'] = None
             session['pending_variables'] = None
             
+            # Log the cancellation
+            if interaction_logger:
+                interaction_logger.log_analysis_event(
+                    session.get('session_id'),
+                    'custom_analysis_cancelled',
+                    {'variables': pending_variables},
+                    True
+                )
+            
             # Return cancellation response
+            ai_response = "Custom analysis cancelled. Would you like to run the standard analysis instead?"
+            
+            # Log assistant response
+            if interaction_logger and session.get('session_id'):
+                interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+            
             return jsonify({
                 'status': 'success', 
-                'response': "Custom analysis cancelled. Would you like to run the standard analysis instead?",
+                'response': ai_response,
                 'action': None
             })
         
         else:  # User didn't clearly confirm or deny
             # Keep the pending state and ask for clarification
+            ai_response = "I'm not sure if you want to proceed with the custom analysis. Please respond with 'yes' to confirm or 'no' to cancel."
+            
+            # Log assistant response
+            if interaction_logger and session.get('session_id'):
+                interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+            
             return jsonify({
                 'status': 'success', 
-                'response': "I'm not sure if you want to proceed with the custom analysis. Please respond with 'yes' to confirm or 'no' to cancel.",
+                'response': ai_response,
                 'action': None
             })
 
@@ -797,6 +1340,15 @@ def send_message():
                 dialogue_context.pop('clarification_type', None)
                 session['dialogue_context'] = dialogue_context
                 
+                # Log the clarification
+                if interaction_logger:
+                    interaction_logger.log_analysis_event(
+                        session.get('session_id'),
+                        'variable_clarification',
+                        {'variable': variable, 'viz_type': viz_type},
+                        True
+                    )
+                
                 # Generate the visualization with the clarified variable
                 return get_visualization_response(data_handler, viz_type, variable)
             else:
@@ -804,10 +1356,25 @@ def send_message():
                 dialogue_context.pop('expecting_clarification', None)  # Give up on this clarification
                 session['dialogue_context'] = dialogue_context
                 
+                # Log the failed clarification
+                if interaction_logger:
+                    interaction_logger.log_analysis_event(
+                        session.get('session_id'),
+                        'variable_clarification_failed',
+                        {'original_message': user_message},
+                        False
+                    )
+                
                 available_vars_examples = ", ".join(available_vars[:5]) + ("..." if len(available_vars) > 5 else "")
+                ai_response = f"I'm sorry, I still couldn't identify a valid variable from your input. Available variables include: {available_vars_examples}. You could try asking for a specific visualization like 'Show me a map of rainfall' or 'Show me a composite map'."
+                
+                # Log assistant response
+                if interaction_logger and session.get('session_id'):
+                    interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+                
                 return jsonify({
                     'status': 'success',
-                    'response': f"I'm sorry, I still couldn't identify a valid variable from your input. Available variables include: {available_vars_examples}. You could try asking for a specific visualization like 'Show me a map of rainfall' or 'Show me a composite map'."
+                    'response': ai_response
                 })
 
     # --- Phase 2/3: Use LLM for Natural Language Understanding ---
@@ -834,15 +1401,34 @@ def send_message():
         if methodology:
             kb_content = get_knowledge('methodology', methodology)
             if kb_content:
+                # Log the knowledge base lookup
+                if interaction_logger:
+                    interaction_logger.log_analysis_event(
+                        session.get('session_id'),
+                        'explain_methodology',
+                        {'methodology_type': methodology},
+                        True
+                    )
+                
+                # Log assistant response
+                if interaction_logger and session.get('session_id'):
+                    interaction_logger.log_message(session.get('session_id'), 'assistant', kb_content)
+                
                 return jsonify({
                     'status': 'success',
                     'response': kb_content
                 })
         
         # If not found or not specified, provide an overview
+        ai_response = "The MRPT tool uses several methodologies to analyze malaria risk:\n\n1. **Data Cleaning** - Handles missing values through spatial imputation and other methods\n2. **Normalization** - Scales variables to 0-1 range based on their relationship with risk\n3. **Composite Scoring** - Combines variables to create risk models\n4. **Vulnerability Ranking** - Orders wards by risk priority\n5. **Urban Extent Analysis** - Classifies areas for intervention planning\n\nWhich aspect would you like me to explain in more detail?"
+        
+        # Log assistant response
+        if interaction_logger and session.get('session_id'):
+            interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+        
         return jsonify({
             'status': 'success',
-            'response': "The MRPT tool uses several methodologies to analyze malaria risk:\n\n1. **Data Cleaning** - Handles missing values through spatial imputation and other methods\n2. **Normalization** - Scales variables to 0-1 range based on their relationship with risk\n3. **Composite Scoring** - Combines variables to create risk models\n4. **Vulnerability Ranking** - Orders wards by risk priority\n5. **Urban Extent Analysis** - Classifies areas for intervention planning\n\nWhich aspect would you like me to explain in more detail?"
+            'response': ai_response
         })
     
     elif intent == 'explain_variable':
@@ -855,21 +1441,46 @@ def send_message():
             
             kb_content = get_knowledge(var_to_explain)
             if kb_content:
+                # Log the knowledge base lookup
+                if interaction_logger:
+                    interaction_logger.log_analysis_event(
+                        session.get('session_id'),
+                        'explain_variable',
+                        {'variable_name': var_to_explain},
+                        True
+                    )
+                
+                # Log assistant response
+                if interaction_logger and session.get('session_id'):
+                    interaction_logger.log_message(session.get('session_id'), 'assistant', kb_content)
+                
                 return jsonify({
                     'status': 'success',
                     'response': kb_content
                 })
             else:
                 # Variable not found in KB, generate a generic response
+                ai_response = f"The variable '{var_to_explain}' is used in malaria risk analysis, but I don't have specific details about its relationship with malaria transmission. Generally, variables in our dataset relate to environmental conditions, demographics, or epidemiological measures."
+                
+                # Log assistant response
+                if interaction_logger and session.get('session_id'):
+                    interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+                
                 return jsonify({
                     'status': 'success',
-                    'response': f"The variable '{var_to_explain}' is used in malaria risk analysis, but I don't have specific details about its relationship with malaria transmission. Generally, variables in our dataset relate to environmental conditions, demographics, or epidemiological measures."
+                    'response': ai_response
                 })
         else:
             # No specific variable mentioned, provide overview of variable categories
+            ai_response = "Variables in malaria risk analysis typically fall into three categories:\n\n1. **Environmental** - Rainfall, temperature, vegetation indices, elevation, distance to water, etc.\n2. **Demographic** - Population density, housing quality, urban/rural classification, etc.\n3. **Epidemiological** - Parasite rates, test positivity, case counts, etc.\n\nWhich type of variable would you like to learn more about?"
+            
+            # Log assistant response
+            if interaction_logger and session.get('session_id'):
+                interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+            
             return jsonify({
                 'status': 'success',
-                'response': "Variables in malaria risk analysis typically fall into three categories:\n\n1. **Environmental** - Rainfall, temperature, vegetation indices, elevation, distance to water, etc.\n2. **Demographic** - Population density, housing quality, urban/rural classification, etc.\n3. **Epidemiological** - Parasite rates, test positivity, case counts, etc.\n\nWhich type of variable would you like to learn more about?"
+                'response': ai_response
             })
     
     elif intent == 'explain_variable_category':
@@ -877,14 +1488,33 @@ def send_message():
         category = entities.get('variable_category', '')
         kb_content = get_knowledge('variables', category)
         if kb_content:
+            # Log the knowledge base lookup
+            if interaction_logger:
+                interaction_logger.log_analysis_event(
+                    session.get('session_id'),
+                    'explain_variable_category',
+                    {'variable_category': category},
+                    True
+                )
+            
+            # Log assistant response
+            if interaction_logger and session.get('session_id'):
+                interaction_logger.log_message(session.get('session_id'), 'assistant', kb_content)
+            
             return jsonify({
                 'status': 'success',
                 'response': kb_content
             })
         else:
+            ai_response = "I can explain three categories of variables used in malaria risk analysis:\n\n1. **Environmental variables** - Physical factors like rainfall, temperature, and elevation\n2. **Demographic variables** - Human factors like population density and housing quality\n3. **Epidemiological variables** - Disease measures like parasite rates and case counts\n\nWhich would you like to learn about?"
+            
+            # Log assistant response
+            if interaction_logger and session.get('session_id'):
+                interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+            
             return jsonify({
                 'status': 'success',
-                'response': "I can explain three categories of variables used in malaria risk analysis:\n\n1. **Environmental variables** - Physical factors like rainfall, temperature, and elevation\n2. **Demographic variables** - Human factors like population density and housing quality\n3. **Epidemiological variables** - Disease measures like parasite rates and case counts\n\nWhich would you like to learn about?"
+                'response': ai_response
             })
     
     # --- QUERY ANALYSIS DETAILS ---
@@ -904,11 +1534,36 @@ def send_message():
                 else:
                     ai_response += " These were selected based on their known relationship with malaria risk."
                 
+                # Log the query
+                if interaction_logger:
+                    interaction_logger.log_analysis_event(
+                        session.get('session_id'),
+                        'query_analysis_details',
+                        {'variables_used': variables_used, 'selection_method': selection_method},
+                        True
+                    )
+                
+                # Log assistant response
+                if interaction_logger and session.get('session_id'):
+                    interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+                
                 return jsonify({'status': 'success', 'response': ai_response})
              else:
-                return jsonify({'status': 'success', 'response': "Analysis is complete, but the specific variables used weren't recorded for this session."})
+                ai_response = "Analysis is complete, but the specific variables used weren't recorded for this session."
+                
+                # Log assistant response
+                if interaction_logger and session.get('session_id'):
+                    interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+                
+                return jsonify({'status': 'success', 'response': ai_response})
         else:
-             return jsonify({'status': 'success', 'response': "Analysis hasn't run yet. Run the analysis first, then ask about variables."})
+             ai_response = "Analysis hasn't run yet. Run the analysis first, then ask about variables."
+             
+             # Log assistant response
+             if interaction_logger and session.get('session_id'):
+                 interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+             
+             return jsonify({'status': 'success', 'response': ai_response})
 
     # --- RUN STANDARD ANALYSIS ---
     elif intent == 'run_standard_analysis':
@@ -927,12 +1582,48 @@ def send_message():
                     'variable_selection_method': 'default',
                      'steps': {k: v.get('message', '') for k, v in result.get('steps', {}).items()}
                 }
+                
+                # Log the analysis
+                if interaction_logger:
+                    details = {
+                        'standard_analysis': True,
+                        'variables_used': result.get('variables_used', []),
+                        'num_variables': len(result.get('variables_used', []))
+                    }
+                    interaction_logger.log_analysis_event(
+                        session.get('session_id'),
+                        'standard_analysis',
+                        details,
+                        True
+                    )
+                
                 ai_response = generate_analysis_success_message(result, is_custom=False)
+                
+                # Log assistant response
+                if interaction_logger and session.get('session_id'):
+                    interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+                
                 return jsonify({'status': 'success', 'response': ai_response, 'action': 'analysis_complete'})
             else:
+                # Log the error
+                if interaction_logger:
+                    interaction_logger.log_error(
+                        session.get('session_id'),
+                        'standard_analysis_error',
+                        result.get('message', 'Unknown error')
+                    )
                 return jsonify({'status': 'error', 'response': f"Error: {result.get('message', 'Unknown')}", 'action': 'error'})
         except Exception as e:
              logger.error(f"Run Standard Analysis Error: {e}", exc_info=True)
+             # Log the error
+             if interaction_logger:
+                 import traceback
+                 interaction_logger.log_error(
+                     session.get('session_id'),
+                     'standard_analysis_exception',
+                     str(e),
+                     traceback.format_exc()
+                 )
              return jsonify({'status': 'error', 'response': f"Error: {e}", 'action': 'error'})
 
     # --- RUN CUSTOM ANALYSIS ---
@@ -950,11 +1641,33 @@ def send_message():
              error_msg = f"Could not validate enough variables from your request "
              if raw_request_vars: error_msg += f"({', '.join(raw_request_vars)})"
              error_msg += f". Need >= 2 valid variables. Available: {available_vars_text}. Try again?"
+             
+             # Log the error
+             if interaction_logger:
+                 interaction_logger.log_error(
+                     session.get('session_id'),
+                     'custom_analysis_validation_error',
+                     f"Invalid or insufficient variables: {raw_request_vars}"
+                 )
+             
+             # Log assistant response
+             if interaction_logger and session.get('session_id'):
+                 interaction_logger.log_message(session.get('session_id'), 'assistant', error_msg)
+             
              return jsonify({'status': 'error', 'response': error_msg, 'action': 'error'})
 
         # PHASE 3: Set pending state rather than immediately running
         session['pending_action'] = 'confirm_custom_analysis'
         session['pending_variables'] = variables
+
+        # Log the custom analysis request
+        if interaction_logger:
+            interaction_logger.log_analysis_event(
+                session.get('session_id'),
+                'custom_analysis_requested',
+                {'variables': variables},
+                True
+            )
 
         # Generate confirmation message
         variables_list_html = "<ul>" + "".join([f"<li>{var}</li>" for var in variables]) + "</ul>"
@@ -963,6 +1676,10 @@ def send_message():
         {variables_list_html}
         <p>Would you like me to proceed with this custom analysis? Please reply with "yes" or "no".</p>
         """
+        
+        # Log assistant response
+        if interaction_logger and session.get('session_id'):
+            interaction_logger.log_message(session.get('session_id'), 'assistant', confirmation_response)
         
         return jsonify({
             'status': 'success',
@@ -998,7 +1715,21 @@ def send_message():
               viz_request = {'type': 'decision_tree'}
         else:
              # Could not determine specific type
-             return jsonify({'status':'error', 'response': "I understand you want a visualization, but couldn't determine which one. Try 'show composite map' or 'plot vulnerability'?", 'action':'error'})
+             ai_response = "I understand you want a visualization, but couldn't determine which one. Try 'show composite map' or 'plot vulnerability'?"
+             
+             # Log the error
+             if interaction_logger:
+                 interaction_logger.log_error(
+                     session.get('session_id'),
+                     'visualization_type_error',
+                     "Could not determine visualization type"
+                 )
+             
+             # Log assistant response
+             if interaction_logger and session.get('session_id'):
+                 interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+             
+             return jsonify({'status':'error', 'response': ai_response, 'action':'error'})
 
         # Variable maps and normalized maps need a variable - if not provided, ask for clarification
         if (viz_request.get('type') in ['variable_map', 'normalized_map']) and not viz_request.get('variable'):
@@ -1008,12 +1739,27 @@ def send_message():
             dialogue_context['viz_type'] = viz_request.get('type')
             session['dialogue_context'] = dialogue_context
             
+            # Log the clarification request
+            if interaction_logger:
+                interaction_logger.log_analysis_event(
+                    session.get('session_id'),
+                    'request_variable_clarification',
+                    {'viz_type': viz_request.get('type')},
+                    True
+                )
+            
             # Get list of available variables to suggest
             available_vars_examples = ", ".join(available_vars[:5]) + ("..." if len(available_vars) > 5 else "")
             
+            ai_response = f"What variable would you like to visualize? Available variables include: {available_vars_examples}"
+            
+            # Log assistant response
+            if interaction_logger and session.get('session_id'):
+                interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+            
             return jsonify({
                 'status': 'success',
-                'response': f"What variable would you like to visualize? Available variables include: {available_vars_examples}"
+                'response': ai_response
             })
 
         # Generate visualization and return response
@@ -1025,7 +1771,13 @@ def send_message():
          format_type = entities.get('report_format', 'pdf')
          
          if not session_state['analysis_complete']:
-             return jsonify({'status': 'error', 'response': "Please run analysis first.", 'action': 'error'})
+             ai_response = "Please run analysis first."
+             
+             # Log assistant response
+             if interaction_logger and session.get('session_id'):
+                 interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+             
+             return jsonify({'status': 'error', 'response': ai_response, 'action': 'error'})
              
          try:
             report_result = report_gen.generate_report(data_handler, format=format_type)
@@ -1033,13 +1785,57 @@ def send_message():
                  report_url = report_result.get('report_url')
                  ai_response = report_result.get('message', f'Report ({format_type.upper()}) ready.')
                  ai_response_html = f'<p>{ai_response}</p><a href="{report_url}" class="btn btn-success mt-2" download target="_blank"><i class="fas fa-download"></i> Download</a>'
+                 
+                 # Log the report generation
+                 if interaction_logger:
+                     interaction_logger.log_analysis_event(
+                         session.get('session_id'),
+                         'generate_report',
+                         {'format': format_type, 'report_url': report_url},
+                         True
+                     )
+                 
+                 # Log assistant response
+                 if interaction_logger and session.get('session_id'):
+                     interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response_html)
+                 
                  return jsonify({'status': 'success', 'response': ai_response_html, 'report_url': report_url, 'action': 'show_report'})
 
             else:
-                 return jsonify({'status': 'error', 'response': f"Error: {report_result.get('message', 'Unknown')}", 'action': 'error'})
+                 # Log the error
+                 if interaction_logger:
+                     interaction_logger.log_error(
+                         session.get('session_id'),
+                         'report_generation_error',
+                         report_result.get('message', 'Unknown error generating report')
+                     )
+                 
+                 ai_response = f"Error: {report_result.get('message', 'Unknown')}"
+                 
+                 # Log assistant response
+                 if interaction_logger and session.get('session_id'):
+                     interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+                 
+                 return jsonify({'status': 'error', 'response': ai_response, 'action': 'error'})
          except Exception as e:
              logger.error(f"Report Generation Error: {e}", exc_info=True)
-             return jsonify({'status': 'error', 'response': f"Error: {e}", 'action': 'error'})
+             # Log the error
+             if interaction_logger:
+                 import traceback
+                 interaction_logger.log_error(
+                     session.get('session_id'),
+                     'report_generation_exception',
+                     str(e),
+                     traceback.format_exc()
+                 )
+             
+             ai_response = f"Error: {e}"
+             
+             # Log assistant response
+             if interaction_logger and session.get('session_id'):
+                 interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+             
+             return jsonify({'status': 'error', 'response': ai_response, 'action': 'error'})
 
     # --- CHANGE LANGUAGE ---
     elif intent == 'change_language':
@@ -1048,15 +1844,40 @@ def send_message():
         session['current_language'] = language
         language_names = {'en': 'English', 'ha': 'Hausa', 'yo': 'Yoruba', 'ig': 'Igbo', 'fr': 'French', 'ar': 'Arabic'}
         ai_response = f"Language set to **{language_names.get(language, language)}**."
+        
+        # Log the language change
+        if interaction_logger:
+            interaction_logger.update_session_language(session.get('session_id'), language)
+            interaction_logger.log_analysis_event(
+                session.get('session_id'),
+                'change_language',
+                {'language': language},
+                True
+            )
+        
+        # Log assistant response
+        if interaction_logger and session.get('session_id'):
+            interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+        
         return jsonify({'status': 'success', 'response': ai_response, 'action': 'language_changed'})
 
     # --- SIMPLE GREETING/GOODBYE ---
     elif intent == 'greet':
         ai_response = "Hello! How can I help with your malaria risk analysis today?"
+        
+        # Log assistant response
+        if interaction_logger and session.get('session_id'):
+            interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+        
         return jsonify({'status': 'success', 'response': ai_response})
     
     elif intent == 'goodbye':
         ai_response = "Goodbye! Feel free to return anytime you need assistance with malaria risk analysis."
+        
+        # Log assistant response
+        if interaction_logger and session.get('session_id'):
+            interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+        
         return jsonify({'status': 'success', 'response': ai_response})
 
     # --- CONTEXT-AWARE FOLLOW-UP FOR VISUALIZATIONS ---
@@ -1095,9 +1916,24 @@ def send_message():
         # Use the ai response function with the specific context
         ai_response = generate_ai_response(user_message, session_state, None, session.get('analysis_result'), context_for_llm)
         
+        # Log the visualization follow-up
+        if interaction_logger:
+            interaction_logger.log_analysis_event(
+                session.get('session_id'),
+                'visualization_followup',
+                {'viz_type': viz_type, 'variable': variable},
+                True
+            )
+        
+        # Log assistant response
+        if interaction_logger and session.get('session_id'):
+            interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+        
         return jsonify({'status': 'success', 'response': ai_response})
 
     # --- ELABORATION REQUESTS --- 
+    # In routes.py, in the request_elaboration section:
+
     elif intent == 'request_elaboration':
         topic = entities.get('topic', '')
         logger.info(f"Handling request for elaboration about: {topic}")
@@ -1108,25 +1944,38 @@ def send_message():
         if not topic and last_topic:
             topic = last_topic
         
+        # Get analysis_result from session
+        analysis_result = session.get('analysis_result', {})
+        
         # Check for common elaboration topics
         if any(word in topic.lower() for word in ['variable', 'parameter', 'variables']):
-            # Get explanation from knowledge base about variables
-            if analysis_result and 'variables_used' in analysis_result:
-                vars_used = analysis_result.get('variables_used', [])
-                
-                # Create a detailed explanation using KB content
-                explanation_parts = []
-                for var in vars_used:
-                    kb_content = get_knowledge(var)
-                    if kb_content:
-                        explanation_parts.append(f"\n\n**{var}**: {kb_content}")
-                
-                if explanation_parts:
-                    explanation = "\n".join(explanation_parts)
-                    return jsonify({
-                        'status': 'success',
-                        'response': f"These variables were selected because of their established relationships with malaria risk:{explanation}"
-                    })
+            # Get data handler for context
+            data_handler = get_data_handler()
+            
+            # Use the LLM for a dynamic response based on the actual query and available data
+            ai_response = generate_ai_response_for_variables(
+                user_message, 
+                analysis_result, 
+                data_handler
+            )
+            
+            # Log the elaboration
+            if interaction_logger:
+                interaction_logger.log_analysis_event(
+                    session.get('session_id'),
+                    'elaboration_variables',
+                    {'topic': topic, 'user_message': user_message},
+                    True
+                )
+            
+            # Log assistant response
+            if interaction_logger and session.get('session_id'):
+                interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+            
+            return jsonify({
+                'status': 'success',
+                'response': ai_response
+            })
         
         # Check if it's about methodology
         elif any(word in topic.lower() for word in ['methodology', 'process', 'analysis', 'calculation']):
@@ -1146,6 +1995,19 @@ def send_message():
             if method_type:
                 kb_content = get_knowledge('methodology', method_type)
                 if kb_content:
+                    # Log the elaboration
+                    if interaction_logger:
+                        interaction_logger.log_analysis_event(
+                            session.get('session_id'),
+                            'elaboration_methodology',
+                            {'method_type': method_type},
+                            True
+                        )
+                    
+                    # Log assistant response
+                    if interaction_logger and session.get('session_id'):
+                        interaction_logger.log_message(session.get('session_id'), 'assistant', kb_content)
+                    
                     return jsonify({
                         'status': 'success',
                         'response': kb_content
@@ -1153,9 +2015,24 @@ def send_message():
         
         # Check for urban microstratification specifically
         elif 'microstrat' in topic.lower() or ('urban' in topic.lower() and any(word in topic.lower() for word in ['stratification', 'classification', 'categorization'])):
+            ai_response = "Urban microstratification involves classifying urban areas at a fine scale based on their characteristics relevant to malaria transmission. In the context of malaria risk analysis, this typically refers to dividing urban areas into distinct ecological zones or strata that might have different risk profiles. This classification helps in targeting interventions more precisely. For example, areas near standing water bodies within an urban environment might have higher malaria risk compared to densely built areas without breeding sites for mosquitoes."
+            
+            # Log the elaboration
+            if interaction_logger:
+                interaction_logger.log_analysis_event(
+                    session.get('session_id'),
+                    'elaboration_urban_microstratification',
+                    {},
+                    True
+                )
+            
+            # Log assistant response
+            if interaction_logger and session.get('session_id'):
+                interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+            
             return jsonify({
                 'status': 'success',
-                'response': "Urban microstratification involves classifying urban areas at a fine scale based on their characteristics relevant to malaria transmission. In the context of malaria risk analysis, this typically refers to dividing urban areas into distinct ecological zones or strata that might have different risk profiles. This classification helps in targeting interventions more precisely. For example, areas near standing water bodies within an urban environment might have higher malaria risk compared to densely built areas without breeding sites for mosquitoes."
+                'response': ai_response
             })
         
         # If we don't have specific knowledge, get AI to generate an explanation
@@ -1174,11 +2051,39 @@ def send_message():
                         break
         
         ai_response = generate_ai_response(user_message, session_state, nlu_result, analysis_result, context_for_llm)
+        
+        # Log the generic elaboration
+        if interaction_logger:
+            interaction_logger.log_analysis_event(
+                session.get('session_id'),
+                'elaboration_generic',
+                {'topic': topic},
+                True
+            )
+        
+        # Log assistant response
+        if interaction_logger and session.get('session_id'):
+            interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+        
         return jsonify({'status': 'success', 'response': ai_response})
     
     # --- CLARIFICATION NEEDED ---
     elif intent == 'clarification_needed':
         ai_response = "I'm not quite sure what you're asking. Could you please rephrase your request? For example, are you asking to run analysis, view a map, or something else?"
+        
+        # Log the clarification needed
+        if interaction_logger:
+            interaction_logger.log_analysis_event(
+                session.get('session_id'),
+                'clarification_needed',
+                {'original_message': user_message},
+                False
+            )
+        
+        # Log assistant response
+        if interaction_logger and session.get('session_id'):
+            interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+        
         return jsonify({'status': 'success', 'response': ai_response})
 
     # --- FALLBACK TO GENERAL QUERY ---
@@ -1208,6 +2113,19 @@ def send_message():
         if not ai_response:  # Fallback if LLM fails
             ai_response = get_fallback_response(user_message, session_state)
         
+        # Log the general query
+        if interaction_logger:
+            interaction_logger.log_analysis_event(
+                session.get('session_id'),
+                'general_query',
+                {'intent': intent},
+                True
+            )
+        
+        # Log assistant response
+        if interaction_logger and session.get('session_id'):
+            interaction_logger.log_message(session.get('session_id'), 'assistant', ai_response)
+        
         # Save the current topic and intent in dialogue context for better continuity
         dialogue_context = session.get('dialogue_context', {})
         
@@ -1235,8 +2153,266 @@ def send_message():
         
         return jsonify({'status': 'success', 'response': ai_response})
 
+# --- Admin routes for interaction logging ---
+
+@main_bp.route('/admin/logs', methods=['GET'])
+def admin_logs():
+    """Admin interface to view interaction logs"""
+    # Simple password protection (replace with proper authentication)
+    if request.args.get('key') != current_app.config.get('ADMIN_KEY', 'admin'):
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    
+    # Get interaction logger
+    logger = get_interaction_logger()
+    if not logger:
+        return jsonify({'status': 'error', 'message': 'Interaction logger not initialized'}), 500
+    
+    # Connect to database
+    try:
+        conn = sqlite3.connect(logger.db_path)
+        conn.row_factory = sqlite3.Row  # Return rows as dictionaries
+        cursor = conn.cursor()
+        
+        # Get sessions
+        cursor.execute('''
+        SELECT * FROM sessions ORDER BY last_activity DESC LIMIT 100
+        ''')
+        sessions = []
+        for row in cursor.fetchall():
+            session_dict = dict(row)
+            # Ensure last_activity and start_time are strings
+            for time_field in ['last_activity', 'start_time']:
+                if time_field in session_dict and session_dict[time_field] is not None:
+                    session_dict[time_field] = str(session_dict[time_field])
+                else:
+                    session_dict[time_field] = ""
+            sessions.append(session_dict)
+        
+        # Get message counts by session
+        cursor.execute('''
+        SELECT session_id, COUNT(*) as message_count FROM messages
+        GROUP BY session_id
+        ''')
+        message_counts = {row['session_id']: row['message_count'] for row in cursor.fetchall()}
+        
+        # Get error counts by session
+        cursor.execute('''
+        SELECT session_id, COUNT(*) as error_count FROM errors
+        GROUP BY session_id
+        ''')
+        error_counts = {row['session_id']: row['error_count'] for row in cursor.fetchall()}
+        
+        # Add counts to sessions
+        for session in sessions:
+            session_id = session['session_id']
+            session['message_count'] = message_counts.get(session_id, 0)
+            session['error_count'] = error_counts.get(session_id, 0)
+        
+        conn.close()
+        
+        # Add today's date for filtering
+        today_date = datetime.now().strftime('%Y-%m-%d')
+        
+        return render_template('admin_logs.html', sessions=sessions, today_date=today_date)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error retrieving logs: {str(e)}", exc_info=True)
+        return jsonify({'status': 'error', 'message': f'Error retrieving logs: {str(e)}'}), 500
+
+@main_bp.route('/admin/session/<session_id>', methods=['GET'])
+def admin_session_detail(session_id):
+    """View detailed logs for a specific session"""
+    # Simple password protection (replace with proper authentication)
+    if request.args.get('key') != current_app.config.get('ADMIN_KEY', 'admin'):
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    
+    # Get interaction logger
+    logger = get_interaction_logger()
+    if not logger:
+        return jsonify({'status': 'error', 'message': 'Interaction logger not initialized'}), 500
+    
+    # Connect to database
+    try:
+        conn = sqlite3.connect(logger.db_path)
+        conn.row_factory = sqlite3.Row  # Return rows as dictionaries
+        cursor = conn.cursor()
+        
+        # Get session info
+        cursor.execute('SELECT * FROM sessions WHERE session_id = ?', (session_id,))
+        session_info = dict(cursor.fetchone() or {})
+        
+        if not session_info:
+            return jsonify({'status': 'error', 'message': 'Session not found'}), 404
+        
+        # Get messages
+        cursor.execute('''
+        SELECT * FROM messages WHERE session_id = ? ORDER BY timestamp
+        ''', (session_id,))
+        messages = [dict(row) for row in cursor.fetchall()]
+        
+        # Get file uploads
+        cursor.execute('''
+        SELECT * FROM file_uploads WHERE session_id = ? ORDER BY timestamp
+        ''', (session_id,))
+        uploads = [dict(row) for row in cursor.fetchall()]
+        
+        # Get analysis events
+        cursor.execute('''
+        SELECT * FROM analysis_events WHERE session_id = ? ORDER BY timestamp
+        ''', (session_id,))
+        events = [dict(row) for row in cursor.fetchall()]
+        
+        # Get errors
+        cursor.execute('''
+        SELECT * FROM errors WHERE session_id = ? ORDER BY timestamp
+        ''', (session_id,))
+        errors = [dict(row) for row in cursor.fetchall()]
+        
+        conn.close()
+        
+        return render_template(
+            'admin_session_detail.html', 
+            session_info=session_info,
+            messages=messages,
+            uploads=uploads,
+            events=events,
+            errors=errors
+        )
+        
+    except Exception as e:
+        current_app.logger.error(f"Error retrieving session details: {str(e)}", exc_info=True)
+        return jsonify({'status': 'error', 'message': f'Error retrieving session details: {str(e)}'}), 500
+
+@main_bp.route('/admin/export', methods=['GET'])
+def admin_export_logs():
+    """Export logs as JSON"""
+    # Simple password protection (replace with proper authentication)
+    if request.args.get('key') != current_app.config.get('ADMIN_KEY', 'admin'):
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    
+    # Get interaction logger
+    logger = get_interaction_logger()
+    if not logger:
+        return jsonify({'status': 'error', 'message': 'Interaction logger not initialized'}), 500
+    
+    # Connect to database
+    try:
+        conn = sqlite3.connect(logger.db_path)
+        conn.row_factory = sqlite3.Row  # Return rows as dictionaries
+        cursor = conn.cursor()
+        
+        # Get all data
+        data = {}
+        
+        # Get sessions
+        cursor.execute('SELECT * FROM sessions')
+        data['sessions'] = [dict(row) for row in cursor.fetchall()]
+        
+        # Get messages
+        cursor.execute('SELECT * FROM messages')
+        data['messages'] = [dict(row) for row in cursor.fetchall()]
+        
+        # Get file uploads
+        cursor.execute('SELECT * FROM file_uploads')
+        data['uploads'] = [dict(row) for row in cursor.fetchall()]
+        
+        # Get analysis events
+        cursor.execute('SELECT * FROM analysis_events')
+        data['events'] = [dict(row) for row in cursor.fetchall()]
+        
+        # Get errors
+        cursor.execute('SELECT * FROM errors')
+        data['errors'] = [dict(row) for row in cursor.fetchall()]
+        
+        conn.close()
+        
+        # Create a response with the JSON data and appropriate headers for download
+        response = current_app.response_class(
+            response=json.dumps(data, indent=2, default=str),
+            status=200,
+            mimetype='application/json'
+        )
+        response.headers["Content-Disposition"] = f"attachment; filename=mrpt_logs_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        
+        return response
+        
+    except Exception as e:
+            current_app.logger.error(f"Error exporting logs: {str(e)}", exc_info=True)
+            return jsonify({'status': 'error', 'message': f'Error exporting logs: {str(e)}'}), 500
 
 # --- Helper Functions ---
+
+# Add this function to routes.py - it will forward questions about variables directly to the LLM
+
+def generate_ai_response_for_variables(user_message, analysis_result=None, data_handler=None):
+    """
+    Generates a detailed AI response specifically for variable-related questions
+    using the OpenAI API directly. This avoids hardcoded explanations.
+    """
+    try:
+        api_key = current_app.config.get('OPENAI_API_KEY')
+        if not api_key:
+            return "I'm unable to provide detailed variable explanations at the moment."
+            
+        # Get the available variables from the data handler if possible
+        available_variables = []
+        selected_variables = []
+        variable_relationships = {}
+        
+        if data_handler:
+            if hasattr(data_handler, 'csv_data') and data_handler.csv_data is not None:
+                available_variables = [col for col in data_handler.csv_data.columns 
+                                    if col != 'WardName' and not is_id_column(col)]
+            
+            if hasattr(data_handler, 'composite_variables') and data_handler.composite_variables:
+                selected_variables = data_handler.composite_variables
+            
+            if hasattr(data_handler, 'variable_relationships'):
+                variable_relationships = data_handler.variable_relationships
+        
+        # If we have analysis_result, get variables from there
+        if analysis_result and 'variables_used' in analysis_result:
+            selected_variables = analysis_result.get('variables_used', [])
+        
+        # Create a detailed context for the LLM
+        context = f"""
+        You are an expert in malaria epidemiology and the Malaria Reprioritization Tool (MRPT) assistant.
+        You've been asked to explain about variable selection for composite scores in malaria risk analysis.
+        
+        Available information about the current analysis:
+        - Available variables: {available_variables}
+        - Variables selected for analysis: {selected_variables}
+        - Variable relationships with risk: {variable_relationships}
+        
+        Answer the user's question about variables in detail, explaining:
+        1. How and why variables were selected
+        2. The epidemiological significance of these variables 
+        3. How they relate to malaria risk
+        4. How they contribute to the composite score calculation
+        
+        Be comprehensive but easy to understand, and tailor your response specifically to the user's question.
+        """
+        
+        # Call the LLM with the detailed context
+        client = openai.OpenAI(api_key=api_key)
+        
+        messages = [
+            {"role": "system", "content": context},
+            {"role": "user", "content": user_message}
+        ]
+        
+        response = client.chat.completions.create(
+            model="gpt-4o",  # Use latest model for best responses
+            messages=messages,
+            temperature=0.5,  # Balance between creative and factual
+            max_tokens=1000  # Allow for detailed responses
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        logger.error(f"Error generating AI response for variables: {e}", exc_info=True)
+        return f"I apologize, but I encountered an error while generating a detailed explanation: {str(e)}"
 
 def is_confirmation(message):
    """Check if a message is a confirmation or cancellation."""
@@ -1278,7 +2454,20 @@ def get_visualization_response(data_handler, viz_type, variable=None, threshold=
            'threshold': threshold
        }, data_handler)
        
+       # Get proper loggers
+       python_logger = logging.getLogger(__name__)
+       interaction_logger = get_interaction_logger()
+       
        if result['status'] == 'success':
+           # Double-check that image_path exists in a success response
+           if 'image_path' not in result:
+               python_logger.error(f"Missing image_path in successful result: {result}")
+               return jsonify({
+                   'status': 'error', 
+                   'response': "I created the visualization but couldn't retrieve its path. Please try again.", 
+                   'action': 'error'
+               })
+           
            # Update session to track visualization for context
            session['last_visualization'] = {
                'type': viz_type,
@@ -1286,6 +2475,39 @@ def get_visualization_response(data_handler, viz_type, variable=None, threshold=
                'threshold': threshold,
                'timestamp': datetime.now().isoformat()
            }
+           
+           # Log visualization in interaction logger
+           if interaction_logger and session.get('session_id'):
+               details = {
+                   'viz_type': viz_type,
+                   'variable': variable,
+                   'threshold': threshold
+               }
+               interaction_logger.log_analysis_event(
+                   session.get('session_id'),
+                   'visualization_success',
+                   details,
+                   True
+               )
+               
+               # Log assistant response
+               interaction_logger.log_message(
+                   session.get('session_id'), 
+                   'assistant', 
+                   result.get('ai_response', 'Here is the visualization.')
+               )
+           
+           # Debug print the format being returned
+           python_logger.info(f"Returning visualization response: {json.dumps({
+               'status': 'success', 
+               'response': result.get('ai_response', 'Here is the visualization:'), 
+               'visualization': result.get('image_path', ''), 
+               'viz_type': result.get('viz_type', ''), 
+               'variable': result.get('variable'), 
+               'current_page': result.get('current_page', 1), 
+               'total_pages': result.get('total_pages', 1), 
+               'action': 'show_visualization'
+           })[:500]}...")
            
            return jsonify({
                'status': 'success', 
@@ -1298,13 +2520,41 @@ def get_visualization_response(data_handler, viz_type, variable=None, threshold=
                'action': 'show_visualization'
            })
        else:
+           # Log the error
+           if interaction_logger and session.get('session_id'):
+               interaction_logger.log_error(
+                   session.get('session_id'),
+                   'visualization_error',
+                   result.get('message', 'Error generating visualization')
+               )
+               
+               # Log assistant response
+               interaction_logger.log_message(
+                   session.get('session_id'), 
+                   'assistant', 
+                   result.get('ai_response', result.get('message', 'Error generating visualization'))
+               )
+           
            return jsonify({
                'status': 'error', 
                'response': result.get('ai_response', result.get('message', 'Error generating visualization')), 
                'action': 'error'
            })
    except Exception as e:
-       logger.error(f"Visualization Error: {e}", exc_info=True)
+       python_logger = logging.getLogger(__name__)
+       python_logger.error(f"Visualization Error: {e}", exc_info=True)
+       
+       # Log the error
+       interaction_logger = get_interaction_logger()
+       if interaction_logger and session.get('session_id'):
+           import traceback
+           interaction_logger.log_error(
+               session.get('session_id'),
+               'visualization_exception',
+               str(e),
+               traceback.format_exc()
+           )
+       
        return jsonify({
            'status': 'error', 
            'response': f"Error generating visualization: {e}", 
@@ -1952,7 +3202,7 @@ def get_llm_nlu_response(user_message, session_state, available_variables, last_
     - map_type (string): Specific map type ('variable', 'normalized', 'composite', 'vulnerability', 'urban_extent').
     - plot_type (string): Specific plot type ('vulnerability', 'decision_tree').
     - variable_for_viz (string): The specific variable requested for a map/plot. Use a name from the available list if possible.
-    - threshold_value (integer): Numerical threshold for urban extent (default 30).
+    - threshold_value (float): Numerical threshold for urban extent (default 30). E.g., for "0.5%", extract 0.5. For "50%", extract 50.
     - report_format (string): 'pdf', 'html', or 'docx'.
     - language_code (string): 'en', 'ha', 'yo', 'ig', 'fr', 'ar', etc.
     - methodology_type (string): The methodology the user is asking about ('missing_values', 'normalization', 'composite_scores', 'vulnerability_ranking', 'urban_extent').
@@ -2320,73 +3570,78 @@ def get_fallback_response(message, session_state):
 
 
 def convert_to_json_serializable(obj):
-   """
-   Recursively convert objects to JSON serializable types.
-   Specifically handles NumPy types which are not JSON serializable by default.
-   Updated for NumPy 2.0 compatibility.
-   """
-   if isinstance(obj, dict):
-       return {k: convert_to_json_serializable(v) for k, v in obj.items()}
-   elif isinstance(obj, list):
-       return [convert_to_json_serializable(item) for item in obj]
-   
-   # --- NumPy Type Handling (Updated for NumPy 2.0+) ---
-   # Integer types
-   elif isinstance(obj, np.integer): # Catches all NumPy integer types
-       return int(obj)
-   # Floating point types
-   elif isinstance(obj, np.floating): # Catches all NumPy float types
-       return float(obj)
-   # Complex types
-   elif isinstance(obj, np.complexfloating): # Catches all NumPy complex types
-       return {'real': float(obj.real), 'imag': float(obj.imag)} # Ensure real/imag are also serializable
-   # Boolean types
-   elif isinstance(obj, np.bool_): # NumPy's specific boolean type
-       return bool(obj)
-   # Void types (structured arrays often have np.void elements for rows)
-   elif isinstance(obj, np.void):
-       # Convert structured array record to a dictionary if possible
-       # This assumes fields in the void type are themselves serializable
-       try:
-           return {name: convert_to_json_serializable(obj[name]) for name in obj.dtype.names}
-       except: # If it's not a structured array record or fails, return None or str
-           return None # Or str(obj) if you prefer a string representation
-   # NumPy arrays
-   elif isinstance(obj, np.ndarray):
-       return convert_to_json_serializable(obj.tolist())
-   # --- End NumPy Type Handling ---
-
-   # Pandas specific types
-   elif pd.isna(obj):
-       return None
-   elif isinstance(obj, pd.Timestamp):
-       return obj.isoformat()
-   # Add other pandas types if needed, e.g., pd.Interval
-
-   # Basic Python types (should be serializable by default)
-   elif obj is None or isinstance(obj, (str, int, float, bool)):
-       return obj
-   
-   # Fallback for other types
-   else:
-       # If it has a to_dict method (like some complex custom objects)
-       if hasattr(obj, 'to_dict') and callable(getattr(obj, 'to_dict')):
-           try:
-               return convert_to_json_serializable(obj.to_dict())
-           except Exception as e:
-               logger.warning(f"Error calling to_dict on {type(obj)}: {e}, falling back to str.")
-               pass # Fall through to string conversion
+    """
+    Recursively convert objects to JSON serializable types.
+    Specifically handles NumPy types which are not JSON serializable by default.
+    Updated for NumPy 2.0 compatibility.
+    """
+    if isinstance(obj, dict):
+        return {k: convert_to_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_json_serializable(item) for item in obj]
+    
+    # Integer types
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    # Floating point types
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    # Boolean types
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    # NumPy arrays
+    elif isinstance(obj, np.ndarray):
+        return convert_to_json_serializable(obj.tolist())
+        
+    # Other Python types
+    elif obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+    # For other types, try string conversion
+    else:
+        try:
+            return str(obj)
+        except:
+            return f"Unserializable object of type: {type(obj).__name__}"
        
-       # Last resort: convert to string, with a warning
-       try:
-           # Attempt a standard string conversion.
-           # Some objects might raise an error here if their __str__ is not well-behaved for serialization.
-           s = str(obj)
-           # Basic check to avoid overly long or problematic string representations in JSON
-           if len(s) > 256: # Arbitrary limit
-               logger.warning(f"Object of type {type(obj)} has a long string representation. Returning type info instead.")
-               return f"<Object of type: {type(obj).__name__}>"
-           return s
-       except Exception as e:
-           logger.error(f"Could not serialize object of type {type(obj)} to string: {e}. Returning type info.")
-           return f"<Unserializable object of type: {type(obj).__name__}>"
+def extractThreshold(message):
+    """
+    Extract urban extent threshold from a message with improved pattern matching
+    
+    Args:
+        message: The message to extract threshold from
+        
+    Returns:
+        float: Extracted threshold percentage (default: 30.0)
+    """
+    # Default threshold
+    default_threshold = 30.0 # Use float for consistency
+    
+    # Convert message to lowercase for case-insensitive matching
+    message_lower = message.lower()
+    
+    # Pattern 1: Find "X%" or "X.Y%" pattern
+    # Regex updated to capture floating point numbers
+    threshold_match = re.search(r'(\d+(?:\.\d+)?)\s*%', message_lower)
+    if threshold_match and threshold_match[1]:
+        try:
+            threshold_value = float(threshold_match[1])
+            # Validate range (0-100%)
+            return max(0.0, min(100.0, threshold_value))
+        except ValueError:
+            pass # Will try next pattern or return default
+    
+    # Pattern 2: Look for "threshold of X" or "at X" or "X threshold" or "X percent"
+    # Regex updated to capture floating point numbers
+    pattern2 = re.search(r'(?:threshold\s+(?:of\s+)?|at\s+|set\s+to\s+|level\s+of\s+)?(\d+(?:\.\d+)?)(?:\s*(?:threshold|percent|pct|%|urban))?', message_lower)
+    if pattern2 and pattern2[1]:
+        try:
+            threshold_value = float(pattern2[1])
+            # Validate range (0-100%)
+            return max(0.0, min(100.0, threshold_value))
+        except ValueError:
+            pass # Will try next pattern or return default
+
+    # Pattern 3: Look for written numbers (more complex, can be added if needed)
+    
+    # Return default if no patterns match
+    return default_threshold

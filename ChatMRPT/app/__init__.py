@@ -49,8 +49,10 @@ def create_app(test_config=None):
         MAX_CONTENT_LENGTH=50 * 1024 * 1024,
         OPENAI_API_KEY=os.environ.get('OPENAI_API_KEY'),
         RELOADER_EXCLUSIONS=reloader_exclusions,
+        ADMIN_KEY=os.environ.get('ADMIN_KEY', 'admin'),
         RESPONSE_TIMEOUT=300
     )
+
 
     # --- Configure logging ---
     log_file_path = os.path.join(app.instance_path, 'app.log')
@@ -95,6 +97,27 @@ def create_app(test_config=None):
     app.logger.info(f"Upload folder: {app.config['UPLOAD_FOLDER']}")
     app.logger.info(f"Reports folder: {app.config['REPORTS_FOLDER']}")
     app.logger.info(f"Log file: {log_file_path}")
+
+
+    # Initialize interaction logger
+    try:
+        from .models.interaction_logger import InteractionLogger
+        app.logger.info("InteractionLogger class imported successfully")
+        
+        # Get the database path and ensure directory exists
+        db_path = os.path.join(app.instance_path, 'interactions.db')
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        app.logger.info(f"Database directory ensured: {os.path.dirname(db_path)}")
+        
+        # Initialize the logger
+        interaction_logger = InteractionLogger(db_path)
+        app.logger.info(f"InteractionLogger initialized with database at {db_path}")
+        
+        # Store in app config
+        app.config['INTERACTION_LOGGER'] = interaction_logger
+        app.logger.info("InteractionLogger stored in app config")
+    except Exception as e:
+        app.logger.error(f"Failed to initialize interaction logger: {e}", exc_info=True)
 
 
     # --- Load instance config / test config ---

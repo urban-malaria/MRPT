@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MRPT AI Assistant - Session Details</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body { font-family: 'Roboto', sans-serif; padding: 20px; background-color: #f5f5f5; }
+        h1, h2 { margin-bottom: 20px; }
+        .section { margin-bottom: 30px; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .user-message { background-color: #E3F2FD; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+        .assistant-message { background-color: #E8F5E9; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+        .system-message { background-color: #FFF3E0; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+        .timestamp { font-size: 0.8rem; color: #666; margin-bottom: 5px; }
+        .back-btn { margin-bottom: 20px; }
+        .content { white-space: pre-wrap; }
+        .session-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        .session-id { 
+            font-family: monospace; 
+            background-color: #f8f9fa; 
+            padding: 5px 10px; 
+            border-radius: 4px; 
+            font-size: 0.9rem;
+        }
+        .tab-content {
+            padding-top: 20px;
+        }
+        .nav-tabs {
+            margin-bottom: 0;
+        }
+        .nav-tabs .nav-link {
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+        }
+        .nav-tabs .nav-link.active {
+            background-color: #fff;
+            border-bottom-color: #fff;
+        }
+        .badge-count {
+            background-color: #6c757d;
+            color: white;
+            border-radius: 10px;
+            padding: 2px 6px;
+            font-size: 0.7rem;
+            margin-left: 5px;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .text-ellipsis {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 300px;
+        }
+        .error-trace {
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 0.85rem;
+        }
+        .metadata-json {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .actions-column {
+            width: 100px;
+        }
+        .conversation-search {
+            margin-bottom: 15px;
+        }
+        .message-search-highlight {
+            background-color: yellow;
+            padding: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="session-header">
+            <a href="{{ url_for('main.admin_logs', key=request.args.get('key')) }}" class="btn btn-secondary back-btn">
+                <i class="bi bi-arrow-left"></i> Back to Sessions
+            </a>
+            
+            <h1>Session Details</h1>
+            
+            <span class="session-id">ID: {{ session_info.session_id }}</span>
+        </div>
+        
+        <ul class="nav nav-tabs" id="sessionTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview" type="button" role="tab" aria-controls="overview" aria-selected="true">
+                    <i class="bi bi-info-circle"></i> Overview
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="conversation-tab" data-bs-toggle="tab" data-bs-target="#conversation" type="button" role="tab" aria-controls="conversation" aria-selected="false">
+                    <i class="bi bi-chat-dots"></i> Conversation
+                    <span class="badge-count">{{ messages|length }}</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="uploads-tab" data-bs-toggle="tab" data-bs-target="#uploads" type="button" role="tab" aria-controls="uploads" aria-selected="false">
+                    <i class="bi bi-file-earmark-arrow-up"></i> Uploads
+                    <span class="badge-count">{{ uploads|length }}</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="events-tab" data-bs-toggle="tab" data-bs-target="#events" type="button" role="tab" aria-controls="events" aria-selected="false">
+                    <i class="bi bi-activity"></i> Analysis Events
+                    <span class="badge-count">{{ events|length }}</span>
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="errors-tab" data-bs-toggle="tab" data-bs-target="#errors" type="button" role="tab" aria-controls="errors" aria-selected="false">
+                    <i class="bi bi-exclamation-triangle"></i> Errors
+                    <span class="badge-count">{{ errors|length }}</span>
+                </button>
+            </li>
+        </ul>
+        
+        <div class="tab-content" id="sessionTabsContent">
+            <!-- Overview Tab -->
+            <div class="tab-pane fade show active" id="overview" role="tabpanel" aria-labelledby="overview-tab">
+                <div class="section">
+                    <h2>Session Information</h2>
+                    <table class="table table-bordered">
+                        <tr>
+                            <th style="width: 200px;">Session ID</th>
+                            <td>{{ session_info.session_id }}</td>
+                        </tr>
+                        <tr>
+                            <th>Start Time</th>
+                            <td>{{ session_info.start_time }}</td>
+                        </tr>
+                        <tr>
+                            <th>Last Activity</th>
+                            <td>{{ session_info.last_activity }}</td>
+                        </tr>
+                        <tr>
+                            <th>Duration</th>
+                            <td>
+                                {% set start = session_info.start_time|string|replace(' ', 'T') %}
+                                {% set end = session_info.last_activity|string|replace(' ', 'T') %}
+                                <script>
+                                    document.write(Math.round((new Date("{{ end }}") - new Date("{{ start }}")) / 60000) + " minutes");
+                                </script>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Language</th>
+                            <td>{{ session_info.user_language }}</td>
+                        </tr>
+                        <tr>
+                            <th>Browser Info</th>
+                            <td>{{ session_info.browser_info }}</td>
+                        </tr>
+                        <tr>
+                            <th>IP Address</th>
+                            <td>{{ session_info.ip_address }}</td>
+                        </tr>
+                        <tr>
+                            <th>Message Count</th>
+                            <td>{{ messages|length }}</td>
+                        </tr>
+                        <tr>
+                            <th>File Uploads</th>
+                            <td>{{ uploads|length }}</td>
+                        </tr>
+                        <tr>
+                            <th>Analysis Events</th>
+                            <td>{{ events|length }}</td>
+                        </tr>
+                        <tr>
+                            <th>Errors</th>
+                            <td>
+                                {% if errors|length > 0 %}
+                                <span class="badge bg-danger">{{ errors|length }}</span>
+                                {% else %}
+                                <span class="badge bg-success">0</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div class="section">
+                    <h2>Session Summary</h2>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h4>Activity Overview</h4>
+                            <ul class="list-group">
+                                {% set user_msgs = 0 %}
+                                {% set ai_msgs = 0 %}
+                                {% for msg in messages %}
+                                    {% if msg.sender == 'user' %}
+                                        {% set user_msgs = user_msgs + 1 %}
+                                    {% elif msg.sender == 'assistant' %}
+                                        {% set ai_msgs = ai_msgs + 1 %}
+                                    {% endif %}
+                                {% endfor %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    User Messages
+                                    <span class="badge bg-primary rounded-pill">{{ user_msgs }}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    Assistant Messages
+                                    <span class="badge bg-success rounded-pill">{{ ai_msgs }}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    File Uploads
+                                    <span class="badge bg-info rounded-pill">{{ uploads|length }}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    Analysis Events
+                                    <span class="badge bg-warning text-dark rounded-pill">{{ events|length }}</span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    Errors Encountered
+                                    <span class="badge bg-danger rounded-pill">{{ errors|length }}</span>
+                                </li>
+                            </ul>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h4>Uploaded Files</h4>
+                            {% if uploads %}
+                            <ul class="list-group">
+                                {% for upload in uploads %}
+                                <li class="list-group-item">
+                                    <i class="bi bi-file-earmark"></i> {{ upload.file_name }}
+                                    <small class="text-muted d-block">{{ upload.file_type }} - {{ upload.file_size }} bytes</small>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            {% else %}
+                            <p class="text-muted">No files uploaded in this session.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Conversation Tab -->
+            <div class="tab-pane fade" id="conversation" role="tabpanel" aria-labelledby="conversation-tab">
+                <div class="section">
+                    <h2>Conversation</h2>
+                    
+                    <div class="conversation-search">
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" id="messageSearchInput" placeholder="Search messages...">
+                            <button class="btn btn-outline-secondary" type="button" id="searchMessagesBtn">Search</button>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="userMessagesOnly" value="user">
+                            <label class="form-check-label" for="userMessagesOnly">User messages only</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="aiMessagesOnly" value="assistant">
+                            <label class="form-check-label" for="aiMessagesOnly">AI messages only</label>
+                        </div>
+                    </div>
+                    
+                    <div id="messageList">
+                        {% for message in messages %}
+                            {% if message.sender == 'user' %}
+                            <div class="user-message" data-sender="user">
+                                <div class="timestamp">{{ message.timestamp }} - User</div>
+                                <div class="content">{{ message.content }}</div>
+                            </div>
+                            {% elif message.sender == 'system' %}
+                            <div class="system-message" data-sender="system">
+                                <div class="timestamp">{{ message.timestamp }} - System</div>
+                                <div class="content">{{ message.content }}</div>
+                            </div>
+                            {% else %}
+                            <div class="assistant-message" data-sender="assistant">
+                                <div class="timestamp">{{ message.timestamp }} - Assistant</div>
+                                <div class="content">{{ message.content }}</div>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Uploads Tab -->
+            <div class="tab-pane fade" id="uploads" role="tabpanel" aria-labelledby="uploads-tab">
+                <div class="section">
+                    <h2>File Uploads</h2>
+                    {% if uploads %}
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>File Type</th>
+                                <th>File Name</th>
+                                <th>Size</th>
+                                <th>Metadata</th>
+                                <th class="actions-column">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for upload in uploads %}
+                            <tr>
+                                <td>{{ upload.timestamp }}</td>
+                                <td>{{ upload.file_type }}</td>
+                                <td>{{ upload.file_name }}</td>
+                                <td>{{ upload.file_size }} bytes</td>
+                                <td>
+                                    <div class="metadata-json">
+                                        <pre>{{ upload.metadata }}</pre>
+                                    </div>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#metadataModal" data-metadata="{{ upload.metadata }}">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="text-muted">No files were uploaded in this session.</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Events Tab -->
+            <div class="tab-pane fade" id="events" role="tabpanel" aria-labelledby="events-tab">
+                <div class="section">
+                    <h2>Analysis Events</h2>
+                    {% if events %}
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Event Type</th>
+                                <th>Success</th>
+                                <th>Details</th>
+                                <th class="actions-column">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for event in events %}
+                            <tr>
+                                <td>{{ event.timestamp }}</td>
+                                <td>{{ event.event_type }}</td>
+                                <td>
+                                    {% if event.success %}
+                                    <span class="badge bg-success">Success</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Failed</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-ellipsis">{{ event.details }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#detailsModal" data-details="{{ event.details }}">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="text-muted">No analysis events were recorded in this session.</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Errors Tab -->
+            <div class="tab-pane fade" id="errors" role="tabpanel" aria-labelledby="errors-tab">
+                <div class="section">
+                    <h2>Errors</h2>
+                    {% if errors %}
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Error Type</th>
+                                <th>Message</th>
+                                <th class="actions-column">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for error in errors %}
+                            <tr>
+                                <td>{{ error.timestamp }}</td>
+                                <td>{{ error.error_type }}</td>
+                                <td class="text-ellipsis">{{ error.error_message }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#errorModal" data-message="{{ error.error_message }}" data-trace="{{ error.stack_trace }}">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="text-muted">No errors were recorded in this session.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Metadata Modal -->
+    <div class="modal fade" id="metadataModal" tabindex="-1" aria-labelledby="metadataModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="metadataModalLabel">File Metadata</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <pre id="modalMetadataContent"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Details Modal -->
+    <div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="detailsModalLabel">Event Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <pre id="modalDetailsContent"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Error Modal -->
+   <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+       <div class="modal-dialog modal-lg">
+           <div class="modal-content">
+               <div class="modal-header">
+                   <h5 class="modal-title" id="errorModalLabel">Error Details</h5>
+                   <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+               </div>
+               <div class="modal-body">
+                   <h6>Error Message</h6>
+                   <pre id="modalErrorMessage"></pre>
+                   <h6>Stack Trace</h6>
+                   <div class="error-trace">
+                       <pre id="modalErrorTrace"></pre>
+                   </div>
+               </div>
+               <div class="modal-footer">
+                   <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+               </div>
+           </div>
+       </div>
+   </div>
+   
+   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+   <script>
+       // Modal event handlers for metadata
+       const metadataModal = document.getElementById('metadataModal');
+       if (metadataModal) {
+           metadataModal.addEventListener('show.bs.modal', function(event) {
+               const button = event.relatedTarget;
+               const metadata = button.getAttribute('data-metadata');
+               const modalContent = document.getElementById('modalMetadataContent');
+               
+               try {
+                   // Try to parse JSON for formatting
+                   const jsonObj = JSON.parse(metadata);
+                   modalContent.textContent = JSON.stringify(jsonObj, null, 2);
+               } catch (e) {
+                   // If not valid JSON, display as is
+                   modalContent.textContent = metadata || 'No metadata available';
+               }
+           });
+       }
+       
+       // Modal event handlers for details
+       const detailsModal = document.getElementById('detailsModal');
+       if (detailsModal) {
+           detailsModal.addEventListener('show.bs.modal', function(event) {
+               const button = event.relatedTarget;
+               const details = button.getAttribute('data-details');
+               const modalContent = document.getElementById('modalDetailsContent');
+               
+               try {
+                   // Try to parse JSON for formatting
+                   const jsonObj = JSON.parse(details);
+                   modalContent.textContent = JSON.stringify(jsonObj, null, 2);
+               } catch (e) {
+                   // If not valid JSON, display as is
+                   modalContent.textContent = details || 'No details available';
+               }
+           });
+       }
+       
+       // Modal event handlers for errors
+       const errorModal = document.getElementById('errorModal');
+       if (errorModal) {
+           errorModal.addEventListener('show.bs.modal', function(event) {
+               const button = event.relatedTarget;
+               const message = button.getAttribute('data-message');
+               const trace = button.getAttribute('data-trace');
+               
+               document.getElementById('modalErrorMessage').textContent = message || 'No error message available';
+               document.getElementById('modalErrorTrace').textContent = trace || 'No stack trace available';
+           });
+       }
+       
+       // Message search functionality
+       const searchBtn = document.getElementById('searchMessagesBtn');
+       const searchInput = document.getElementById('messageSearchInput');
+       const userMessagesOnly = document.getElementById('userMessagesOnly');
+       const aiMessagesOnly = document.getElementById('aiMessagesOnly');
+       
+       if (searchBtn && searchInput) {
+           searchBtn.addEventListener('click', searchMessages);
+           searchInput.addEventListener('keyup', function(event) {
+               if (event.key === 'Enter') {
+                   searchMessages();
+               }
+           });
+           
+           // Make checkboxes mutually exclusive
+           userMessagesOnly.addEventListener('change', function() {
+               if (this.checked) {
+                   aiMessagesOnly.checked = false;
+               }
+               searchMessages();
+           });
+           
+           aiMessagesOnly.addEventListener('change', function() {
+               if (this.checked) {
+                   userMessagesOnly.checked = false;
+               }
+               searchMessages();
+           });
+       }
+       
+       function searchMessages() {
+           const searchTerm = searchInput.value.toLowerCase();
+           const messageElements = document.querySelectorAll('#messageList > div');
+           let visibleCount = 0;
+           
+           // Remove all existing highlights
+           document.querySelectorAll('.message-search-highlight').forEach(el => {
+               const parent = el.parentNode;
+               parent.replaceChild(document.createTextNode(el.textContent), el);
+           });
+           
+           messageElements.forEach(message => {
+               // Apply sender filter first
+               let showBySender = true;
+               if (userMessagesOnly.checked && message.getAttribute('data-sender') !== 'user') {
+                   showBySender = false;
+               }
+               if (aiMessagesOnly.checked && message.getAttribute('data-sender') !== 'assistant') {
+                   showBySender = false;
+               }
+               
+               // Then apply text search
+               const content = message.querySelector('.content');
+               const text = content.textContent.toLowerCase();
+               
+               if (showBySender && (searchTerm === '' || text.includes(searchTerm))) {
+                   message.style.display = '';
+                   visibleCount++;
+                   
+                   // Add highlight if search term is not empty
+                   if (searchTerm !== '') {
+                       highlightText(content, searchTerm);
+                   }
+               } else {
+                   message.style.display = 'none';
+               }
+           });
+           
+           // Add a status message if needed
+           const existingStatus = document.getElementById('searchStatusMessage');
+           if (existingStatus) {
+               existingStatus.remove();
+           }
+           
+           if (searchTerm !== '') {
+               const statusMessage = document.createElement('div');
+               statusMessage.id = 'searchStatusMessage';
+               statusMessage.className = 'alert alert-info mt-2';
+               statusMessage.textContent = `Found ${visibleCount} matching message${visibleCount !== 1 ? 's' : ''}.`;
+               
+               const messageList = document.getElementById('messageList');
+               messageList.parentNode.insertBefore(statusMessage, messageList);
+           }
+       }
+       
+       function highlightText(element, searchTerm) {
+           const innerHTML = element.innerHTML;
+           const index = innerHTML.toLowerCase().indexOf(searchTerm.toLowerCase());
+           
+           if (index >= 0) {
+               element.innerHTML = innerHTML.substring(0, index) + 
+                                 '<span class="message-search-highlight">' + 
+                                 innerHTML.substring(index, index + searchTerm.length) + 
+                                 '</span>' + 
+                                 innerHTML.substring(index + searchTerm.length);
+           }
+       }
+   </script>
+</body>
+</html>
