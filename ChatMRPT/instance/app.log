@@ -31280,3 +31280,202 @@ AttributeError: type object 'datetime.datetime' has no attribute 'datetime'
 2025-05-14 15:31:47,083 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\scipy\\sparse\\_matrix_io.py', reloading
 2025-05-14 15:31:47,088 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\pysal\\lib\\__init__.py', reloading
 2025-05-14 15:31:49,327 - werkzeug - INFO -  * Restarting with watchdog (windowsapi)
+2025-05-14 15:31:49,796 - app - INFO - Flask app configured and logging set up.
+2025-05-14 15:31:49,796 - app - INFO - Flask app configured and logging set up.
+2025-05-14 15:31:49,796 - app - INFO - Instance path: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance
+2025-05-14 15:31:49,796 - app - INFO - Instance path: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance
+2025-05-14 15:31:49,797 - app - INFO - Upload folder: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\uploads
+2025-05-14 15:31:49,797 - app - INFO - Upload folder: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\uploads
+2025-05-14 15:31:49,797 - app - INFO - Reports folder: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\reports
+2025-05-14 15:31:49,797 - app - INFO - Reports folder: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\reports
+2025-05-14 15:31:49,797 - app - INFO - Log file: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\app.log
+2025-05-14 15:31:49,797 - app - INFO - Log file: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\app.log
+2025-05-14 15:31:49,808 - app - INFO - InteractionLogger class imported successfully
+2025-05-14 15:31:49,808 - app - INFO - InteractionLogger class imported successfully
+2025-05-14 15:31:49,809 - app - INFO - Database directory ensured: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance
+2025-05-14 15:31:49,809 - app - INFO - Database directory ensured: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance
+2025-05-14 15:31:49,818 - app.models.interaction_logger - INFO - Interaction database initialized at C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\interactions.db
+2025-05-14 15:31:49,818 - app.models.interaction_logger - INFO - Interaction database initialized at C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\interactions.db
+2025-05-14 15:31:49,818 - app - INFO - InteractionLogger initialized with database at C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\interactions.db
+2025-05-14 15:31:49,818 - app - INFO - InteractionLogger initialized with database at C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\interactions.db
+2025-05-14 15:31:49,819 - app - INFO - InteractionLogger stored in app config
+2025-05-14 15:31:49,819 - app - INFO - InteractionLogger stored in app config
+2025-05-14 15:31:49,819 - app - INFO - Attempted to load instance/config.py (if exists).
+2025-05-14 15:31:49,819 - app - INFO - Attempted to load instance/config.py (if exists).
+2025-05-14 15:31:49,819 - app - INFO - Ensured upload and report directories exist.
+2025-05-14 15:31:49,819 - app - INFO - Ensured upload and report directories exist.
+2025-05-14 15:31:56,625 - app.routes - INFO - Loaded 179 English stopwords from NLTK.
+2025-05-14 15:31:56,625 - app.routes - INFO - Loaded 179 English stopwords from NLTK.
+2025-05-14 15:31:56,625 - app.routes - INFO - Total stopwords including domain-specific: 235
+2025-05-14 15:31:56,625 - app.routes - INFO - Total stopwords including domain-specific: 235
+2025-05-14 15:31:56,629 - app - INFO - Registered main blueprint.
+2025-05-14 15:31:56,629 - app - INFO - Registered main blueprint.
+2025-05-14 15:31:56,629 - app - INFO - Error handlers registered.
+2025-05-14 15:31:56,629 - app - INFO - Error handlers registered.
+2025-05-14 15:31:56,629 - app - INFO - App creation complete.
+2025-05-14 15:31:56,629 - app - INFO - App creation complete.
+2025-05-14 15:31:56,641 - werkzeug - WARNING -  * Debugger is active!
+2025-05-14 15:31:56,648 - werkzeug - INFO -  * Debugger PIN: 127-120-445
+2025-05-14 15:52:35,243 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\__init__.py', reloading
+2025-05-14 15:52:35,255 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\__main__.py', reloading
+2025-05-14 15:52:35,255 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\__init__.py', reloading
+2025-05-14 15:52:35,256 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\__init__.py', reloading
+2025-05-14 15:52:35,257 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\__main__.py', reloading
+2025-05-14 15:52:35,258 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\__main__.py', reloading
+2025-05-14 15:52:35,259 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\__meta__.py', reloading
+2025-05-14 15:52:35,259 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\__meta__.py', reloading
+2025-05-14 15:52:35,261 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\blockparser.py', reloading
+2025-05-14 15:52:35,262 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\blockparser.py', reloading
+2025-05-14 15:52:35,262 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\blockprocessors.py', reloading
+2025-05-14 15:52:35,262 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\blockprocessors.py', reloading
+2025-05-14 15:52:35,263 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\core.py', reloading
+2025-05-14 15:52:35,264 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\core.py', reloading
+2025-05-14 15:52:35,265 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\htmlparser.py', reloading
+2025-05-14 15:52:35,265 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\htmlparser.py', reloading
+2025-05-14 15:52:35,266 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\inlinepatterns.py', reloading
+2025-05-14 15:52:35,266 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\inlinepatterns.py', reloading
+2025-05-14 15:52:35,267 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\postprocessors.py', reloading
+2025-05-14 15:52:35,270 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\postprocessors.py', reloading
+2025-05-14 15:52:35,270 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\preprocessors.py', reloading
+2025-05-14 15:52:35,271 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\preprocessors.py', reloading
+2025-05-14 15:52:35,272 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\serializers.py', reloading
+2025-05-14 15:52:35,273 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\serializers.py', reloading
+2025-05-14 15:52:35,274 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\test_tools.py', reloading
+2025-05-14 15:52:35,275 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\test_tools.py', reloading
+2025-05-14 15:52:35,276 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\treeprocessors.py', reloading
+2025-05-14 15:52:35,277 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\treeprocessors.py', reloading
+2025-05-14 15:52:35,277 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\util.py', reloading
+2025-05-14 15:52:35,278 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\util.py', reloading
+2025-05-14 15:52:35,279 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\abbr.py', reloading
+2025-05-14 15:52:35,279 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\admonition.py', reloading
+2025-05-14 15:52:35,280 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\attr_list.py', reloading
+2025-05-14 15:52:35,280 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\codehilite.py', reloading
+2025-05-14 15:52:35,281 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\def_list.py', reloading
+2025-05-14 15:52:35,281 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\extra.py', reloading
+2025-05-14 15:52:35,282 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\fenced_code.py', reloading
+2025-05-14 15:52:35,282 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\footnotes.py', reloading
+2025-05-14 15:52:35,283 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\legacy_attrs.py', reloading
+2025-05-14 15:52:35,283 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\legacy_em.py', reloading
+2025-05-14 15:52:35,283 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\md_in_html.py', reloading
+2025-05-14 15:52:35,284 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\meta.py', reloading
+2025-05-14 15:52:35,284 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\nl2br.py', reloading
+2025-05-14 15:52:35,285 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\sane_lists.py', reloading
+2025-05-14 15:52:35,285 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\smarty.py', reloading
+2025-05-14 15:52:35,285 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\tables.py', reloading
+2025-05-14 15:52:35,285 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\toc.py', reloading
+2025-05-14 15:52:35,286 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\wikilinks.py', reloading
+2025-05-14 15:52:35,286 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\__init__.py', reloading
+2025-05-14 15:52:35,287 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\__init__.py', reloading
+2025-05-14 15:52:35,287 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\__init__.py', reloading
+2025-05-14 15:52:35,287 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\abbr.py', reloading
+2025-05-14 15:52:35,288 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\abbr.py', reloading
+2025-05-14 15:52:35,288 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\admonition.py', reloading
+2025-05-14 15:52:35,290 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\admonition.py', reloading
+2025-05-14 15:52:35,291 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\attr_list.py', reloading
+2025-05-14 15:52:35,291 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\attr_list.py', reloading
+2025-05-14 15:52:35,292 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\codehilite.py', reloading
+2025-05-14 15:52:35,292 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\codehilite.py', reloading
+2025-05-14 15:52:35,293 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\def_list.py', reloading
+2025-05-14 15:52:35,294 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\def_list.py', reloading
+2025-05-14 15:52:35,294 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\extra.py', reloading
+2025-05-14 15:52:35,295 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\extra.py', reloading
+2025-05-14 15:52:35,295 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\fenced_code.py', reloading
+2025-05-14 15:52:35,296 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\fenced_code.py', reloading
+2025-05-14 15:52:35,296 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\footnotes.py', reloading
+2025-05-14 15:52:35,297 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\footnotes.py', reloading
+2025-05-14 15:52:35,297 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\legacy_attrs.py', reloading
+2025-05-14 15:52:35,297 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\legacy_attrs.py', reloading
+2025-05-14 15:52:35,298 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\legacy_em.py', reloading
+2025-05-14 15:52:35,299 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\legacy_em.py', reloading
+2025-05-14 15:52:35,301 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\md_in_html.py', reloading
+2025-05-14 15:52:35,301 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\md_in_html.py', reloading
+2025-05-14 15:52:35,301 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\meta.py', reloading
+2025-05-14 15:52:35,302 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\meta.py', reloading
+2025-05-14 15:52:35,303 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\nl2br.py', reloading
+2025-05-14 15:52:35,303 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\nl2br.py', reloading
+2025-05-14 15:52:35,304 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\sane_lists.py', reloading
+2025-05-14 15:52:35,304 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\sane_lists.py', reloading
+2025-05-14 15:52:35,305 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\smarty.py', reloading
+2025-05-14 15:52:35,305 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\smarty.py', reloading
+2025-05-14 15:52:35,306 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\tables.py', reloading
+2025-05-14 15:52:35,306 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\tables.py', reloading
+2025-05-14 15:52:35,308 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\toc.py', reloading
+2025-05-14 15:52:35,308 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\toc.py', reloading
+2025-05-14 15:52:35,309 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\wikilinks.py', reloading
+2025-05-14 15:52:35,310 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\markdown\\extensions\\wikilinks.py', reloading
+2025-05-14 15:52:38,120 - werkzeug - INFO -  * Restarting with watchdog (windowsapi)
+2025-05-14 15:52:38,648 - app - INFO - Flask app configured and logging set up.
+2025-05-14 15:52:38,648 - app - INFO - Flask app configured and logging set up.
+2025-05-14 15:52:38,648 - app - INFO - Instance path: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance
+2025-05-14 15:52:38,648 - app - INFO - Instance path: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance
+2025-05-14 15:52:38,648 - app - INFO - Upload folder: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\uploads
+2025-05-14 15:52:38,648 - app - INFO - Upload folder: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\uploads
+2025-05-14 15:52:38,649 - app - INFO - Reports folder: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\reports
+2025-05-14 15:52:38,649 - app - INFO - Reports folder: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\reports
+2025-05-14 15:52:38,649 - app - INFO - Log file: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\app.log
+2025-05-14 15:52:38,649 - app - INFO - Log file: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\app.log
+2025-05-14 15:52:38,676 - app - INFO - InteractionLogger class imported successfully
+2025-05-14 15:52:38,676 - app - INFO - InteractionLogger class imported successfully
+2025-05-14 15:52:38,677 - app - INFO - Database directory ensured: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance
+2025-05-14 15:52:38,677 - app - INFO - Database directory ensured: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance
+2025-05-14 15:52:38,678 - app.models.interaction_logger - INFO - Interaction database initialized at C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\interactions.db
+2025-05-14 15:52:38,678 - app.models.interaction_logger - INFO - Interaction database initialized at C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\interactions.db
+2025-05-14 15:52:38,679 - app - INFO - InteractionLogger initialized with database at C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\interactions.db
+2025-05-14 15:52:38,679 - app - INFO - InteractionLogger initialized with database at C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\interactions.db
+2025-05-14 15:52:38,679 - app - INFO - InteractionLogger stored in app config
+2025-05-14 15:52:38,679 - app - INFO - InteractionLogger stored in app config
+2025-05-14 15:52:38,680 - app - INFO - Attempted to load instance/config.py (if exists).
+2025-05-14 15:52:38,680 - app - INFO - Attempted to load instance/config.py (if exists).
+2025-05-14 15:52:38,681 - app - INFO - Ensured upload and report directories exist.
+2025-05-14 15:52:38,681 - app - INFO - Ensured upload and report directories exist.
+2025-05-14 15:52:46,369 - app.routes - INFO - Loaded 179 English stopwords from NLTK.
+2025-05-14 15:52:46,369 - app.routes - INFO - Loaded 179 English stopwords from NLTK.
+2025-05-14 15:52:46,370 - app.routes - INFO - Total stopwords including domain-specific: 235
+2025-05-14 15:52:46,370 - app.routes - INFO - Total stopwords including domain-specific: 235
+2025-05-14 15:52:46,378 - app - INFO - Registered main blueprint.
+2025-05-14 15:52:46,378 - app - INFO - Registered main blueprint.
+2025-05-14 15:52:46,379 - app - INFO - Error handlers registered.
+2025-05-14 15:52:46,379 - app - INFO - Error handlers registered.
+2025-05-14 15:52:46,379 - app - INFO - App creation complete.
+2025-05-14 15:52:46,379 - app - INFO - App creation complete.
+2025-05-14 15:52:46,403 - werkzeug - WARNING -  * Debugger is active!
+2025-05-14 15:52:46,415 - werkzeug - INFO -  * Debugger PIN: 127-120-445
+2025-05-14 15:52:48,639 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\sklearn\\frozen\\__init__.py', reloading
+2025-05-14 15:52:48,640 - werkzeug - INFO -  * Detected change in 'C:\\Users\\bbofo\\OneDrive\\Desktop\\MRPT\\mrpt_venv\\Lib\\site-packages\\sklearn\\frozen\\_frozen.py', reloading
+2025-05-14 15:52:49,704 - werkzeug - INFO -  * Restarting with watchdog (windowsapi)
+2025-05-14 15:52:50,229 - app - INFO - Flask app configured and logging set up.
+2025-05-14 15:52:50,229 - app - INFO - Flask app configured and logging set up.
+2025-05-14 15:52:50,230 - app - INFO - Instance path: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance
+2025-05-14 15:52:50,230 - app - INFO - Instance path: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance
+2025-05-14 15:52:50,231 - app - INFO - Upload folder: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\uploads
+2025-05-14 15:52:50,231 - app - INFO - Upload folder: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\uploads
+2025-05-14 15:52:50,231 - app - INFO - Reports folder: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\reports
+2025-05-14 15:52:50,231 - app - INFO - Reports folder: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\reports
+2025-05-14 15:52:50,231 - app - INFO - Log file: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\app.log
+2025-05-14 15:52:50,231 - app - INFO - Log file: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\app.log
+2025-05-14 15:52:50,239 - app - INFO - InteractionLogger class imported successfully
+2025-05-14 15:52:50,239 - app - INFO - InteractionLogger class imported successfully
+2025-05-14 15:52:50,239 - app - INFO - Database directory ensured: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance
+2025-05-14 15:52:50,239 - app - INFO - Database directory ensured: C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance
+2025-05-14 15:52:50,241 - app.models.interaction_logger - INFO - Interaction database initialized at C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\interactions.db
+2025-05-14 15:52:50,241 - app.models.interaction_logger - INFO - Interaction database initialized at C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\interactions.db
+2025-05-14 15:52:50,242 - app - INFO - InteractionLogger initialized with database at C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\interactions.db
+2025-05-14 15:52:50,242 - app - INFO - InteractionLogger initialized with database at C:\Users\bbofo\OneDrive\Desktop\MRPT\ChatMRPT\instance\interactions.db
+2025-05-14 15:52:50,242 - app - INFO - InteractionLogger stored in app config
+2025-05-14 15:52:50,242 - app - INFO - InteractionLogger stored in app config
+2025-05-14 15:52:50,242 - app - INFO - Attempted to load instance/config.py (if exists).
+2025-05-14 15:52:50,242 - app - INFO - Attempted to load instance/config.py (if exists).
+2025-05-14 15:52:50,243 - app - INFO - Ensured upload and report directories exist.
+2025-05-14 15:52:50,243 - app - INFO - Ensured upload and report directories exist.
+2025-05-14 15:52:55,291 - app.routes - INFO - Loaded 179 English stopwords from NLTK.
+2025-05-14 15:52:55,291 - app.routes - INFO - Loaded 179 English stopwords from NLTK.
+2025-05-14 15:52:55,291 - app.routes - INFO - Total stopwords including domain-specific: 235
+2025-05-14 15:52:55,291 - app.routes - INFO - Total stopwords including domain-specific: 235
+2025-05-14 15:52:55,297 - app - INFO - Registered main blueprint.
+2025-05-14 15:52:55,297 - app - INFO - Registered main blueprint.
+2025-05-14 15:52:55,298 - app - INFO - Error handlers registered.
+2025-05-14 15:52:55,298 - app - INFO - Error handlers registered.
+2025-05-14 15:52:55,298 - app - INFO - App creation complete.
+2025-05-14 15:52:55,298 - app - INFO - App creation complete.
+2025-05-14 15:52:55,322 - werkzeug - WARNING -  * Debugger is active!
+2025-05-14 15:52:55,329 - werkzeug - INFO -  * Debugger PIN: 127-120-445

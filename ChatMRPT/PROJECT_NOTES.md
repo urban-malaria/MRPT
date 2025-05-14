@@ -30,7 +30,7 @@ The system can be visualized as a series of interacting layers:
 
 **Typical User Interaction Flow:**
 
-
+```
 User Input (Text/File Upload)
 |
 V
@@ -90,6 +90,7 @@ Response Assembly (Text, Visualization URL, Report URL)
 |
 V
 Frontend Interface (Display to User)
+```
 
 ### 2.2. Core System Components (Re-iterated with Architectural Context)
 
@@ -353,12 +354,8 @@ ChatMRPT was developed iteratively, focusing on building a robust data backend f
     *   Session interaction logging and admin interface.
 
 **Project File Structure (Key Files):**
-IGNORE_WHEN_COPYING_START
-content_copy
-download
-Use code with caution.
-IGNORE_WHEN_COPYING_END
 
+```
 ChatMRPT/
 ├── app/
 │ ├── init.py # Flask app factory, configuration, blueprint registration
@@ -388,7 +385,7 @@ ChatMRPT/
 ├── .env # Environment variables (OPENAI_API_KEY, SECRET_KEY)
 ├── requirements.txt # Python dependencies
 └── run.py # Script to run the Flask development server
-
+```
 ________________________________________
 
 ## 5. LLM Integration Deep Dive
@@ -508,11 +505,7 @@ def send_message():
         
     # ... (log assistant response, update session dialogue_context) ...
     return jsonify({'status': 'success', 'response': ai_response, 'action': ...})
-IGNORE_WHEN_COPYING_START
-content_copy
-download
-Use code with caution.
-IGNORE_WHEN_COPYING_END
+
 7. Future Enhancements
 
 Development is ongoing, with a focus on expanding capabilities and improving intelligence:
