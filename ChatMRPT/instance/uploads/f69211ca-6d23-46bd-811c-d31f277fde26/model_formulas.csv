@@ -1,0 +1,12 @@
+model,variables
+model_1,"flood,mean_rainfall"
+model_2,"flood,housing_quality"
+model_3,"flood,mean_ndvi"
+model_4,"mean_rainfall,housing_quality"
+model_5,"mean_rainfall,mean_ndvi"
+model_6,"housing_quality,mean_ndvi"
+model_7,"flood,mean_rainfall,housing_quality"
+model_8,"flood,mean_rainfall,mean_ndvi"
+model_9,"flood,housing_quality,mean_ndvi"
+model_10,"mean_rainfall,housing_quality,mean_ndvi"
+model_11,"flood,mean_rainfall,housing_quality,mean_ndvi"
