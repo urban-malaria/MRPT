@@ -1,0 +1,47 @@
+composite_score_interpretation:
+  - condition: "score >= 0.75"
+response: >
+ This ward has a **high malaria risk** score, consistent with findings from informal settlements in Ibadan and Kano.
+ These areas often lacked drainage and had poor infrastructure, supporting mosquito breeding.
+ Prioritize **LLIN distribution**, **environmental clean-up**, or **larval source management** in these locations.
+
+- condition: "0.4 <= score < 0.75"
+response: >
+  This ward has a **moderate risk** profile. Based on the 2023 study in Ibadan/Kano, such areas showed variable malaria exposure tied to micro-environmental conditions.
+  A **mixed intervention strategy** may be more effective — targeted campaigns combined with routine ITN replacement.
+
+- condition: "score < 0.4"
+response: >
+  This ward is likely **low risk**, similar to planned settlements studied in Kano and Ibadan.
+  Continue routine surveillance, but intensive intervention may not be necessary.
+
+box_whisker_interpretation:
+  - condition: "iqr > threshold and outliers_present"
+response: >
+       There is **high heterogeneity in risk within the ward**. Outliers may indicate malaria hotspots, often found in flood-prone zones in Ibadan.
+Consider EA-level drilling for targeted control.
+
+- condition: "iqr < threshold and no_outliers"
+response: >
+  Risk levels are **uniformly distributed**. This was typical of wards where coverage was sufficient, as observed in the Kwara LLIN study.
+Blanket interventions may work efficiently here.
+
+normalization_explanation:
+  - question: "Why do we normalize the indicators?"
+response: >
+  Normalization ensures all variables contribute comparably to the final score.
+In our urban malaria studies, indicators like mosquito density and building compactness differ in scale but jointly explain risk patterns.
+Normalization allows them to be merged without distortion.
+
+llin_prioritization_conflict:
+  - condition: "score > 0.5 and itn_score < threshold"
+response: >
+  This mismatch may reflect **intentional reprioritization**.
+As in the Kwara 2025 study, some medium-risk wards with prior high ITN coverage were deprioritized to focus on **underserved, higher-risk locations**.
+
+urban_form_link:
+  - question: "What does urban morphology tell us about risk?"
+response: >
+  Settlement form is critical. In our studies, **dense, irregular layouts with narrow roads** were linked to higher risk.
+These patterns signal informal settlements and correlate with environmental factors like stagnant water and poor waste management.
+

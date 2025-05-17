@@ -621,6 +621,7 @@ manual_labeling_tab <- function() {
                               )
                             ),
                             
+                            
                             # Classification count badges
                             conditionalPanel(
                               condition = "input.plot_ward_map > 0",
@@ -631,7 +632,13 @@ manual_labeling_tab <- function() {
                                     "Click on grid cells in the map to classify them.")
                               )
                             )
+                            
                         ),
+                        
+                        
+                        actionButton("regenerate_map", "LABELLED MAP",
+                                     icon = icon("map-marked-alt"),
+                                     style = "width: 100%; margin-bottom: 15px;"),
                         
                         # Control buttons - UPDATED with Download Map button
                         div(class = "classification-box",
@@ -684,7 +691,12 @@ manual_labeling_tab <- function() {
                                 uiOutput("dynamic_grid_help_content"),
                                 actionButton("close_help", "Close", style = "width: 100%;")
                             ),
-                            leafletOutput("ward_map", height = 700)
+                            
+                            # leafletOutput("ward_map", height = 700),
+                            # leafletOutput("labelled_ward_map", height = 700)
+                            
+                            div(id = "ward_map", leafletOutput("ward_map", height = 700)),
+                            div(id = "labelled_ward_map", leafletOutput("labelled_ward_map", height = 700))
                         )
                  )
                )
@@ -937,6 +949,9 @@ initialize_reactives <- function(session) {
     current_page = 1,
     ward_rankings = FALSE,
     
+    # classified_data <- NULL, 
+    # map <- NULL,
+    # 
     
     # NEW: Duplicate ward handling
     duplicate_wards_handled = FALSE,
@@ -962,8 +977,8 @@ initialize_reactives <- function(session) {
     # Apply urban extent threshold filtering
     filtered_data <- filter_by_urban_extent(rv$shp_data, rv$raw_data, threshold)
     
-    print("printing filtered data line 965")
-    print(filtered_data)
+    # print("printing filtered data line 965")
+    # print(filtered_data)
     
     # Join with vulnerability rankings
     map_data <- left_join(filtered_data, rv$ward_rankings, by = c("WardName", "WardCode"))
@@ -2367,130 +2382,7 @@ server <- function(input, output, session) {
   })
   
   
-  #looks like a duplication  see line 2686
   
-  #' Create ward grid and map
-  # observeEvent(input$plot_ward_map, {
-  #   req(input$selected_ward, rv$shp_data, rv$raw_data, input$urban_threshold)
-  #   
-  #   withProgress(message = 'Processing ward data...', value = 0, {
-  #     incProgress(0.2, detail = "Loading ward data...")
-  #     
-  #     # Create grid for the selected ward
-  #     if (input$enable_grid) {
-  #       # Create the grid (using 500m as default if not specified)
-  #       grid_data <- create_ward_grid(
-  #         input$selected_ward, 
-  #         rv$shp_data, 
-  #         as.numeric(input$grid_cell_size %||% 500)
-  #       )
-  #       
-  #       # Store the grid in the reactive value
-  #       if (!is.null(grid_data)) {
-  #         # If we already have grids stored, update or append
-  #         existing_grids <- rv$gridded_wards()
-  #         if (!is.null(existing_grids)) {
-  #           # Remove any existing grid for this ward
-  #           existing_grids <- existing_grids[existing_grids$WardName != input$selected_ward, ]
-  #           # Combine with the new grid
-  #           grid_data <- rbind(existing_grids, grid_data)
-  #         }
-  #         rv$gridded_wards(grid_data)
-  #         
-  #         incProgress(0.6, detail = "Grid created successfully!")
-  #       } else {
-  #         showNotification("Could not create grid for this ward. Check console for errors.", type = "error")
-  #       }
-  #     }
-      
-      # Determine if this is a prioritized or re-prioritized ward
-  #     ward_data <- rv$shp_data %>%
-  #       filter(WardName == input$selected_ward)
-  #     
-  #     #threshold <- 30 # why is this hard coded 
-  #     threshold <- as.numeric(input$urban_threshold)
-  #     
-  #     
-  #     filtered_ward <- filter_by_urban_extent(ward_data, rv$raw_data, threshold)
-  #     
-  # 
-  #     is_prioritized <- filtered_ward$MeetsThreshold[1]
-  #     
-  #     # Render the map with our enhanced function
-  #     output$ward_map <- renderLeaflet({
-  #       process_and_view_shapefile_and_csv_enhanced(
-  #         input$selected_ward, 
-  #         rv$shp_data,
-  #         rv$grid_annotations(),
-  #         enable_grid = input$enable_grid,
-  #         grid_cell_size = as.numeric(input$grid_cell_size %||% 500)
-  #       )
-  #     })
-  #     
-   #     incProgress(1, detail = "Map created!")
-   #  })
-   # })
-  
-  #' Observer for classification from popup
-  # Observer for classification from popup
-  
-  # Another duplication see line 2753
-  # observeEvent(input$classify_grid, {
-  #   req(input$classify_grid, rv$gridded_wards())
-  #   
-  #   # Extract the classification data
-  #   ward_name <- input$classify_grid$wardName
-  #   grid_id <- as.integer(input$classify_grid$gridId)
-  #   classification <- input$classify_grid$classification
-  #   timestamp <- input$classify_grid$timestamp
-  #   method <- input$classify_grid$method %||% "manual"
-  #   
-  #   # Create a data frame with the information
-  #   new_annotation <- data.frame(
-  #     WardName = ward_name,
-  #     GridID = grid_id,
-  #     Classification = classification,
-  #     Timestamp = timestamp,
-  #     Method = method,
-  #     stringsAsFactors = FALSE
-  #   )
-  #   
-  #   # Get current annotations
-  #   annotations <- rv$grid_annotations()
-  #   
-  #   # Check if this grid cell is already annotated
-  #   existing_idx <- which(annotations$WardName == ward_name & 
-  #                           annotations$GridID == grid_id)
-  #   
-  #   if (length(existing_idx) > 0) {
-  #     # Update existing annotation
-  #     annotations$Classification[existing_idx] <- classification
-  #     annotations$Timestamp[existing_idx] <- timestamp
-  #     annotations$Method[existing_idx] <- method
-  #   } else {
-  #     # Add new annotation
-  #     annotations <- rbind(annotations, new_annotation)
-  #   }
-  #   
-  #   # Update annotations
-  #   rv$grid_annotations(annotations)
-  #   
-  #   # Refresh the map with the updated classifications
-  #   output$ward_map <- renderLeaflet({
-  #     process_and_view_shapefile_and_csv_enhanced(
-  #       input$selected_ward, 
-  #       rv$shp_data,
-  #       rv$grid_annotations(),
-  #       enable_grid = input$enable_grid,
-  #       grid_cell_size = as.numeric(input$grid_cell_size %||% 500)
-  #     )
-  #   })
-  #   
-  #   # Show notification
-  #   showNotification(paste("Grid", grid_id, "classified as", classification), 
-  #                    type = "message", duration = 2)
-  # })
-  # 
   #' Display classification summary badges
   output$classification_badges <- renderUI({
     req(input$selected_ward, rv$grid_annotations())
@@ -2645,7 +2537,9 @@ server <- function(input, output, session) {
       # Add metadata columns
       export_data$ExportDate <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
       export_data$GridCellSize <- input$grid_cell_size
-      export_data$GridCellDescription <- paste0(input$grid_cell_size, "m × ", input$grid_cell_size, "m square (for operational purposes)")
+      export_data$GridCellDescription <- paste0(input$grid_cell_size, "m × ", 
+                                                input$grid_cell_size, 
+                                                "m square (for operational purposes)")
       
       # Get urban info
       if (!is.null(rv$raw_data)) {
@@ -2678,14 +2572,18 @@ server <- function(input, output, session) {
       }
       
       # Write to CSV
+     
+      
       write.csv(export_data, file, row.names = FALSE)
+      
+      #rv$export_data <- export_data
       
       showNotification(paste("Successfully downloaded annotations for", input$selected_ward), type = "message")
     }
   )
   
   
-  # Create ward map with grid classifications
+ 
   observeEvent(input$plot_ward_map, {
     req(input$selected_ward, rv$shp_data, input$urban_threshold)
     
@@ -2728,14 +2626,10 @@ server <- function(input, output, session) {
       filtered_ward <- filter_by_urban_extent(ward_data, rv$raw_data, threshold)
       is_prioritized <- filtered_ward$MeetsThreshold[1]
       
-      # print("gridded_ward")
-      # print(head(grid_data))
-      # print("filtered_data")
-      # print(filtered_ward)
-      
-      
+
       # Render the map with our enhanced function
       output$ward_map <- renderLeaflet({
+        
         process_and_view_shapefile_and_csv_enhanced(
           input$selected_ward, 
           rv$shp_data,
@@ -2743,11 +2637,39 @@ server <- function(input, output, session) {
           enable_grid = input$enable_grid,
           grid_cell_size = as.numeric(input$grid_cell_size %||% 500)
         )
+        
+        
       })
       
       incProgress(1, detail = "Map created!")
     })
   })
+  
+  
+  # observeEvent(input$regenerate_map, {
+  #   req(input$selected_ward, rv$shp_data, rv$export_data, input$grid_cell_size)
+  #   
+  #   # regenerate_classified_map <- function(data, ward_name, 
+  #   #                                       shapefile, 
+  #   #                                       grid_cell_size
+  #   # ) 
+  #   
+  #   cat("DEBUG: regenerate_map called for ward", input$selected_ward, "\n")
+  #   
+  #   # Subset only relevant data
+  #   ward_shp <- rv$shp_data %>% 
+  #     filter(WardName == input$selected_ward)
+  #   
+  # 
+  #   output$ward_map <- renderLeaflet({
+  #     
+  #     regenerate_classified_map(rv$export_data, input$selected_ward, 
+  #                               ward_shp, input$grid_cell_size)
+  #   })
+  # })
+  
+
+  
   
   # Observer for classification from popup
   observeEvent(input$classify_grid, {
@@ -2805,6 +2727,49 @@ server <- function(input, output, session) {
     showNotification(paste("Grid", grid_id, "classified as", classification), 
                      type = "message", duration = 2)
   })
+  
+
+  
+  
+  observeEvent(input$regenerate_map, {
+    
+    cat(" Button clicked!\n")
+    cat("input$selected_ward:", input$selected_ward, "\n")
+    cat("grid_cell_size:", input$grid_cell_size, "\n")
+    cat("nrow(rv$shp_data):", nrow(rv$shp_data), "\n")
+    cat("nrow(rv$export_data):", nrow(rv$grid_annotations()), "\n")
+    
+    
+    
+    req(input$selected_ward, rv$shp_data, rv$grid_annotations(), input$grid_cell_size)
+    
+    cat("regenerate_map observer executing!\n")
+    
+    ward_shp <- rv$shp_data %>%
+      filter(WardName == input$selected_ward)
+    
+    # print(head(ward_shp))
+    output$labelled_ward_map <- renderLeaflet({
+      regenerate_classified_map(
+        rv$grid_annotations(),
+        input$selected_ward,
+        ward_shp,
+        grid_cell_size = as.numeric(input$grid_cell_size %||% 500)
+      )
+    })
+  })
+  
+  
+  observeEvent(input$plot_ward_map, {
+    shinyjs::show("ward_map")
+    shinyjs::hide("labelled_ward_map")
+  })
+
+  observeEvent(input$regenerate_map, {
+    shinyjs::hide("ward_map")
+    shinyjs::show("labelled_ward_map")
+  })
+
   
   # NEW - Download Map functionality 
   output$download_map <- downloadHandler(

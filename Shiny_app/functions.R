@@ -1116,13 +1116,13 @@ create_classification_popup <- function(ward_name, grid_id, current_class = "Unc
 #' @param grid_cell_size Grid cell size
 #' @return Leaflet map with grid
 
-process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, grid_annotations = NULL, 
+process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, grid_annotations = NULL,
                                                         enable_grid = TRUE, grid_cell_size = 500) {
   # Modified function in functions.R
   # Filter the main shapefile to get just the selected ward
-  
+
   ward_shape <- shp_data %>% filter(WardName == ward_name)
-  
+
   if (nrow(ward_shape) == 0) {
     return(
       leaflet() %>%
@@ -1136,10 +1136,10 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
         )
     )
   }
-  
+
   # Transform shapefile to WGS84 for leaflet
   shapefile_wgs84 <- st_transform(ward_shape, crs = 4326)
-  
+
   # Create a Leaflet map with satellite imagery
   map <- leaflet() %>%
     addProviderTiles(providers$Esri.WorldImagery, group = "Satellite") %>%
@@ -1149,14 +1149,14 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
               lat1 = st_bbox(shapefile_wgs84)[[2]],
               lng2 = st_bbox(shapefile_wgs84)[[3]],
               lat2 = st_bbox(shapefile_wgs84)[[4]])
-  
+
   # Add layer control
   map <- map %>%
     addLayersControl(
       baseGroups = c("Satellite", "OpenStreetMap", "CartoDB Light"),
       options = layersControlOptions(collapsed = FALSE)
     )
-  
+
   # Add ward boundary (outline only)
   map <- map %>%
     addPolygons(data = shapefile_wgs84,
@@ -1165,7 +1165,7 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
                 opacity = 1.0,          # Fully opaque line
                 fillOpacity = 0.0,      # Completely transparent fill (no shading)
                 label = ward_name)
-  
+
   # Create grid if enabled
   if (enable_grid) {
     # Create grid for the ward
@@ -1175,16 +1175,16 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
       message("Error creating grid: ", e$message)
       NULL
     })
-    
-    
-    
+
+
+
     if (!is.null(grid_sf)) {
       # Transform to WGS84
       grid_wgs84 <- st_transform(grid_sf, crs = 4326)
-      
+
       # Add Classification column with default value
       grid_wgs84$Classification <- "Unclassified"
-      
+
       # Update classifications from annotations if they exist for this ward
       if (!is.null(grid_annotations) && nrow(grid_annotations) > 0) {
         ward_annotations <- grid_annotations[grid_annotations$WardName == ward_name, ]
@@ -1197,7 +1197,7 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
           }
         }
       }
-      
+
       # Create color palette for classifications with appropriate transparency
       classification_colors <- c(
         "Formal" = "#0074D9",           # Blue
@@ -1205,17 +1205,17 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
         "No Buildings/Avoid Area" = "#2ECC40",  # Green
         "Unclassified" = "#AAAAAA"      # Gray
       )
-      
+
       # UPDATED: Opacity settings for better visibility
       classified_opacity <- 0.65      # More transparent to see the satellite imagery
       unclassified_opacity <- 0.1     # Very transparent for unclassified cells
-      
+
       # Split grid data for better visualization
       unclassified_cells <- grid_wgs84[grid_wgs84$Classification == "Unclassified", ]
       formal_cells <- grid_wgs84[grid_wgs84$Classification == "Formal", ]
       informal_cells <- grid_wgs84[grid_wgs84$Classification == "Informal", ]
       avoid_cells <- grid_wgs84[grid_wgs84$Classification == "No Buildings/Avoid Area", ]
-      
+
       # Add unclassified grid cells first (with just borders, minimal fill)
       if (nrow(unclassified_cells) > 0) {
         map <- map %>%
@@ -1230,13 +1230,13 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
                       popup = ~create_classification_popup(WardName, GridID, Classification),
                       group = "UnclassifiedGrid")
       }
-      
+
       # Add formal cells with blue color
       if (nrow(formal_cells) > 0) {
         map <- map %>%
           addPolygons(data = formal_cells,
                       color = "white",
-                      weight = 2, 
+                      weight = 2,
                       opacity = 0.9,
                       fillColor = classification_colors["Formal"],
                       fillOpacity = classified_opacity,
@@ -1245,7 +1245,7 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
                       popup = ~create_classification_popup(WardName, GridID, Classification),
                       group = "ClassifiedGrid_Formal")
       }
-      
+
       # Add informal cells with red color
       if (nrow(informal_cells) > 0) {
         map <- map %>%
@@ -1260,7 +1260,7 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
                       popup = ~create_classification_popup(WardName, GridID, Classification),
                       group = "ClassifiedGrid_Informal")
       }
-      
+
       # Add avoid cells with green color
       if (nrow(avoid_cells) > 0) {
         map <- map %>%
@@ -1275,7 +1275,7 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
                       popup = ~create_classification_popup(WardName, GridID, Classification),
                       group = "ClassifiedGrid_Avoid")
       }
-      
+
       # Add classification legend with proper colors
       map <- map %>%
         addLegend(
@@ -1287,9 +1287,9 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
         )
     }
   }
-  
+
   # Add JavaScript functions for handling classification from popup
-  map <- map %>% 
+  map <- map %>%
     htmlwidgets::onRender(paste0("
       function(el, x) {
         // Define the classification functions globally so they can be called from popups
@@ -1299,7 +1299,7 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
             gridId,
             classification
           });
-          
+
           // Send data to Shiny
           Shiny.setInputValue('classify_grid', {
             wardName: wardName,
@@ -1308,7 +1308,7 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
             timestamp: new Date().toISOString(),
             method: 'manual'
           });
-          
+
           // Show confirmation message
           const popup = document.querySelector('.leaflet-popup-content');
           if (popup) {
@@ -1321,7 +1321,7 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
             confirmationMsg.style.textAlign = 'center';
             confirmationMsg.innerHTML = 'Classification saved successfully!';
             popup.appendChild(confirmationMsg);
-            
+
             // Remove message after a short delay
             setTimeout(function() {
               try {
@@ -1339,8 +1339,138 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
       }
     "))
   
+  #print(grid_sf)
+
   return(map)
 }
+
+
+#' @param data Ward name
+#' @param shapefile Shapefile data
+#' @param ward_name selected ward
+#' @param grid_cell_size defined grid size 
+
+regenerate_classified_map <- function(data, ward_name, 
+                                      shapefile, 
+                                      grid_cell_size
+) {
+  
+  ward_shape <- shapefile %>% 
+    filter(WardName == ward_name)
+  
+  grid_sf <- create_ward_grid(ward_name, ward_shape, grid_cell_size)
+  
+  grid_sf <- st_transform(grid_sf, 4326)
+  
+
+  # Join classification data (which already contains longitude and latitude)
+  classified_sf <- left_join(grid_sf, data, by = c("GridID", "WardName"))
+
+  grid_centroids <- st_centroid(classified_sf)
+  
+  coords <- st_coordinates(grid_centroids)
+  
+  classified_sf <- cbind(classified_sf,  
+    Longitude = coords[, 1],
+    Latitude = coords[, 2]
+  )
+  
+  
+  # print("printing classified_sf"); 
+  # print(head(classified_sf))
+  
+  
+  classification_colors <- c(
+    "Formal" = "#0074D9",
+    "Informal" = "#FF4136",
+    "No Buildings/Avoid Area" = "#2ECC40",
+    "Unclassified" = "#AAAAAA"
+  )
+  
+  # Polygon layers
+  formal_cells <- classified_sf %>% filter(Classification == "Formal")
+  informal_cells <- classified_sf %>% filter(Classification == "Informal")
+  avoid_cells <- classified_sf %>% filter(Classification == "No Buildings/Avoid Area")
+  unclassified_cells <- classified_sf %>% filter(is.na(Classification))
+  
+  # Initialize map
+  map <- leaflet() %>%
+    addProviderTiles(providers$Esri.WorldImagery, group = "Satellite") %>%
+    addProviderTiles(providers$OpenStreetMap, group = "OpenStreetMap") %>%
+    addProviderTiles(providers$CartoDB.Positron, group = "CartoDB Light") %>%
+    fitBounds(
+      lng1 = st_bbox(grid_sf)[[1]],
+      lat1 = st_bbox(grid_sf)[[2]],
+      lng2 = st_bbox(grid_sf)[[3]],
+      lat2 = st_bbox(grid_sf)[[4]]
+    )
+  
+  
+  map <- map %>%
+    addLayersControl(
+      baseGroups = c("Satellite", "OpenStreetMap", "CartoDB Light"),
+      options = layersControlOptions(collapsed = FALSE)
+    )
+  
+  # Add polygons
+  if (nrow(unclassified_cells) > 0) {
+    map <- map %>%
+      addPolygons(data = unclassified_cells, color = "white", weight = 1, opacity = 0.8,
+                  fillColor = classification_colors["Unclassified"], fillOpacity = 0.1,
+                  label = ~paste("Grid ID:", GridID, "- Unclassified"))
+  }
+  
+  if (nrow(formal_cells) > 0) {
+    map <- map %>%
+      addPolygons(data = formal_cells, color = "white", weight = 2, opacity = 0.9,
+                  fillColor = classification_colors["Formal"], fillOpacity = 0.65,
+                  label = ~paste("Grid ID:", GridID, "- Formal"))
+  }
+  
+  if (nrow(informal_cells) > 0) {
+    map <- map %>%
+      addPolygons(data = informal_cells, color = "white", weight = 2, opacity = 0.9,
+                  fillColor = classification_colors["Informal"], fillOpacity = 0.65,
+                  label = ~paste("Grid ID:", GridID, "- Informal"))
+  }
+  
+  if (nrow(avoid_cells) > 0) {
+    map <- map %>%
+      addPolygons(data = avoid_cells, color = "white", weight = 2, opacity = 0.9,
+                  fillColor = classification_colors["No Buildings/Avoid Area"], fillOpacity = 0.65,
+                  label = ~paste("Grid ID:", GridID, "- No Buildings/Avoid Area"))
+  }
+  
+  # Add points using long/lat
+  classified_sf$Color <- classification_colors[data$Classification]
+  
+  print(data)
+  
+  if (all(c("Longitude", "Latitude") %in% names(classified_sf))) {
+    map <- map %>%
+      addCircleMarkers(data = classified_sf,
+                       lng = ~Longitude,
+                       lat = ~Latitude,
+                       radius = 5,
+                       color = ~Color,
+                       stroke = TRUE,
+                       fillOpacity = 0.8,  # <-- this was the issue
+                       label = ~paste("Grid ID:", GridID, "<br>Classification:", Classification),
+                       group = "Centroids")
+  }
+  
+  # Add legend
+  map <- map %>%
+    addLegend(position = "bottomright",
+              colors = unname(classification_colors),
+              labels = names(classification_colors),
+              title = "Grid Classification",
+              opacity = 0.9)
+  
+  
+  return(map)
+}
+
 
 
 create_downloadable_map <- function(ward_name, shp_data, grid_annotations, 
