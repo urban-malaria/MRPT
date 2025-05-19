@@ -263,8 +263,7 @@ handle_na_neighbor_mean <- function(data, shp_data, col = NULL) {
     col_data <- data[[current_col]]
     missing_indices <- which(is.na(col_data))
     
-    print(paste("Processing column:", current_col))
-    print(paste("Number of NAs:", length(missing_indices)))
+
     
     for (index in missing_indices) {
       neighbor_indices <- w[[index]]
@@ -276,7 +275,7 @@ handle_na_neighbor_mean <- function(data, shp_data, col = NULL) {
       }
       
       col_data[index] <- imputed_value
-      print(paste("Imputed value for index", index, ":", imputed_value))
+    
     }
     
     # Only update the NAs in the original data
@@ -525,13 +524,8 @@ plot_normalized_map <- function(shp_data, processed_csv, selected_vars) {
 
 
 composite_score_models <- function(normalized_data, selected_vars, shp_data) {
-  print("Entering composite_score_models function")
-  print("Normalized data structure:")
-  print(str(normalized_data))
-  print("Selected variables:")
-  print(selected_vars)
-  print("Shapefile data structure:")
-  print(str(shp_data))
+  
+
   
   # Get normalized column names for selected variables only
   norm_cols <- paste0("normalization_", tolower(selected_vars))
@@ -1017,8 +1011,6 @@ create_ward_grid <- function(ward_name, shapefile_data, cell_size = 500) {
     return(NULL)
   }
 
- # print("output from create_ward_grid", ward_shape)
-  # Create the grid
   tryCatch({
     grid <- subdivide_polygon(ward_shape, cell_size)
     return(grid)
@@ -1180,7 +1172,18 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
 
     if (!is.null(grid_sf)) {
       # Transform to WGS84
-      grid_wgs84 <- st_transform(grid_sf, crs = 4326)
+      # grid_wgs84 <- st_transform(grid_sf, crs = 4326)
+      
+      grid_wgs84 <- st_transform(grid_sf, 4326)
+      grid_wgs84 <- st_make_valid(grid_wgs84)
+      
+      is_geomcol <- st_geometry_type(grid_wgs84) == "GEOMETRYCOLLECTION"
+      
+      if (any(is_geomcol)) {
+        
+        grid_wgs84[is_geomcol, ] <- st_cast(grid_wgs84[is_geomcol, ], "MULTIPOLYGON")
+        
+      }
 
       # Add Classification column with default value
       grid_wgs84$Classification <- "Unclassified"
@@ -1339,7 +1342,6 @@ process_and_view_shapefile_and_csv_enhanced <- function(ward_name, shp_data, gri
       }
     "))
   
-  #print(grid_sf)
 
   return(map)
 }
@@ -1360,8 +1362,20 @@ regenerate_classified_map <- function(data, ward_name,
   
   grid_sf <- create_ward_grid(ward_name, ward_shape, grid_cell_size)
   
-  grid_sf <- st_transform(grid_sf, 4326)
+  # grid_sf <- st_transform(grid_sf, 4326)
   
+  grid_sf <- st_transform(grid_sf, 4326)
+  grid_sf <- st_make_valid(grid_sf)
+  
+  is_geomcol <- st_geometry_type(grid_sf) == "GEOMETRYCOLLECTION"
+  
+  if (any(is_geomcol)) {
+    
+    grid_sf[is_geomcol, ] <- st_cast(grid_sf[is_geomcol, ], "MULTIPOLYGON")
+  
+    }
+  
+  grid_sf <- grid_sf[st_geometry_type(grid_sf) %in% c("POLYGON", "MULTIPOLYGON"), ]
 
   # Join classification data (which already contains longitude and latitude)
   classified_sf <- left_join(grid_sf, data, by = c("GridID", "WardName"))
@@ -1375,9 +1389,6 @@ regenerate_classified_map <- function(data, ward_name,
     Latitude = coords[, 2]
   )
   
-  
-  # print("printing classified_sf"); 
-  # print(head(classified_sf))
   
   
   classification_colors <- c(
@@ -1443,8 +1454,7 @@ regenerate_classified_map <- function(data, ward_name,
   
   # Add points using long/lat
   classified_sf$Color <- classification_colors[data$Classification]
-  
-  print(data)
+
   
   if (all(c("Longitude", "Latitude") %in% names(classified_sf))) {
     map <- map %>%
@@ -1600,7 +1610,8 @@ filter_by_urban_extent <- function(shp_data, data, threshold = 0) {
 #' @param gridded_wards Gridded wards data
 #' @return List with population estimates
 
-estimate_ward_population <- function(ward_name, grid_annotations, shp_data, gridded_wards = NULL) {
+estimate_ward_population <- function(ward_name, grid_annotations, 
+                                     shp_data, gridded_wards = NULL) {
   # Update the ward population estimation function to use ITN data when available
   # Extract the state code from the shapefile if available
   
@@ -1905,19 +1916,36 @@ calculate_net_distribution <- function(population_data, total_nets, hh_distribut
 #' 
 
 
-calculate_prioritized_net_distribution <- function(ward_data, total_nets, avg_household_size, 
+calculate_prioritized_net_distribution <- function(ward_data, data, total_nets, 
+                                                   avg_household_size, 
                                                    urban_threshold = 30, strategy = "rank",
                                                    grid_overrides = NULL) {
+  
+
+  
   # Ensure the required columns exist in ward_data
-  if (!"UrbanPercent" %in% names(ward_data)) {
+  ward_data <- dplyr::left_join(ward_data, 
+                               data[, c("WardName", "WardCode", "UrbanPercentage")],
+                               by = c("WardCode", "WardName"))
+  
+  
+  
+  # Handle missing UrbanPercentage in uploaded .csv file 
+  if (!"UrbanPercentage" %in% names(ward_data)) {
+    
     if ("Urban" %in% names(ward_data)) {
-      # If Urban is binary (Yes/No), convert to percentage (100/0)
-      ward_data$UrbanPercent <- ifelse(ward_data$Urban %in% c("Yes", "YES", "yes", "Y", "y"), 100, 0)
+      warning("UrbanPercentage not found in data; using Urban column from shapefile.")
+      ward_data$UrbanPercentage <- ifelse(ward_data$Urban == "Yes", 100, 0)
+      
     } else {
-      ward_data$UrbanPercent <- 0  # Default assumption
-      warning("No Urban data found, assuming all areas are non-urban")
+      
+      warning("No Urban or UrbanPercentage column found; assuming 100% urban.")
+      ward_data$UrbanPercentage <- 100
     }
   }
+  
+  # Clean and calculate threshold logic
+  # ward_data$UrbanPercentage <- as.numeric(replace(ward_data$UrbanPercentage, is.na(ward_data$UrbanPercentage), 0))
   
   # Extract all ward names from shapefile
   all_ward_names <- ward_data$WardName
@@ -1934,6 +1962,8 @@ calculate_prioritized_net_distribution <- function(ward_data, total_nets, avg_ho
   # Initialize population source column
   ward_data$PopulationSource <- "Density_Estimate"
   
+
+  
   # Get ITN population data matching our ward names
   if (!is.null(state_name)) {
     # Build file path to ITN data
@@ -1949,7 +1979,7 @@ calculate_prioritized_net_distribution <- function(ward_data, total_nets, avg_ho
       if (file.exists(file_path)) {
         itn_data <- read.csv(file_path)
       } else {
-        itn_data <- readxl::read_excel(excel_path, sheet = 1)
+        itn_data <- readxl::read_excel(excel_path, sheet = 1) #not always sheet one 
       }
       
       # Process the ITN data for ward population
@@ -2057,7 +2087,7 @@ calculate_prioritized_net_distribution <- function(ward_data, total_nets, avg_ho
       # Use area-based estimation
       if ("area" %in% names(ward_data) && !is.na(ward_data$area[i])) {
         # Urban status affects density
-        is_urban <- !is.na(ward_data$UrbanPercent[i]) && ward_data$UrbanPercent[i] >= urban_threshold
+        is_urban <- !is.na(ward_data$UrbanPercentage[i]) && ward_data$UrbanPercentage[i] >= urban_threshold
         base_density <- if (is_urban) 5000 else 500
         ward_data$EstimatedPopulation[i] <- ward_data$area[i] * base_density
       } else {
@@ -2129,6 +2159,8 @@ calculate_prioritized_net_distribution <- function(ward_data, total_nets, avg_ho
   # First, get wards in order of allocation priority
   prioritized_wards <- ward_data %>%
     filter(Priority == "Prioritized") 
+  
+
   
   # Sort by vulnerability rank if available
   if ("overall_rank" %in% names(prioritized_wards)) {

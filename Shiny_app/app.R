@@ -731,7 +731,7 @@ net_distribution_tab <- function() {
                             # Simple inputs
                             h4("Resource Allocation", style = "color: #E53935;"),
                             numericInput("total_nets", "Total Bed Nets Available", 
-                                         value = 10000, min = 1,
+                                         value = 10000000, min = 1,
                                          width = "100%"),
                             
                             numericInput("avg_household_size", "Average Household Size", 
@@ -977,8 +977,7 @@ initialize_reactives <- function(session) {
     # Apply urban extent threshold filtering
     filtered_data <- filter_by_urban_extent(rv$shp_data, rv$raw_data, threshold)
     
-    # print("printing filtered data line 965")
-    # print(filtered_data)
+ 
     
     # Join with vulnerability rankings
     map_data <- left_join(filtered_data, rv$ward_rankings, by = c("WardName", "WardCode"))
@@ -1659,7 +1658,7 @@ server <- function(input, output, session) {
         runtime <- end_time - start_time
         message(paste("Composite score computation time:", runtime))
         
-        # print(combined_data)
+        
         
         list(
           combined_data = combined_data,
@@ -1715,7 +1714,7 @@ server <- function(input, output, session) {
   })
   
   
-  #print("we passed this stage")
+ 
   
   #============================================================================
   # Box and Whisker Plot / Vulnerability Map
@@ -2224,9 +2223,7 @@ server <- function(input, output, session) {
     # Require both shapefile, data and ward rankings to be available
     req(rv$shp_data, rv$raw_data, rv$ward_rankings, input$urban_threshold)
     
-    # print(paste("printing ", rv$shp_data))
-    # print(paste("printing ", rv$raw_data))
-    # print(paste("printing ", rv$ward_rankings))
+
     
     shp_data <- dplyr::left_join(rv$shp_data, 
                                     rv$raw_data[, c("WardName",
@@ -2646,31 +2643,6 @@ server <- function(input, output, session) {
   })
   
   
-  # observeEvent(input$regenerate_map, {
-  #   req(input$selected_ward, rv$shp_data, rv$export_data, input$grid_cell_size)
-  #   
-  #   # regenerate_classified_map <- function(data, ward_name, 
-  #   #                                       shapefile, 
-  #   #                                       grid_cell_size
-  #   # ) 
-  #   
-  #   cat("DEBUG: regenerate_map called for ward", input$selected_ward, "\n")
-  #   
-  #   # Subset only relevant data
-  #   ward_shp <- rv$shp_data %>% 
-  #     filter(WardName == input$selected_ward)
-  #   
-  # 
-  #   output$ward_map <- renderLeaflet({
-  #     
-  #     regenerate_classified_map(rv$export_data, input$selected_ward, 
-  #                               ward_shp, input$grid_cell_size)
-  #   })
-  # })
-  
-
-  
-  
   # Observer for classification from popup
   observeEvent(input$classify_grid, {
     req(input$classify_grid, rv$gridded_wards())
@@ -2748,7 +2720,7 @@ server <- function(input, output, session) {
     ward_shp <- rv$shp_data %>%
       filter(WardName == input$selected_ward)
     
-    # print(head(ward_shp))
+    
     output$labelled_ward_map <- renderLeaflet({
       regenerate_classified_map(
         rv$grid_annotations(),
@@ -2836,7 +2808,7 @@ server <- function(input, output, session) {
     # Apply urban extent threshold filtering with fixed 30% threshold
     #threshold <- 30
     input$threshold <- input$threshold
-    filtered_data <- filter_by_urban_extent(rv$shp_data, rv$raw_data, threshold)
+    filtered_data <- filter_by_urban_extent(rv$shp_data, rv$raw_data, input$threshold)
     
     # Find prioritized wards (below threshold) - UPDATED TERMINOLOGY
     prioritized_wards <- filtered_data %>%
@@ -2864,7 +2836,9 @@ server <- function(input, output, session) {
   
   #' Calculate net distribution
   observeEvent(input$calculate_distribution, {
-    req(rv$shp_data, rv$ward_rankings, input$total_nets, input$avg_household_size)
+    req(rv$shp_data, rv$raw_data, rv$ward_rankings, 
+        input$total_nets, input$avg_household_size)
+    
     
     # Show a loading message
     withProgress(message = 'Calculating optimal net distribution...', value = 0, {
@@ -2884,13 +2858,19 @@ server <- function(input, output, session) {
       
       # Use the threshold from the Box and Whisker Plot tab
       threshold <- as.numeric(input$urban_threshold)
+      
       if (is.na(threshold) || threshold < 0 || threshold > 100) {
         threshold <- 30 # Default if invalid
         showNotification("Invalid threshold. Using 30% as default.", type = "warning")
       }
       
+      
+    
+
       # Join shapefile data with ward rankings
-      ward_data <- left_join(rv$shp_data, rv$ward_rankings, by = "WardName")
+      ward_data <- left_join(rv$shp_data, rv$ward_rankings, by = c("WardName", "WardCode"))
+      
+
       
       # Add area calculation if not present
       if (!"area" %in% names(ward_data)) {
@@ -2904,15 +2884,20 @@ server <- function(input, output, session) {
       
       incProgress(0.3, detail = "Applying manual classification overrides...")
       
+
+      
       # Calculate the net distribution with improved strategy
       distribution_results <- calculate_prioritized_net_distribution(
         ward_data = ward_data, 
+        data  =  rv$raw_data,
         total_nets = total_nets, 
         avg_household_size = avg_household_size, 
         urban_threshold = threshold, 
         strategy = "rank", # Use ranking strategy
         grid_overrides = grid_overrides
       )
+      
+
       
       # Verify we have valid data in the summary before storing
       if (is.null(distribution_results$summary$TargetPopulation) || 
@@ -3316,7 +3301,7 @@ server <- function(input, output, session) {
           "<h4 style='margin-top: 0;'>", WardName, "</h4>",
           "<table style='width: 100%; border-collapse: collapse;'>",
           "<tr><td>Priority:</td><td>", Priority, "</td></tr>",
-          "<tr><td>Urban %:</td><td>", round(UrbanPercent, 1), "%</td></tr>",
+          "<tr><td>Urban %:</td><td>", round(UrbanPercentage, 1), "%</td></tr>",
           "<tr><td>Coverage:</td><td>", CoveragePercent, "%</td></tr>",
           "<tr><td>Population:</td><td>", format(EstimatedPopulation, big.mark = ","), "</td></tr>",
           "<tr><td>Nets Allocated:</td><td>", format(NetsAllocated, big.mark = ","), "</td></tr>",
@@ -3352,7 +3337,7 @@ server <- function(input, output, session) {
     # Prepare data for table
     table_data <- results$wards %>%
       st_drop_geometry() %>%
-      select(WardName, Priority, UrbanPercent, overall_rank, EstimatedPopulation, 
+      select(WardName, Priority, UrbanPercentage, overall_rank, EstimatedPopulation, 
              NetsNeeded, NetsAllocated, CoveragePercent) %>%
       arrange(Priority, overall_rank)
     
@@ -3361,7 +3346,7 @@ server <- function(input, output, session) {
       mutate(
         `Ward Name` = WardName,
         `Priority` = Priority,
-        `Urban %` = round(UrbanPercent, 1),
+        `Urban %` = round(UrbanPercentage, 1),
         `Vulnerability Rank` = overall_rank,
         `Population` = EstimatedPopulation,
         `Nets Needed` = NetsNeeded,
@@ -3423,14 +3408,14 @@ server <- function(input, output, session) {
     grid_classified_wards <- results$wards %>%
       st_drop_geometry() %>%
       filter(Priority == "Grid-Classified") %>%
-      select(WardName, UrbanPercent, overall_rank, EstimatedPopulation, 
+      select(WardName, UrbanPercentage, overall_rank, EstimatedPopulation, 
              AdjustedPopulation, NetsNeeded, NetsAllocated, CoveragePercent)
     
     # Merge with grid override info
     override_data <- left_join(grid_classified_wards, overrides, by = "WardName") %>%
       mutate(
         `Ward Name` = WardName,
-        `Urban %` = round(UrbanPercent, 1),
+        `Urban %` = round(UrbanPercentage, 1),
         `Vulnerability Rank` = overall_rank,
         `Total Population` = EstimatedPopulation,
         `Adjusted Population` = AdjustedPopulation,
