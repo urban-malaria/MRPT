@@ -1,4 +1,4 @@
-# **Malaria Reprioritization Tool (MRPT) Repository (MRPT)**
+# **Malaria Reprioritization Tool (MRPT) Repository (MRPT)** [![DOI](https://zenodo.org/badge/823760067.svg)](https://doi.org/10.5281/zenodo.18274896)
 
 ## **Overview**
 
